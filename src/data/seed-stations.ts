@@ -24,6 +24,11 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'wtf-marina',  name: 'Marina',  gender: 'female', trait: 'rage froide',            color: '#ff8866', avatar: '🔥' },
       { id: 'wtf-diogene', name: 'Diogène', gender: 'male',   trait: 'cynisme philosophique',  color: '#ffaa44', avatar: '🪔' },
     ],
+    sources: [
+      { type: 'rss', url: 'https://www.mediapart.fr/articles/feed',          title: 'Mediapart' },
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',    title: 'Reporterre' },
+      { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',   title: 'Le Monde Diplomatique' },
+    ],
     tracks: [
       { title: 'Track 1', cid: 'bafybeihqozxwaq4ucefvq3bdqbj6u7as32uadzgngkqtltey646vutdjhu' },
       { title: 'Track 2', cid: 'bafybeihg4uu22uqrgwdxwdio6te7oukj4zpwumlxpccbu4duah3ml36e5q' },
@@ -43,6 +48,11 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'fw-aurelien', name: 'Aurélien', gender: 'male',   trait: 'espoir lucide',         color: '#33d18a', avatar: '🌱' },
       { id: 'fw-leila',    name: 'Leïla',    gender: 'female', trait: 'pragmatisme bienveillant', color: '#7af0c8', avatar: '🌅' },
     ],
+    sources: [
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',    title: 'Reporterre' },
+      { type: 'rss', url: 'https://basta.media/spip.php?page=backend',       title: 'Bastamag' },
+      { type: 'rss', url: 'https://positivr.fr/feed/',                        title: 'Positivr' },
+    ],
     tracks: [
       { title: 'Track 3', cid: 'bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q' },
       { title: 'Track 4', cid: 'bafybeifmfsamtn76ugitlps5vf62uguypp7lxjhusj5piwhglkcavjrjhq' },
@@ -61,6 +71,11 @@ export const SEED_STATIONS: RadioStation[] = [
     hosts: [
       { id: 'bb-rocco', name: 'Rocco', gender: 'male', trait: 'punch / motivation', color: '#ffb320', avatar: '🥊' },
     ],
+    sources: [
+      { type: 'rss', url: 'https://www.numerama.com/feed/',                  title: 'Numerama' },
+      { type: 'rss', url: 'https://korben.info/feed',                        title: 'Korben' },
+      { type: 'rss', url: 'https://www.lemonde.fr/rss/une.xml',              title: 'Le Monde' },
+    ],
     tracks: [
       { title: 'Track 5', cid: 'bafybeiewnkzqs33a4x5oahytej2zhora3tqpgihgaym6fvyp2tqb5gffeu' },
     ],
@@ -77,6 +92,11 @@ export const SEED_STATIONS: RadioStation[] = [
     color: '#a070ff',
     hosts: [
       { id: 'mc-anonyme', name: 'Anonyme', gender: 'androgyn', trait: 'méta-ironique', color: '#a070ff', avatar: '🌀' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://www.acrimed.org/spip.php?page=backend',   title: 'Acrimed (critique des médias)' },
+      { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',   title: 'Le Monde Diplomatique' },
+      { type: 'rss', url: 'https://korben.info/feed',                        title: 'Korben (décryptage tech)' },
     ],
     tracks: [
       { title: 'Track 6', cid: 'bafybeih54zuvvdeyzpjuyygmff7uok7mxmayqcracid5rkp2phc7xzindm' },
@@ -101,7 +121,7 @@ export const SEED_STATIONS: RadioStation[] = [
     sources: [
       { type: 'rss', url: 'https://www.h2-mobile.fr/feed/',                       title: 'H2 Mobile' },
       { type: 'rss', url: 'https://www.connaissancedesenergies.org/rss.xml',      title: 'Connaissance des Énergies' },
-      { type: 'web', url: 'https://www.afhypac.org/actualites/',                  title: 'AFHYPAC (Association H2)' },
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',         title: 'Reporterre' },
     ],
     skipMusic: true,    // demande user — éducative pure, pas de musique pour l'instant
     live: false,
@@ -120,9 +140,9 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'g1-bernard', name: 'Bernard', gender: 'male', trait: 'pédagogue passionné de monnaie libre', color: '#dba23a', avatar: '🪙' },
     ],
     sources: [
-      { type: 'rss', url: 'https://www.monnaie-libre.fr/feed/',     title: 'Monnaie Libre' },
-      { type: 'rss', url: 'https://forum.duniter.org/latest.rss',   title: 'Forum Duniter' },
-      { type: 'web', url: 'https://duniter.org/blog/',              title: 'Blog Duniter' },
+      { type: 'rss', url: 'https://forum.duniter.org/latest.rss',                 title: 'Forum Duniter' },
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',         title: 'Reporterre (alternatives)' },
+      { type: 'rss', url: 'https://basta.media/spip.php?page=backend',            title: 'Bastamag (luttes sociales)' },
     ],
     skipMusic: true,    // demande user — pas de musique pour l'instant
     live: false,
@@ -163,9 +183,9 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'dn-salome', name: 'Salomé', gender: 'female', trait: 'ex-corporate devenue baroudeuse, pragmatique', color: '#22c1a3', avatar: '🌍' },
     ],
     sources: [
-      { type: 'rss', url: 'https://blog.nomadlist.com/rss/',       title: 'Nomad List Blog' },
-      { type: 'rss', url: 'https://nomadcapitalist.com/feed/',     title: 'Nomad Capitalist' },
-      { type: 'web', url: 'https://www.tropicalmba.com/',          title: 'Tropical MBA' },
+      { type: 'rss', url: 'https://nomadcapitalist.com/feed/',                   title: 'Nomad Capitalist' },
+      { type: 'rss', url: 'https://www.lemonde.fr/rss/une.xml',                  title: 'Le Monde (actualité internationale)' },
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',        title: 'Reporterre' },
     ],
     tracks: [
       { title: 'Track 7', cid: 'bafybeifbh4yvz6wuydwfvrc6dbnoxg5q4iof6q4otcnzy7lh5lsqfs35fa' },
@@ -186,10 +206,9 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'tk-iris', name: 'Iris', gender: 'female', trait: 'dev cypherpunk, références Bitcoin/IPFS/NOSTR', color: '#7a5fff', avatar: '🛰️' },
     ],
     sources: [
-      { type: 'rss', url: 'https://blog.ipfs.tech/index.xml',       title: 'IPFS Blog' },
-      { type: 'rss', url: 'https://blog.protocol.ai/rss/',          title: 'Protocol Labs' },
-      { type: 'rss', url: 'https://blog.web3.foundation/feed.xml',  title: 'Web3 Foundation' },
-      { type: 'web', url: 'https://nostr.com/',                     title: 'NOSTR community' },
+      { type: 'rss', url: 'https://blog.ipfs.tech/index.xml',                   title: 'IPFS Blog' },
+      { type: 'rss', url: 'https://korben.info/feed',                            title: 'Korben (tech)' },
+      { type: 'rss', url: 'https://www.numerama.com/feed/',                      title: 'Numerama' },
     ],
     tracks: [
       { title: 'Track 8', cid: 'bafybeidjdzqdgmktpjzumkybvgnzhvhejp7qcftggoa6gs7cyfzzmoofpi' },
