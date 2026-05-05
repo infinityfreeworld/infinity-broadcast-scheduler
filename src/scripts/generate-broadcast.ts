@@ -124,6 +124,8 @@ async function generateBroadcastBytes(opts: {
       newsBlock:          formatNewsForPrompt(news),
       language,
       otherHosts,
+      currentTurn:        i + 1,
+      totalTurns:         numTurns,
     })
 
     const history: LLMMessage[] = turns.slice(-HISTORY_DEPTH).map(t => ({
@@ -133,8 +135,10 @@ async function generateBroadcastBytes(opts: {
     const userMessage: LLMMessage = {
       role: 'user',
       content: isFirstTurn
-        ? `Ouvre le podcast. Présente brièvement le sujet : ${topic || '(libre)'}. Trois phrases max.`
-        : 'Ton tour. Continue le dialogue de façon naturelle.',
+        ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
+        : (i === numTurns - 1
+            ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
+            : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).'),
     }
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${host.name}… `)

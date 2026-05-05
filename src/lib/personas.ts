@@ -39,8 +39,13 @@ export function buildHostSystemPrompt(opts: {
   otherHosts:     RadioHost[]
   stationDescription?: string
   newsBlock?:     string
+  /** Position du tour courant (1-indexé). Si fourni avec totalTurns, le prompt
+   *  inclut une section STRUCTURE qui guide le LLM selon sa position dans
+   *  l'émission (intro / développement / conclusion). */
+  currentTurn?:   number
+  totalTurns?:    number
 }): string {
-  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock } = opts
+  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns } = opts
 
   const otherHostsLine = otherHosts.length > 0
     ? `Tes confrères à l'antenne : ${otherHosts.map(h => `${h.name} (${h.trait})`).join(', ')}.`
@@ -65,6 +70,10 @@ ${newsBlock}
 `
     : ''
 
+  const structureSection = (currentTurn && totalTurns)
+    ? buildStructureSection(currentTurn, totalTurns, language)
+    : ''
+
   return `Tu es ${host.name}, animateur radio sur ${stationLine}.
 
 # IDENTITÉ
@@ -76,7 +85,7 @@ ${kb.personality || '(non renseignée — sois naturel selon ton trait dominant)
 
 # CE QUE TU SAIS / PENSES (extraits pertinents de ta KB)
 ${kbContext}
-${newsSection}
+${newsSection}${structureSection}
 # CONTEXTE DU PODCAST
 - ${otherHostsLine}
 - ${topic ? `Thème en cours : ${topic}` : 'Thème libre — laisse l\'auditeur choisir où on va.'}
@@ -91,6 +100,63 @@ ${newsSection}
 7. Ne répète pas mécaniquement ce que les autres viennent de dire — réagis, rebondis, déplace l'angle.
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.name}:", pas de guillemets — juste ce que tu dis à l'antenne.`
+}
+
+/**
+ * Découpe l'émission en 5 phases pour donner une vraie structure :
+ *   1. INTRO            (~7% des tours, min 2)        → signature + annonce 2-3 sujets
+ *   2. SEGMENT 1        (~28% des tours)              → premier sujet creusé
+ *   3. SEGMENT 2        (~28% des tours)              → angle complémentaire ou nouveau sujet
+ *   4. SEGMENT 3        (~28% des tours)              → fond / décalage / récit
+ *   5. CONCLUSION       (~9% des tours, min 3)        → récap + perspective + teaser demain
+ *
+ * À chaque tour, le prompt rappelle au LLM dans quelle phase il est et ce qu'on
+ * attend de lui (transition explicite, citation actu, profondeur, etc.).
+ */
+function buildStructureSection(turn: number, total: number, language: StationLanguage): string {
+  if (language !== 'fr') return ''   // structure FR pour l'instant — ajouter EN/etc. plus tard
+
+  const introEnd     = Math.max(2, Math.round(total * 0.07))           // 1..introEnd
+  const seg1End      = introEnd + Math.round(total * 0.28)             // (introEnd+1)..seg1End
+  const seg2End      = seg1End + Math.round(total * 0.28)              // (seg1End+1)..seg2End
+  const conclusionStart = total - Math.max(3, Math.round(total * 0.09)) + 1
+  const seg3End      = conclusionStart - 1
+
+  let phase: string, instruction: string
+  if (turn <= introEnd) {
+    phase = `INTRO (tours 1-${introEnd})`
+    instruction = `Ouvre l'émission. Pose la signature de la station, le ton du jour. Au moins une fois dans l'intro, ANNONCE explicitement 2 ou 3 sujets concrets que vous allez traiter aujourd'hui (en t'appuyant sur l'actu fournie si elle s'y prête). Donne envie d'écouter la suite.`
+  } else if (turn <= seg1End) {
+    phase = `SEGMENT 1 (tours ${introEnd + 1}-${seg1End})`
+    instruction = `Premier sujet annoncé en intro. Va en profondeur — pas du bavardage, du contenu. Cite l'actu quand c'est juste, contredis-toi entre vous, donne des exemples concrets. L'auditeur doit apprendre, comprendre ou rire.`
+  } else if (turn <= seg2End) {
+    phase = `SEGMENT 2 (tours ${seg1End + 1}-${seg2End})`
+    instruction = `Bascule vers le second sujet annoncé. Si tu es le premier de ce segment : fais une TRANSITION EXPLICITE ("Bon, on passe à…", "Et toi ${otherHostsHint(language)}, sur le sujet X tu en penses quoi ?"). Reste sur le sujet sans dériver.`
+  } else if (turn <= seg3End) {
+    phase = `SEGMENT 3 (tours ${seg2End + 1}-${seg3End})`
+    instruction = `Troisième sujet — fond, décalage ou récit. Si tu es le premier de ce segment : transition explicite. C'est le moment du contenu plus tendu, plus drôle ou plus poétique selon le ton de la station.`
+  } else {
+    phase = `CONCLUSION (tours ${conclusionStart}-${total})`
+    instruction = `Récapitule en une phrase ce qu'on a abordé aujourd'hui. Donne une perspective courte, une idée que l'auditeur emporte. Termine par un teaser de l'émission de demain ("Demain on parlera de…") sans révéler le contenu — donne envie de revenir. Garde le ton de la station.`
+  }
+
+  return `\n# STRUCTURE DE L'ÉMISSION
+Tu es au tour ${turn}/${total} → phase **${phase}**.
+
+→ ${instruction}
+
+L'émission dure environ 30 minutes. La structure totale :
+- 1-${introEnd}            : INTRO + annonce des sujets
+- ${introEnd + 1}-${seg1End}            : SEGMENT 1 (sujet A)
+- ${seg1End + 1}-${seg2End}            : SEGMENT 2 (sujet B)
+- ${seg2End + 1}-${seg3End}            : SEGMENT 3 (sujet C ou récit)
+- ${conclusionStart}-${total}          : CONCLUSION + teaser demain
+
+`
+}
+
+function otherHostsHint(language: StationLanguage): string {
+  return language === 'fr' ? '[prénom du confrère]' : '[colleague name]'
 }
 
 /**
