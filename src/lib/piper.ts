@@ -147,11 +147,15 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
   const voicePath = join(VOICES_DIR, `${voiceId}.onnx`)
   const outPath = join(tmpdir(), `piper-${voiceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
 
-  // piper accepte le texte sur stdin et écrit le WAV via --output_file
+  // piper accepte le texte sur stdin et écrit le WAV via --output_file.
+  // --sentence_silence=0.05 réduit le silence en fin de phrase de 0.2s
+  // (défaut Piper) à 0.05s. Combiné avec INTER_TURN_SILENCE_S=0.10 dans
+  // audio.ts, le pacing est naturel sans "trous" perceptibles.
   return new Promise((resolve, reject) => {
     const child = execFile(PIPER_BIN, [
-      '--model', voicePath,
-      '--output_file', outPath,
+      '--model',            voicePath,
+      '--output_file',      outPath,
+      '--sentence_silence', '0.05',
     ], { encoding: 'buffer' }, (err, _stdout, stderr) => {
       if (err) {
         reject(new Error(`piper failed (${voiceId}): ${err.message}\n${stderr.toString()}`))

@@ -12,7 +12,10 @@
 
 import { readFileSync } from 'node:fs'
 
-const INTER_TURN_SILENCE_S = 0.35
+// 100ms — micro-pause naturelle entre 2 speakers, comme une vraie radio
+// (avant : 350ms = trop, donnait l'impression de "trous" dans le dialogue).
+// Combiné avec --sentence_silence=0.05 côté Piper, total ≈150ms entre tours.
+const INTER_TURN_SILENCE_S = 0.10
 
 export interface DecodedWav {
   /** Échantillons PCM en Float32 normalisé [-1, 1]. */
