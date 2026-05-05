@@ -8,7 +8,8 @@
     "generate:one": "tsx src/scripts/generate-broadcast.ts",
     "generate:all": "tsx src/scripts/generate-all.ts",
     "typecheck": "tsc --noEmit",
-    "setup:piper": "tsx src/scripts/setup-piper.ts"
+    "setup:piper": "tsx src/scripts/setup-piper.ts",
+    "upload:tracks": "tsx src/scripts/upload-tracks.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.93.0",
