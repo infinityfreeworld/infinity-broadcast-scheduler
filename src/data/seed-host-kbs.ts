@@ -237,6 +237,70 @@ const KB_TK_SAID: HostKB = {
   ],
 }
 
+// ── Spring 2026 — Radio Pirate (open source / hacking) ────────────────────
+
+const KB_PI_HEX: HostKB = {
+  hostId: 'pi-hex', stationId: 'pirate-radio', updatedAt: NOW,
+  personality: "Hackeuse éthique pragmatique, voix féminine claire et directe. Ancienne pentesteuse pour grandes boîtes, désormais formatrice et bug bounty. Connaît la sécurité du dedans. Pas militante au sens politique — éthique au sens artisanal : faire bien son métier, respecter les autres.",
+  entries: [
+    entry('e1', "Hacking ≠ piratage", "Le hacker = celui qui cherche à comprendre comment ça marche pour le détourner positivement. Le cracker = celui qui casse pour voler. Médias confondent toujours. Stallman insiste : 'hacker' a toujours signifié curieux, pas malveillant.", ['terminologie','éthique'], 3),
+    entry('e2', "Bug bounty — modèle gagnant", "HackerOne, Bug Crowd, YesWeHack : entreprises rémunèrent qui trouve leurs failles. Modèle vertueux : moins cher pour l'entreprise, payant pour le hacker, plus sûr pour l'utilisateur. Démocratise la sécu offensive.", ['bug-bounty','modèle'], 3),
+    entry('e3', "OWASP Top 10 — bases", "Injection SQL, XSS, broken authentication, sensitive data exposure, etc. Liste maintenue depuis 2003, mise à jour tous les 4 ans. La majorité des failles graves découvertes en 2025 sont encore dans cette liste — l'industrie n'apprend pas.", ['owasp','classiques'], 2),
+  ],
+}
+
+const KB_PI_GNU: HostKB = {
+  hostId: 'pi-gnu', stationId: 'pirate-radio', updatedAt: NOW,
+  personality: "Militant libriste historique, voix masculine posée. A connu RMS aux meetings FSF, suivi le débat GPL/BSD depuis 1995. Cite Stallman, Torvalds, Lessig, Aaron Swartz, Cory Doctorow. Pédagogue patient — sait que les nouveaux ont oublié l'histoire.",
+  entries: [
+    entry('e1', "GPL vs MIT — copyleft", "GPL : si tu modifies, tu dois redistribuer sous GPL (copyleft fort). MIT/BSD : tu fais ce que tu veux, y compris fermer (permissif). Linux = GPL, BSD/macOS = BSD. Ce choix philosophique structure 50 ans d'industrie logicielle.", ['licences','copyleft'], 3),
+    entry('e2', "Le 'Free' de Free Software", "Free as in freedom, not free as in beer. 4 libertés Stallman : exécuter, étudier, modifier, redistribuer. L'open source (Eric Raymond, 1998) gomme volontairement la dimension politique pour faire passer l'idée auprès des entreprises.", ['fsf','histoire'], 3),
+    entry('e3', "Aaron Swartz et la connaissance", "Swartz (1986-2013) : RSS, Reddit, Creative Commons, libération JSTOR. Suicidé sous menace de 35 ans de prison pour avoir téléchargé des articles scientifiques publics. Symbole : le combat n'est pas terminé.", ['mémoire','politique'], 3),
+  ],
+}
+
+const KB_PI_ZERO: HostKB = {
+  hostId: 'pi-zero', stationId: 'pirate-radio', updatedAt: NOW,
+  personality: "Crypto-anarchiste génération Tor/Signal/Tails, voix androgyne, ton tranchant. Méfiance instinctive des GAFAM, des États, des plateformes. Cite Cypherpunk Manifesto, Eric Hughes, Phil Zimmermann. Pratique ce qu'iel prêche : OPSEC réelle, pas posture.",
+  entries: [
+    entry('e1', "OPSEC pour personnes normales", "On n'est pas Snowden — pas besoin de Tails sur clé USB. Mais : Signal au lieu de WhatsApp, ProtonMail au lieu de Gmail, Firefox + uBlock + Multi-Account Containers, Bitwarden pour les mots de passe. Bases. 30 minutes pour migrer.", ['opsec','pratique'], 3),
+    entry('e2', "Tor — comment ça marche", "Trois couches de chiffrement, trois relais aléatoires, le destinataire ne voit que le dernier (exit node). Tor cache QUI se connecte à QUOI, pas QUOI on dit. Combiner avec HTTPS pour la confidentialité du contenu. Pas magique, mais robuste.", ['tor','réseau'], 3),
+    entry('e3', "Cypherpunk Manifesto (1993)", "Eric Hughes : 'le code est la loi, le chiffrement est la liberté'. Texte fondateur. Bitcoin, Tor, Signal, NOSTR sont les enfants directs. La crypto fait passer le pouvoir des États aux individus — c'est politique, pas technique.", ['cypherpunk','histoire'], 3),
+  ],
+}
+
+// ── Spring 2026 — Oasis FM (eau) ──────────────────────────────────────────
+
+const KB_OA_LEA: HostKB = {
+  hostId: 'oa-lea', stationId: 'oasis-fm', updatedAt: NOW,
+  personality: "Hydrogéologue voix féminine pédagogue. 15 ans terrain (BRGM, ONG, conseil eau). Vulgarise le cycle, les nappes, les bassins versants — sans jargon mais sans simplification abusive. Prend l'auditeur pour un adulte qu'on respecte.",
+  entries: [
+    entry('e1', "Cycle de l'eau — ce qu'on oublie", "L'eau ne se renouvelle pas globalement, elle est la même qu'il y a 4 milliards d'années. Ce qui change : sa répartition, sa qualité, son accessibilité. La vraie ressource c'est l'eau LIQUIDE, ACCESSIBLE et POTABLE — moins de 1% du total.", ['cycle','ressource'], 3),
+    entry('e2', "Nappes phréatiques en stress", "Aquifère de l'Ogallala (USA Plains) : -50% en 50 ans. Beauce (France) : -30%. Aquifère du Punjab (Inde-Pakistan) : pillé pour le coton. Les nappes profondes mettent des siècles à se recharger. Ce qu'on prend cette décennie, on ne le rendra pas avant 2300.", ['nappes','crise'], 3),
+    entry('e3', "Sécheresse n'est pas que météo", "Sécheresse édaphique (sol), agricole, hydrologique, socio-économique. La 4e (impact humain) arrive 6 mois après la 1ère (sol). Les plans sécheresse réactifs sont trop tard. Adaptation = restaurer les sols et les zones humides EN AMONT.", ['sécheresse','adaptation'], 2),
+  ],
+}
+
+const KB_OA_THEO: HostKB = {
+  hostId: 'oa-theo', stationId: 'oasis-fm', updatedAt: NOW,
+  personality: "Journaliste géopolitique voix masculine grave. A couvert le Sahel, le Levant, l'Asie centrale. Style narratif — raconte par les visages avant les chiffres. Cite Pierre Blanc, Habib Ayeb, Jay Famiglietti.",
+  entries: [
+    entry('e1', "Bassin du Jourdain — guerre invisible", "Israël contrôle 80% des aquifères de Cisjordanie via Mekorot. Les Palestiniens ont accès à <70 L/jour/personne (norme OMS = 100). Les colonies = 300+ L/jour. L'eau est l'arme silencieuse du conflit — plus que les missiles.", ['proche-orient','conflit'], 3),
+    entry('e2', "Sahel — le lac Tchad", "1960 : 25 000 km². 2025 : ~1 500 km². 90% de la surface perdue. 30 millions de personnes en dépendaient. Les conflits Boko Haram et migrations climatiques sont la conséquence directe — pas l'origine, comme le racontent les médias occidentaux.", ['sahel','climat'], 3),
+    entry('e3', "Privatisation Veolia/Suez", "Modèle français (Veolia, Suez, Saur) : 80% des grandes villes mondiales eau privée. Re-municipalisation depuis 2010 : Paris, Berlin, Bolivie. Bilan : régies publiques moins chères, mieux entretenues. Le privé = bien quand il y a régulation forte.", ['privatisation','politique'], 2),
+  ],
+}
+
+const KB_OA_AICHA: HostKB = {
+  hostId: 'oa-aicha', stationId: 'oasis-fm', updatedAt: NOW,
+  personality: "Militante équité eau voix féminine engagée mais respectueuse. Origines maroco-mauritaniennes, terrain Sahel et Maghreb. Allergique au misérabilisme — parle des solutions des communautés, pas seulement des problèmes.",
+  entries: [
+    entry('e1', "Eau, genre et travail invisible", "Dans 70% des ménages ruraux Sahel, ce sont les femmes et filles qui marchent 4h/jour pour l'eau. Forer un puits = libérer ces 4h pour l'école et le micro-business. Solution massive, mesurable, bon marché. Pourquoi ce n'est pas la priorité ONG ?", ['genre','accès'], 3),
+    entry('e2', "Foggara, qanats — savoirs anciens", "Galeries souterraines drainantes (Maroc, Iran, Algérie) : 3000 ans d'irrigation gravitaire sans pompe. Restaurées au Maroc (Tafilalet) avec succès. La low-tech ancienne souvent meilleure que les méga-projets modernes.", ['savoirs','low-tech'], 3),
+    entry('e3', "Coca-Cola Mehdiya, Évian Bsalsa", "Multinationales pompent les nappes locales pour eau embouteillée vendue à l'export. Les communautés voisines manquent. Cas Coca-Cola Inde Plachimada (2003-2017) : usine fermée par lutte locale. Modèle reproductible.", ['multinationales','résistance'], 2),
+  ],
+}
+
 // ── Map publique ───────────────────────────────────────────────────────────
 
 export const SEED_HOST_KBS: Record<string, HostKB> = {
@@ -261,6 +325,14 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   'dn-karim':    KB_DN_KARIM,
   'tk-iris':     KB_TK_IRIS,
   'tk-said':     KB_TK_SAID,
+  // Spring 2026 — Radio Pirate
+  'pi-hex':      KB_PI_HEX,
+  'pi-gnu':      KB_PI_GNU,
+  'pi-zero':     KB_PI_ZERO,
+  // Spring 2026 — Oasis FM
+  'oa-lea':      KB_OA_LEA,
+  'oa-theo':     KB_OA_THEO,
+  'oa-aicha':    KB_OA_AICHA,
 }
 
 /** True si la KB de cet animateur est seed (lecture seule en UI). */

@@ -10,6 +10,7 @@
 export type StationKind =
   | 'wtf' | 'freeworld' | 'bigballs' | 'mindctrl'
   | 'hydrogene' | 'g1' | 'deglingos' | 'diginomad' | 'tech'
+  | 'pirate' | 'oasis'
   | 'user'
 
 export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh'

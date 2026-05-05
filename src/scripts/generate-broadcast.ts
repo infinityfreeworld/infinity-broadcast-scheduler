@@ -57,6 +57,14 @@ const PIPER_VOICE_BY_HOST: Record<string, string> = {
   'dn-karim':    'fr_FR-tom-medium',
   'tk-iris':     'fr_FR-siwis-medium',
   'tk-said':     'fr_FR-tom-medium',
+  // Radio Pirate
+  'pi-hex':      'fr_FR-siwis-medium',
+  'pi-gnu':      'fr_FR-tom-medium',
+  'pi-zero':     'fr_FR-siwis-medium',
+  // Oasis FM
+  'oa-lea':      'fr_FR-siwis-medium',
+  'oa-theo':     'fr_FR-tom-medium',
+  'oa-aicha':    'fr_FR-siwis-medium',
 }
 
 const FALLBACK_BY_GENDER: Record<'male' | 'female' | 'androgyn', string> = {

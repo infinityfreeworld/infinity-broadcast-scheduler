@@ -220,6 +220,53 @@ export const SEED_STATIONS: RadioStation[] = [
     live: false,
     creatorPubkey: null,
   },
+  // ── Spring 2026 — Radio Pirate (open source / hacking / sensibilisation) ──
+  {
+    id: 'pirate-radio',
+    kind: 'pirate',
+    language: 'fr',
+    frequency: 87.7,
+    name: 'Radio Pirate',
+    tagline: 'Le code est libre, l\'humain aussi.',
+    description: "Chaîne dédiée au logiciel libre, à l'open source et à la culture hacker éthique. Histoire du mouvement (FSF, GNU, Linux, Debian), licences (GPL, MIT, AGPL, copyleft vs permissif), sécurité offensive et défensive, vie privée numérique (Tor, Tails, Signal), souveraineté logicielle. Sensibilise les auditeurs à reprendre le contrôle de leurs outils numériques.",
+    color: '#0bd35d',
+    hosts: [
+      { id: 'pi-hex',  name: 'Hex',  gender: 'female',   trait: 'hackeuse éthique pragmatique, ancienne pentesteuse',                color: '#0bd35d', avatar: '🐍' },
+      { id: 'pi-gnu',  name: 'Gnu',  gender: 'male',     trait: 'militant libriste historique, références Stallman/Torvalds/Lessig',  color: '#5fef9d', avatar: '🦬' },
+      { id: 'pi-zero', name: 'Zero', gender: 'androgyn', trait: 'crypto-anarchiste génération Tor/Signal, allergique aux GAFAM',      color: '#9ffac3', avatar: '👁️' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://korben.info/feed',                              title: 'Korben (open source / hacking FR)' },
+      { type: 'rss', url: 'https://feeds.feedburner.com/TheHackersNews',           title: 'The Hacker News (cybersécu)' },
+      { type: 'rss', url: 'https://www.numerama.com/feed/',                        title: 'Numerama' },
+      { type: 'rss', url: 'https://opensource.org/blog/feed',                      title: 'Open Source Initiative' },
+    ],
+    live: false,
+    creatorPubkey: null,
+  },
+  // ── Spring 2026 — Oasis FM (eau, hydropolitique, accès) ────────────────────
+  {
+    id: 'oasis-fm',
+    kind: 'oasis',
+    language: 'fr',
+    frequency: 105.3,
+    name: 'Oasis FM',
+    tagline: 'L\'eau, source de tout.',
+    description: "Chaîne dédiée à l'eau sous tous ses angles : hydrologie et nappes phréatiques, guerre de l'eau (Israël/Palestine, Maroc, Sahel), privatisation vs régies publiques, sécheresse et adaptation climatique, eaux souterraines profondes, hydrogène vert depuis l'eau, médecines de l'eau (eau hydrogénée, balnéothérapie, eaux minérales), récits de fleuves et lacs.",
+    color: '#1e9adb',
+    hosts: [
+      { id: 'oa-lea',   name: 'Léa',   gender: 'female', trait: 'hydrogéologue terrain, vulgarisatrice nappes/cycles/sécheresse',     color: '#1e9adb', avatar: '💧' },
+      { id: 'oa-theo',  name: 'Théo',  gender: 'male',   trait: 'journaliste géopolitique de l\'eau (Sahel, Levant, Asie centrale)', color: '#5fbdec', avatar: '🌊' },
+      { id: 'oa-aicha', name: 'Aïcha', gender: 'female', trait: 'militante équité accès eau, expérience terrain Maroc/Mauritanie',   color: '#a3d8f3', avatar: '🏜️' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',          title: 'Reporterre (eau, écologie)' },
+      { type: 'rss', url: 'https://basta.media/spip.php?page=backend',             title: 'Bastamag (luttes, eau)' },
+      { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',         title: 'Le Monde Diplomatique' },
+    ],
+    live: false,
+    creatorPubkey: null,
+  },
 ]
 
 /** Bornes du dial — 87.5 à 144.0 MHz, comme une vraie radio FM étendue. */
