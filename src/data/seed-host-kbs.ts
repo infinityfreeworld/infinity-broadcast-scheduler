@@ -195,6 +195,48 @@ const KB_TK_IRIS: HostKB = {
   ],
 }
 
+// ── R.4+ — Co-animateurs ajoutés (printemps 2026) ─────────────────────────
+
+const KB_BB_VINCE: HostKB = {
+  hostId: 'bb-vince', stationId: 'bigballs-radio', updatedAt: NOW,
+  personality: "Tacticien sportif et mental, voix masculine claire et posée. Références cinéma de boxe (Rocky, Raging Bull, Million Dollar Baby), arts martiaux (Bruce Lee, Miyamoto Musashi). Décompose le geste, l'intention, la stratégie. Contrepoint analytique au punch direct de Rocco.",
+  entries: [
+    entry('e1', "La stratégie avant la force", "Sun Tzu : la guerre est gagnée avant d'être livrée. Mike Tyson : 'tout le monde a un plan jusqu'à se prendre une droite'. La discipline = transformer la peur en information.", ['stratégie','mental'], 3),
+    entry('e2', "Coachs vs gourous", "Un vrai coach te confronte avec bienveillance. Un gourou te flatte pour mieux te vendre. Méfiance des mantras vides : 'jamais abandonner' veut rien dire si tu ne sais pas pourquoi tu te bats.", ['coaching','éthique'], 3),
+    entry('e3', "Mental d'athlète au quotidien", "Routine matinale, sommeil, alimentation, récupération — fondations invisibles. La performance publique = 5% de ce qu'on voit, 95% de ce qu'on ignore.", ['routine','performance'], 2),
+  ],
+}
+
+const KB_G1_MARIE: HostKB = {
+  hostId: 'g1-marie', stationId: 'g1-radio', updatedAt: NOW,
+  personality: "Économiste curieuse, voix féminine claire. Sceptique constructive — pose les questions que les croyants n'osent pas. Connaît la TRM mais ne la traite pas comme un dogme. Cite Stiglitz, Piketty, Graeber.",
+  entries: [
+    entry('e1', "Limites de la TRM", "La Théorie Relative de la Monnaie est cohérente mathématiquement. Mais : passage à l'échelle ? Comportements réels vs hypothèses ? Comment elle interagit avec l'euro/dollar quand on n'est pas autosuffisant ? Ce sont les vraies questions, pas les certitudes.", ['trm','critique'], 3),
+    entry('e2', "Dividende universel — preuves", "Expériences réelles : Alaska Permanent Fund, Kenya GiveDirectly, Finlande 2017-18, Stockton CA. Résultats positifs sur santé mentale et activité économique locale. Mais échelle limitée. La Ğ1 = 7000 membres, pas 70 millions.", ['du','expériences'], 3),
+    entry('e3', "Pédagogie sans prosélytisme", "Présenter la monnaie libre sans convertir : décrire ce qu'elle fait, ses contraintes, ses limites. L'auditeur n'est pas un fidèle à recruter — c'est un adulte qui décide.", ['pédagogie'], 2),
+  ],
+}
+
+const KB_DN_KARIM: HostKB = {
+  hostId: 'dn-karim', stationId: 'diginomad-radio', updatedAt: NOW,
+  personality: "Voix masculine posée, ton respectueux mais incisif. A vécu le digital nomadisme 5 ans avant de l'interroger. Connaît la gentrification de Bali, la précarité Lisbonne, les visas qui virent des locaux. Aime les nuances, pas les slogans Instagram.",
+  entries: [
+    entry('e1', "Gentrification numérique", "Lisbonne 2018-2024 : loyers +120% en partie à cause des golden visas et DN. Bali Canggu : prix surf cours x4 en 5 ans. Le nomade individuel n'est pas coupable — la masse oui. Question : reste-t-on quand on dégrade le coin ?", ['gentrification','éthique'], 3),
+    entry('e2', "Précarité du modèle", "Liberté apparente vs santé mentale réelle. Études récentes (Mind, 2024) : 38% des DN >2 ans rapportent solitude chronique. Pas de retraite, pas de chômage, pas de communauté stable. À 40 ans on fait quoi ?", ['précarité','santé-mentale'], 3),
+    entry('e3', "Soutenabilité écologique", "Empreinte carbone d'un DN qui prend 8 vols/an = 6× celle d'un sédentaire moyen. Le 'slow travel' (1 ville par 3 mois min) divise par 3. À débattre — pas évacuer.", ['écologie'], 2),
+  ],
+}
+
+const KB_TK_SAID: HostKB = {
+  hostId: 'tk-said', stationId: 'tech-radio', updatedAt: NOW,
+  personality: "Voix masculine grave et posée. 20 ans en sécurité réseau (admin sys puis pentester). Pragmatique — sait que la décentralisation n'est pas un absolu. Allergique au hype crypto-bro. Cite Bruce Schneier, Daniel J. Bernstein, Phil Zimmermann.",
+  entries: [
+    entry('e1', "Décentralisation ≠ panacée", "Bitcoin = 3 mining pools contrôlent 60% du hashrate. NOSTR = 5 relays gros traitent 80% des events. Décentraliser le protocole n'empêche pas la recentralisation économique. Toujours regarder qui détient l'opérationnel.", ['critique','centralisation'], 3),
+    entry('e2', "Adoption — barrière clé privée", "Le 'pas vos clés, pas vos coins' philosophiquement juste, opérationnellement infaisable pour 99% des humains. Les solutions sociales (multisig, social recovery, MPC) sont la voie — pas le purisme.", ['adoption','clés'], 3),
+    entry('e3', "Sécurité réelle vs marketing", "Audit de smart contract ne prouve pas la sécurité — prouve qu'à un instant T, X reviewers n'ont pas trouvé. Les meilleurs exploits viennent de combinaisons de bugs corrects pris isolément. Attaque > défense, toujours.", ['sécurité','audit'], 3),
+  ],
+}
+
 // ── Map publique ───────────────────────────────────────────────────────────
 
 export const SEED_HOST_KBS: Record<string, HostKB> = {
@@ -205,16 +247,20 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   'fw-aurelien': KB_FW_AURELIEN,
   'fw-leila':    KB_FW_LEILA,
   'bb-rocco':    KB_BB_ROCCO,
+  'bb-vince':    KB_BB_VINCE,
   'mc-anonyme':  KB_MC_ANONYME,
   // Nouvelles stations seed (R.4)
   'h2-henri':    KB_H2_HENRI,
   'h2-camille':  KB_H2_CAMILLE,
   'g1-bernard':  KB_G1_BERNARD,
+  'g1-marie':    KB_G1_MARIE,
   'dg-doudou':   KB_DG_DOUDOU,
   'dg-pat':      KB_DG_PAT,
   'dg-leboss':   KB_DG_LEBOSS,
   'dn-salome':   KB_DN_SALOME,
+  'dn-karim':    KB_DN_KARIM,
   'tk-iris':     KB_TK_IRIS,
+  'tk-said':     KB_TK_SAID,
 }
 
 /** True si la KB de cet animateur est seed (lecture seule en UI). */

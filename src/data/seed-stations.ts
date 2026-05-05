@@ -69,7 +69,8 @@ export const SEED_STATIONS: RadioStation[] = [
     tagline: 'Action ou silence.',
     color: '#ffb320',
     hosts: [
-      { id: 'bb-rocco', name: 'Rocco', gender: 'male', trait: 'punch / motivation', color: '#ffb320', avatar: '🥊' },
+      { id: 'bb-rocco', name: 'Rocco', gender: 'male',   trait: 'punch / motivation, ex-coach',         color: '#ffb320', avatar: '🥊' },
+      { id: 'bb-vince', name: 'Vince', gender: 'male',   trait: 'tacticien stratégique, références cinéma de boxe et arts martiaux', color: '#ffd76a', avatar: '🎬' },
     ],
     sources: [
       { type: 'rss', url: 'https://www.numerama.com/feed/',                  title: 'Numerama' },
@@ -137,7 +138,8 @@ export const SEED_STATIONS: RadioStation[] = [
     description: "Chaîne dédiée à la Ğ1 (June), monnaie libre fondée sur la Théorie Relative de la Monnaie de Stéphane Laborde. Web of trust Cesium/Sakia, Duniter, écosystème Ğmarché, communautés vivantes, dividende universel concret.",
     color: '#dba23a',
     hosts: [
-      { id: 'g1-bernard', name: 'Bernard', gender: 'male', trait: 'pédagogue passionné de monnaie libre', color: '#dba23a', avatar: '🪙' },
+      { id: 'g1-bernard', name: 'Bernard', gender: 'male',   trait: 'pédagogue passionné de monnaie libre',                          color: '#dba23a', avatar: '🪙' },
+      { id: 'g1-marie',   name: 'Marie',   gender: 'female', trait: 'économiste curieuse, sceptique constructive sur la TRM',         color: '#f0c97a', avatar: '📊' },
     ],
     sources: [
       { type: 'rss', url: 'https://forum.duniter.org/latest.rss',                 title: 'Forum Duniter' },
@@ -180,7 +182,8 @@ export const SEED_STATIONS: RadioStation[] = [
     description: "Chaîne dédiée au digital nomadisme, à l'expatriation et au remote work. Visas spécifiques (Bali, Lisbonne, Tbilissi, Mexique), fiscalité multi-pays, coworkings, langues, cultures, échecs et réussites de la vie de baroudeur connecté.",
     color: '#22c1a3',
     hosts: [
-      { id: 'dn-salome', name: 'Salomé', gender: 'female', trait: 'ex-corporate devenue baroudeuse, pragmatique', color: '#22c1a3', avatar: '🌍' },
+      { id: 'dn-salome', name: 'Salomé', gender: 'female', trait: 'ex-corporate devenue baroudeuse, pragmatique',                       color: '#22c1a3', avatar: '🌍' },
+      { id: 'dn-karim',  name: 'Karim',  gender: 'male',   trait: 'questionne le modèle nomade : impact social, gentrification, soutenabilité', color: '#5fd9bf', avatar: '🧭' },
     ],
     sources: [
       { type: 'rss', url: 'https://nomadcapitalist.com/feed/',                   title: 'Nomad Capitalist' },
@@ -198,12 +201,13 @@ export const SEED_STATIONS: RadioStation[] = [
     kind: 'tech',
     language: 'fr',
     frequency: 122.5,
-    name: 'Décentralisée',
+    name: 'Cryptozor',
     tagline: 'Sortir du cloud propriétaire.',
     description: "Chaîne éducative sur les technologies décentralisées : IPFS, libp2p, NOSTR, Holochain, Bluesky/ATProto, ActivityPub, Ceramic, Hypercore. Comment elles marchent, ce qu'elles changent, projets réels qui s'en servent.",
     color: '#7a5fff',
     hosts: [
-      { id: 'tk-iris', name: 'Iris', gender: 'female', trait: 'dev cypherpunk, références Bitcoin/IPFS/NOSTR', color: '#7a5fff', avatar: '🛰️' },
+      { id: 'tk-iris', name: 'Iris', gender: 'female', trait: 'dev cypherpunk, références Bitcoin/IPFS/NOSTR',                     color: '#7a5fff', avatar: '🛰️' },
+      { id: 'tk-said', name: 'Saïd', gender: 'male',   trait: 'vétéran sécurité réseau, pragmatique sur Web3, allergique au hype', color: '#9a7fff', avatar: '🛡️' },
     ],
     sources: [
       { type: 'rss', url: 'https://blog.ipfs.tech/index.xml',                   title: 'IPFS Blog' },

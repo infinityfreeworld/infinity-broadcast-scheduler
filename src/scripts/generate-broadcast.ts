@@ -44,15 +44,19 @@ const PIPER_VOICE_BY_HOST: Record<string, string> = {
   'fw-aurelien': 'fr_FR-tom-medium',
   'fw-leila':    'fr_FR-siwis-medium',
   'bb-rocco':    'fr_FR-tom-medium',
+  'bb-vince':    'fr_FR-tom-medium',
   'mc-anonyme':  'fr_FR-siwis-medium',
   'h2-henri':    'fr_FR-tom-medium',
   'h2-camille':  'fr_FR-siwis-medium',
   'g1-bernard':  'fr_FR-tom-medium',
+  'g1-marie':    'fr_FR-siwis-medium',
   'dg-doudou':   'fr_FR-tom-medium',
   'dg-pat':      'fr_FR-siwis-medium',
   'dg-leboss':   'fr_FR-siwis-medium',
   'dn-salome':   'fr_FR-siwis-medium',
+  'dn-karim':    'fr_FR-tom-medium',
   'tk-iris':     'fr_FR-siwis-medium',
+  'tk-said':     'fr_FR-tom-medium',
 }
 
 const FALLBACK_BY_GENDER: Record<'male' | 'female' | 'androgyn', string> = {
