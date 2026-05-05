@@ -1,0 +1,67 @@
+name: Daily Broadcast Generation
+
+# Cron : tous les jours à 22h UTC = 23h Paris (hiver) / minuit Paris (été)
+# Génère les broadcasts pour J+1 (lendemain) avec l'actu fraîche du moment.
+#
+# Manual trigger possible via "Run workflow" (workflow_dispatch).
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Date cible YYYY-MM-DD (défaut J+1)'
+        required: false
+        default: ''
+      single_station:
+        description: 'Station unique (vide = toutes)'
+        required: false
+        default: ''
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90    # 9 stations × ~5 min/broadcast = ~45 min, +marge
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # Cache des binaires Piper + voix ONNX pour économiser ~50 MB téléchargés
+      # à chaque run. Clé basée sur la version Piper + voices listées en code.
+      - name: Cache Piper binary + voices
+        uses: actions/cache@v4
+        with:
+          path: |
+            piper/
+            voices/
+          key: piper-${{ hashFiles('src/lib/piper.ts') }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Generate broadcasts
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PINATA_JWT:        ${{ secrets.PINATA_JWT }}
+          NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
+          ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}
+          NUM_TURNS:         ${{ vars.NUM_TURNS || '25' }}
+          NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
+          TARGET_DATE:       ${{ github.event.inputs.target_date || '' }}
+        run: |
+          if [ -n "${{ github.event.inputs.single_station }}" ]; then
+            echo "Génération station unique : ${{ github.event.inputs.single_station }}"
+            npm run generate:one -- "${{ github.event.inputs.single_station }}"
+          else
+            npm run generate:all
+          fi

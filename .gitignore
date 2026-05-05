@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+
+# Piper binaries + voices (téléchargés à chaque CI run, cachés via actions/cache)
+piper/
+voices/
+
+# Outputs locaux
+out/
+*.wav
+*.mp3
