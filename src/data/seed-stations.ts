@@ -8,7 +8,30 @@
  * fréquence libre — Phase R.2).
  */
 
-import type { RadioStation } from '../lib/types'
+import type { RadioStation, TrackRef } from '../lib/types'
+
+/**
+ * Bibliothèque musicale par défaut — utilisée pour TOUTES les stations seed
+ * tant que des bibliothèques dédiées ne sont pas fournies.
+ *
+ * Source : Pinata gateway `coffee-rapid-mongoose-820.mypinata.cloud`,
+ * fournie par le user le 2026-05-05. 10 tracks uniques.
+ *
+ * Quand une station reçoit sa propre bibliothèque, remplacer
+ * `tracks: DEFAULT_TRACKS` par `tracks: STATION_TRACKS_<id>`.
+ */
+export const DEFAULT_TRACKS: TrackRef[] = [
+  { title: 'Default Track 01', cid: 'bafybeibhjj5cyhauwnrrjntrkwncl6y3bhyetzow54jieku47f2igchw7e' },
+  { title: 'Default Track 02', cid: 'bafybeiey67moux547ib62r5uojwssqz3iu63ro3d2hvr7z62npifw3dlq4' },
+  { title: 'Default Track 03', cid: 'bafybeiewnkzqs33a4x5oahytej2zhora3tqpgihgaym6fvyp2tqb5gffeu' },
+  { title: 'Default Track 04', cid: 'bafybeifmfsamtn76ugitlps5vf62uguypp7lxjhusj5piwhglkcavjrjhq' },
+  { title: 'Default Track 05', cid: 'bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q' },
+  { title: 'Default Track 06', cid: 'bafybeihg4uu22uqrgwdxwdio6te7oukj4zpwumlxpccbu4duah3ml36e5q' },
+  { title: 'Default Track 07', cid: 'bafybeihqozxwaq4ucefvq3bdqbj6u7as32uadzgngkqtltey646vutdjhu' },
+  { title: 'Default Track 08', cid: 'bafybeieygru4cmsv4oygx5becnl5qhx5ooms7eavz75asqneo6ts45utam' },
+  { title: 'Default Track 09', cid: 'bafybeic4zr3xf3kzlbjbaadx6csfesmmkkx57ebfg7erndahhqt47vx4pi' },
+  { title: 'Default Track 10', cid: 'bafybeiafjpji5ltdmgvhb7mpre6krpftwbsr2pzkdprj36uhyrkcya7trm' },
+]
 
 export const SEED_STATIONS: RadioStation[] = [
   {
@@ -29,10 +52,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',    title: 'Reporterre' },
       { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',   title: 'Le Monde Diplomatique' },
     ],
-    tracks: [
-      { title: 'Track 1', cid: 'bafybeihqozxwaq4ucefvq3bdqbj6u7as32uadzgngkqtltey646vutdjhu' },
-      { title: 'Track 2', cid: 'bafybeihg4uu22uqrgwdxwdio6te7oukj4zpwumlxpccbu4duah3ml36e5q' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -53,10 +73,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://basta.media/spip.php?page=backend',       title: 'Bastamag' },
       { type: 'rss', url: 'https://positivr.fr/feed/',                        title: 'Positivr' },
     ],
-    tracks: [
-      { title: 'Track 3', cid: 'bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q' },
-      { title: 'Track 4', cid: 'bafybeifmfsamtn76ugitlps5vf62uguypp7lxjhusj5piwhglkcavjrjhq' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -77,9 +94,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://korben.info/feed',                        title: 'Korben' },
       { type: 'rss', url: 'https://www.lemonde.fr/rss/une.xml',              title: 'Le Monde' },
     ],
-    tracks: [
-      { title: 'Track 5', cid: 'bafybeiewnkzqs33a4x5oahytej2zhora3tqpgihgaym6fvyp2tqb5gffeu' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -99,9 +114,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',   title: 'Le Monde Diplomatique' },
       { type: 'rss', url: 'https://korben.info/feed',                        title: 'Korben (décryptage tech)' },
     ],
-    tracks: [
-      { title: 'Track 6', cid: 'bafybeih54zuvvdeyzpjuyygmff7uok7mxmayqcracid5rkp2phc7xzindm' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -124,7 +137,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://www.connaissancedesenergies.org/rss.xml',      title: 'Connaissance des Énergies' },
       { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',         title: 'Reporterre' },
     ],
-    skipMusic: true,    // demande user — éducative pure, pas de musique pour l'instant
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -146,7 +159,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',         title: 'Reporterre (alternatives)' },
       { type: 'rss', url: 'https://basta.media/spip.php?page=backend',            title: 'Bastamag (luttes sociales)' },
     ],
-    skipMusic: true,    // demande user — pas de musique pour l'instant
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -168,7 +181,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://www.francetvinfo.fr/titres.rss', title: 'France Info (pour rebondir)' },
       { type: 'rss', url: 'https://www.legorafi.fr/feed/',          title: 'Le Gorafi (inspi humour)' },
     ],
-    skipMusic: true,    // demande user — chaîne d'humour pure, pas de musique
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -190,9 +203,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://www.lemonde.fr/rss/une.xml',                  title: 'Le Monde (actualité internationale)' },
       { type: 'rss', url: 'https://reporterre.net/spip.php?page=backend',        title: 'Reporterre' },
     ],
-    tracks: [
-      { title: 'Track 7', cid: 'bafybeifbh4yvz6wuydwfvrc6dbnoxg5q4iof6q4otcnzy7lh5lsqfs35fa' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -214,9 +225,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://korben.info/feed',                            title: 'Korben (tech)' },
       { type: 'rss', url: 'https://www.numerama.com/feed/',                      title: 'Numerama' },
     ],
-    tracks: [
-      { title: 'Track 8', cid: 'bafybeidjdzqdgmktpjzumkybvgnzhvhejp7qcftggoa6gs7cyfzzmoofpi' },
-    ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -241,6 +250,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://www.numerama.com/feed/',                        title: 'Numerama' },
       { type: 'rss', url: 'https://opensource.org/blog/feed',                      title: 'Open Source Initiative' },
     ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
@@ -264,6 +274,7 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://basta.media/spip.php?page=backend',             title: 'Bastamag (luttes, eau)' },
       { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',         title: 'Le Monde Diplomatique' },
     ],
+    tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
   },
