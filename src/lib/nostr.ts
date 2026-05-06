@@ -17,6 +17,12 @@ import type { RadioBroadcast } from './types'
 export const RADIO_BROADCAST_KIND = 30093
 
 const DEFAULT_RELAYS = [
+  // Spring 2026 — Relay perso Cloudflare (rétention permanente kind:30093)
+  // Avant : les events kind custom étaient purgés rapidement par les relais
+  // publics (~quelques heures). Ce relay garde tout définitivement via D1.
+  'wss://infinity-radio-relay.digitalforlifeagency.workers.dev',
+  // Relais publics : redondance + découvrabilité (les bots/clients qui
+  // suivent les pubkey Infinity peuvent voir les events publiés ici aussi).
   'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.snort.social',
