@@ -75,10 +75,11 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 ### 4. Test local d'une station
 
 **Pré-requis macOS** : Piper a besoin de la lib système `espeak-ng` (phonétisation
+texte → sons) ET `opus-tools` (encodage final WAV → Opus pour upload Pinata, ~16× plus petit que WAV brut).
 texte → sons). Sur Ubuntu CI, c'est dans le workflow ; pour le dev local Mac :
 
 ```bash
-brew install espeak-ng
+brew install espeak-ng opus-tools
 ```
 
 Puis :

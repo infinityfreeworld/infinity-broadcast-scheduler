@@ -32,6 +32,7 @@ import { buildHostSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
+import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
 import { publishBroadcast } from '../lib/nostr'
 
@@ -259,16 +260,27 @@ async function main() {
   console.log(`    Coût estimé Haiku 4.5 : $${costUsd.toFixed(4)}`)
 
   // Optionnel : sauve le WAV localement (debug)
-  const localPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.wav`)
-  writeFileSync(localPath, result.audioBlob)
-  console.log(`    WAV local : ${localPath}`)
+  const localWavPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.wav`)
+  writeFileSync(localWavPath, result.audioBlob)
+  console.log(`    WAV local : ${localWavPath} (${(result.audioBlob.byteLength / 1024 / 1024).toFixed(1)} MB)`)
 
-  // 4. Upload IPFS
+  // 3.5. Encode Opus (Spring 2026) — gain ~16× vs WAV brut, sans perte audible
+  // pour de la voix Piper. Fichier .opus (container OGG) joué nativement par
+  // tous les navigateurs modernes via AudioContext.decodeAudioData().
+  console.log('\n🎵 Encodage Opus…')
+  const opusBlob = await encodeWavToOpus(result.audioBlob, 32)
+  const ratio = (opusBlob.byteLength / result.audioBlob.byteLength * 100).toFixed(1)
+  console.log(`    ✓ ${(opusBlob.byteLength / 1024 / 1024).toFixed(1)} MB Opus (${ratio}% du WAV)`)
+  // Sauve aussi l'Opus en debug
+  const localOpusPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.opus`)
+  writeFileSync(localOpusPath, opusBlob)
+
+  // 4. Upload IPFS (Opus, pas WAV)
   console.log('\n📡 Upload Pinata IPFS…')
   const pin = await pinataPinFile(
-    result.audioBlob,
-    `broadcast-${stationId}-${targetDate}.wav`,
-    'audio/wav',
+    opusBlob,
+    `broadcast-${stationId}-${targetDate}.opus`,
+    'audio/ogg',
     pinataJwt,
     // Metadata pour l'auto-purge (purgeOldBroadcasts filtre par date)
     { station: stationId, date: targetDate },
@@ -283,7 +295,7 @@ async function main() {
     language:    station.language ?? 'fr',
     durationSec: result.durationSec,
     audioCid:    pin.cid,
-    audioMime:   'audio/wav',
+    audioMime:   'audio/ogg',     // Opus depuis Spring 2026 (plus de WAV)
     turns:       result.turns,
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,
