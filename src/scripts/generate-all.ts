@@ -18,12 +18,28 @@ import 'dotenv/config'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { SEED_STATIONS } from '../data/seed-stations'
+import { purgeOldBroadcasts } from '../lib/pinata'
 
 const exec = promisify(execFile)
 
 function tomorrowLocalISO(): string {
   const d = new Date()
   d.setDate(d.getDate() + 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+function todayLocalISO(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+function yesterdayLocalISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
@@ -37,6 +53,27 @@ async function main() {
   console.log(`║  Infinity Broadcast Scheduler — génération pour ${targetDate}  ║`)
   console.log(`║  ${SEED_STATIONS.length} stations seed à traiter               ║`)
   console.log(`╚══════════════════════════════════════════════════════════╝`)
+
+  // ── Auto-purge Pinata (Spring 2026) ──────────────────────────────────
+  // Avant chaque run cron, on supprime les broadcasts > J-1 du compte Pinata
+  // pour rester sous le quota free tier (1 GB). On garde [hier, aujourd'hui,
+  // demain] = 3 jours de retention, suffit pour overlap entre J et J+1
+  // + grace period si l'utilisateur reste plusieurs heures sur une page.
+  const pinataJwt = process.env.PINATA_JWT
+  if (pinataJwt) {
+    const keepDates = new Set([yesterdayLocalISO(), todayLocalISO(), targetDate])
+    console.log(`\n🧹 Auto-purge Pinata : keep [${[...keepDates].join(', ')}]`)
+    try {
+      const { pruned, freedBytes, errors } = await purgeOldBroadcasts(pinataJwt, keepDates)
+      console.log(`   ✓ ${pruned} pin(s) supprimé(s), ${(freedBytes / 1024 / 1024).toFixed(1)} MB libéré(s)`)
+      if (errors.length > 0) {
+        console.warn(`   ⚠️  ${errors.length} erreur(s) de unpin :`)
+        for (const e of errors.slice(0, 5)) console.warn(`      - ${e}`)
+      }
+    } catch (err) {
+      console.warn(`   ⚠️  Auto-purge échec (continue quand même) :`, err instanceof Error ? err.message : err)
+    }
+  }
 
   const startedAt = Date.now()
   const results: Array<{ stationId: string; ok: boolean; error?: string }> = []

@@ -270,6 +270,8 @@ async function main() {
     `broadcast-${stationId}-${targetDate}.wav`,
     'audio/wav',
     pinataJwt,
+    // Metadata pour l'auto-purge (purgeOldBroadcasts filtre par date)
+    { station: stationId, date: targetDate },
   )
   console.log(`    ✓ CID ${pin.cid} (${(pin.size / 1024 / 1024).toFixed(1)} MB)`)
 
