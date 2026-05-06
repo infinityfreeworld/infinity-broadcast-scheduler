@@ -306,6 +306,12 @@ async function main() {
   const okCount = publish.relays.filter(r => r.ok).length
   console.log(`    ✓ Event ${publish.eventId.slice(0, 12)}… publié sur ${okCount}/${publish.relays.length} relays`)
   console.log(`    Pubkey publisher : ${publish.pubkey}`)
+  // Détail par relay (pour détecter les échecs silencieux nostr-tools type
+  // "connection failure: …" qui donnaient un faux positif "publié 7/7")
+  for (const r of publish.relays) {
+    const tag = r.ok ? '✓' : '✗'
+    console.log(`      ${tag} ${r.url} → ${r.reason ?? 'ok'}`)
+  }
 
   console.log(`\n✅ Broadcast ${stationId} pour ${targetDate} publié.`)
 }

@@ -91,11 +91,22 @@ export async function publishBroadcast(
   const pool = new SimplePool()
 
   const results = await Promise.allSettled(pool.publish(relays, signed))
-  const summary = results.map((r, i) => ({
-    url: relays[i],
-    ok:  r.status === 'fulfilled',
-    reason: r.status === 'rejected' ? String(r.reason) : undefined,
-  }))
+  // nostr-tools' pool.publish returns "connection failure: …" as a fulfilled
+  // string when ensureRelay() fails (it does NOT reject). Si on se contente de
+  // r.status === 'fulfilled' on a un faux positif. Un vrai OK est le reason
+  // renvoyé par le relay (ex: "Event saved successfully" ou ""), donc on rejette
+  // explicitement les valeurs qui commencent par "connection failure".
+  const summary = results.map((r, i) => {
+    const url = relays[i]
+    if (r.status === 'rejected') {
+      return { url, ok: false, reason: String(r.reason?.message ?? r.reason) }
+    }
+    const value = String(r.value ?? '')
+    if (value.startsWith('connection failure')) {
+      return { url, ok: false, reason: value }
+    }
+    return { url, ok: true, reason: value || 'ok' }
+  })
 
   pool.close(relays)
 
