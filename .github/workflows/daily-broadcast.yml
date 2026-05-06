@@ -21,7 +21,7 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 90    # 9 stations × ~5 min/broadcast = ~45 min, +marge
+    timeout-minutes: 150    # 9 stations × ~5 min/broadcast = ~45 min, +marge
 
     steps:
       - name: Checkout
