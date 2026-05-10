@@ -145,7 +145,7 @@ Tu es au tour ${turn}/${total} → phase **${phase}**.
 
 → ${instruction}
 
-L'émission dure environ 30 minutes. La structure totale :
+L'émission dure environ 15 minutes. La structure totale :
 - 1-${introEnd}            : INTRO + annonce des sujets
 - ${introEnd + 1}-${seg1End}            : SEGMENT 1 (sujet A)
 - ${seg1End + 1}-${seg2End}            : SEGMENT 2 (sujet B)

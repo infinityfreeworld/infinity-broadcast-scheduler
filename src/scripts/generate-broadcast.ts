@@ -224,9 +224,11 @@ async function main() {
   const pinataJwt = required('PINATA_JWT')
   const nostrPriv = required('NOSTR_PRIVATE_KEY')
   const model = process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
-  // 45 tours ≈ 30 min audio (cible "vraie radio FM"). Ajustable via NUM_TURNS.
-  // Estimation : 1 tour ≈ 40s audio (3 phrases TTS Piper FR + ~150ms pacing)
-  const numTurns = Number.parseInt(process.env.NUM_TURNS ?? '45', 10)
+  // 22 tours ≈ 15 min audio (décision user 2026-05-11 : émissions courtes +
+  // 5 min de musique entre = cycle 20 min en boucle 72×/jour). Ajustable via
+  // NUM_TURNS. Estimation : 1 tour ≈ 40s audio (3 phrases TTS Piper FR +
+  // ~150ms pacing).
+  const numTurns = Number.parseInt(process.env.NUM_TURNS ?? '22', 10)
 
   const station = SEED_STATIONS.find(s => s.id === stationId)
   if (!station) throw new Error(`Station inconnue : ${stationId}`)
