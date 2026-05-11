@@ -58,7 +58,7 @@ jobs:
           PINATA_JWT:        ${{ secrets.PINATA_JWT }}
           NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
           ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}
-          NUM_TURNS:         ${{ vars.NUM_TURNS || '45' }}
+          NUM_TURNS:         ${{ vars.NUM_TURNS || '22' }}
           NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
           TARGET_DATE:       ${{ github.event.inputs.target_date || '' }}
         run: |
