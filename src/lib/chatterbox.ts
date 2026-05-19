@@ -61,13 +61,15 @@ function authHeaders(apiKey: string): Record<string, string> {
 }
 
 /**
- * Health check du HF Space.
+ * Health check du HF Space. Sprint DJ — utilise `/api/model-info` (le seul
+ * endpoint GET léger sans paramètre exposé par `devnen/chatterbox-tts-server`).
+ * `/health` n'existe pas sur cette image (renvoie 404 FastAPI).
  */
 export async function pingChatterbox(): Promise<{ ok: boolean; status: number; ms: number }> {
   const { url, apiKey } = getEndpoint()
   const t0 = Date.now()
   try {
-    const res = await fetch(`${url}/health`, {
+    const res = await fetch(`${url}/api/model-info`, {
       headers: authHeaders(apiKey),
       signal:  AbortSignal.timeout(90_000),
     })
