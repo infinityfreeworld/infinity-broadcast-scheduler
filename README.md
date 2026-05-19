@@ -135,6 +135,35 @@ Pour trigger manuellement (test) :
 - Repo → Actions → "Daily Broadcast Generation" → "Run workflow"
 - Optionnellement spécifie une date ou une station unique
 
+## TTS Chatterbox (optionnel, Sprint DE)
+
+Le pipeline supporte un **mode hybride** : Chatterbox (Resemble AI, voice
+cloning) si configuré, fallback Piper FR sinon. Permet de cloner la voix
+d'un Bâtisseur réel pour son animateur IA.
+
+**Activation** :
+
+1. Déploie un HF Space avec l'image `ghcr.io/devnen/chatterbox-tts-server`
+   (cf. `chatterbox-hf/` dans le repo CPI Neo pour le Dockerfile type)
+2. Upload les samples de voix depuis l'IHL d'Infinity (onglet 🎙️ Voix Radio)
+   ou via l'admin endpoint du Space
+3. Ajoute les secrets GHA :
+   - `CHATTERBOX_TTS_URL` (secret) — URL du HF Space
+   - `CHATTERBOX_API_KEY` (secret) — Bearer token HF
+4. Ajoute les vars GHA :
+   - `CHATTERBOX_VOICE_MAP` (var) — JSON `{"<hostId>":"<voiceName>"}` (optionnel)
+   - `CHATTERBOX_DEFAULT_VOICE` (var) — voix utilisée si pas de mapping
+   - `CHATTERBOX_LANGUAGE` (var) — défaut `fr`
+   - `CHATTERBOX_FALLBACK_PIPER` (var) — défaut `true`
+
+**Comportement** :
+- Au démarrage : ping le HF Space (cold start ~30-60s)
+- Pour chaque turn : si `host.id` est dans `CHATTERBOX_VOICE_MAP` → Chatterbox
+- Si Chatterbox fail (timeout / 5xx) ET fallback activé → Piper FR
+- Si pas de map ni de default → Piper FR direct (cas actuel)
+
+**Coût additionnel** : ~10 USD/mois (HF Space GPU T4 avec sleep auto).
+
 ## Maintenance
 
 **Coûts à surveiller** :

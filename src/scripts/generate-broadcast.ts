@@ -31,6 +31,10 @@ import { callAnthropic, type LLMMessage } from '../lib/anthropic'
 import { buildHostSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
+import {
+  synthesizeWithChatterbox, getChatterboxVoiceForHost, pingUntilReady,
+  isFallbackPiperEnabled, ChatterboxError,
+} from '../lib/chatterbox'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
@@ -168,13 +172,44 @@ async function generateBroadcastBytes(opts: {
       continue
     }
 
-    // Synthèse Piper natif
-    const wavPath = await synthesize(turnText, voiceId)
-    const wav = readWav(wavPath)
-    // Sanity check sample rate
-    if (wav.sampleRate !== getVoiceSampleRate(voiceId)) {
-      console.warn(`  sample rate mismatch ${wav.sampleRate} vs ${getVoiceSampleRate(voiceId)}`)
+    // Sprint DE — TTS hybride : Chatterbox d'abord si configuré pour ce
+    // host, fallback Piper sinon (toujours fallback si Chatterbox fail
+    // et CHATTERBOX_FALLBACK_PIPER ≠ false).
+    let wav: import('../lib/audio').DecodedWav | null = null
+    const chatterboxVoice = getChatterboxVoiceForHost(host.id)
+    if (chatterboxVoice) {
+      try {
+        const buf = await synthesizeWithChatterbox({
+          voice:    chatterboxVoice,
+          text:     turnText,
+          language: language,
+          format:   'wav',
+        })
+        // Écrit le buffer dans un tmpfile WAV pour pouvoir réutiliser
+        // readWav qui attend un path.
+        const tmpPath = join(tmpdir(), `chatterbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
+        writeFileSync(tmpPath, buf)
+        wav = readWav(tmpPath)
+        process.stdout.write(`(chatterbox:${chatterboxVoice}) `)
+      } catch (err) {
+        const msg = err instanceof ChatterboxError ? err.message : (err as Error).message
+        console.warn(`\n  ⚠ chatterbox fail [${chatterboxVoice}]: ${msg.slice(0, 120)}`)
+        if (!isFallbackPiperEnabled()) {
+          throw err
+        }
+        process.stdout.write('(fallback piper) ')
+      }
     }
+    if (!wav) {
+      const wavPath = await synthesize(turnText, voiceId)
+      const piperWav = readWav(wavPath)
+      if (piperWav.sampleRate !== getVoiceSampleRate(voiceId)) {
+        console.warn(`  sample rate mismatch ${piperWav.sampleRate} vs ${getVoiceSampleRate(voiceId)}`)
+      }
+      wav = piperWav
+    }
+    // TS narrowing : wav est garanti non-null à ce stade.
+    const finalWav: import('../lib/audio').DecodedWav = wav
 
     const turn: BroadcastTurn = {
       id:       `bcast-${i}-${Date.now().toString(36).slice(-4)}`,
@@ -187,7 +222,7 @@ async function generateBroadcastBytes(opts: {
       tEnd:     0,
     }
     turns.push(turn)
-    wavEntries.push({ wav })
+    wavEntries.push({ wav: finalWav })
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
   }
@@ -237,12 +272,26 @@ async function main() {
   console.log(`\n🎙  Génération broadcast : ${station.name} pour ${targetDate}`)
   console.log(`    Model : ${model} · ${numTurns} tours · ${station.hosts.length} animateur(s)`)
 
-  // 1. Préparation Piper (binaire + voix)
+  // 1. Préparation Piper (binaire + voix) — gardé même si Chatterbox
+  // configuré : sert de fallback robuste si le HF Space est down ou
+  // qu'un host n'a pas de voix Chatterbox mappée.
   console.log('\n📦 Setup Piper…')
   await ensurePiperBinary()
   const uniqueVoices = new Set<string>()
   for (const h of station.hosts) uniqueVoices.add(pickVoice(h.id, h.gender))
   for (const v of uniqueVoices) await ensureVoice(v)
+
+  // 1.b — Sprint DE : ping Chatterbox jusqu'à ready si configuré.
+  // Le Space HF peut être en cold start (sleep auto 15min). On le
+  // réveille AVANT de commencer à synthétiser, pour éviter un long
+  // timeout au 1er turn.
+  if (process.env.CHATTERBOX_TTS_URL) {
+    console.log('\n🎙  Chatterbox configuré, réveil HF Space…')
+    const ready = await pingUntilReady(6, 5_000)
+    if (!ready) {
+      console.warn('    ⚠ HF Space pas ready après 6 retries — fallback Piper actif')
+    }
+  }
 
   // 2. Fetch news
   console.log('\n📰 Fetch actu…')

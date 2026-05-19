@@ -61,6 +61,15 @@ jobs:
           NUM_TURNS:         ${{ vars.NUM_TURNS || '22' }}
           NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
           TARGET_DATE:       ${{ github.event.inputs.target_date || '' }}
+          # Sprint DE — Chatterbox TTS (optionnel, ajouter ces secrets+vars dans
+          # Settings → Actions → Secrets pour activer la synthèse Chatterbox
+          # avec fallback Piper auto)
+          CHATTERBOX_TTS_URL:        ${{ secrets.CHATTERBOX_TTS_URL || '' }}
+          CHATTERBOX_API_KEY:        ${{ secrets.CHATTERBOX_API_KEY || '' }}
+          CHATTERBOX_VOICE_MAP:      ${{ vars.CHATTERBOX_VOICE_MAP || '' }}
+          CHATTERBOX_DEFAULT_VOICE:  ${{ vars.CHATTERBOX_DEFAULT_VOICE || '' }}
+          CHATTERBOX_LANGUAGE:       ${{ vars.CHATTERBOX_LANGUAGE || 'fr' }}
+          CHATTERBOX_FALLBACK_PIPER: ${{ vars.CHATTERBOX_FALLBACK_PIPER || 'true' }}
         run: |
           if [ -n "${{ github.event.inputs.single_station }}" ]; then
             echo "Génération station unique : ${{ github.event.inputs.single_station }}"
