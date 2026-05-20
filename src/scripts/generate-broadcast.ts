@@ -28,7 +28,7 @@ import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
 import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem } from '../lib/types'
 import { callAnthropic, type LLMMessage } from '../lib/anthropic'
-import { buildHostSystemPrompt, retrieveTopEntries } from '../lib/personas'
+import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import {
@@ -36,6 +36,7 @@ import {
   isFallbackPiperEnabled, ChatterboxError,
 } from '../lib/chatterbox'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
+import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
@@ -124,19 +125,42 @@ async function generateBroadcastBytes(opts: {
   const wavEntries: ConcatEntry[] = []
   let costIn = 0, costOut = 0
 
+  // Phase H.4 — Tirage d'un invité au sort parmi `station.guestIds`
+  // (filtré par langue de la station). Le guest intervient sur 1 tour
+  // en milieu de broadcast (~40% du parcours).
+  const guest = pickGuestForStation(station.guestIds, language)
+  const guestTurnIndex = guest ? Math.max(2, Math.floor(numTurns * 0.4)) : -1
+  if (guest) {
+    console.log(`    🎭 Invité programmé tour ${guestTurnIndex + 1}/${numTurns} : ${guest.displayName} (${guest.behavior})`)
+  }
+
   for (let i = 0; i < numTurns; i++) {
-    const host = station.hosts[i % station.hosts.length]
+    const isGuestTurn = guest !== null && i === guestTurnIndex
+
+    // Speaker effectif : guest si c'est son tour, sinon round-robin host
+    const host: RadioHost = isGuestTurn
+      ? {
+          id:     `guest:${guest!.id}`,
+          name:   guest!.displayName,
+          gender: guest!.gender,
+          trait:  guest!.bio.slice(0, 60),
+          color:  guest!.color,
+          avatar: guest!.avatar,
+        }
+      : station.hosts[i % station.hosts.length]
     const voiceId = pickVoice(host.id, host.gender)
 
-    const kb = SEED_HOST_KBS[host.id] ?? {
-      hostId: host.id, stationId: station.id, personality: '', entries: [], updatedAt: 0,
-    } as HostKB
+    const kb = !isGuestTurn && SEED_HOST_KBS[host.id]
+      ? SEED_HOST_KBS[host.id]
+      : { hostId: host.id, stationId: station.id, personality: '', entries: [], updatedAt: 0 } as HostKB
     const selectedEntries = retrieveTopEntries(kb.entries, topic, KB_TOP_K)
     const otherHosts = station.hosts.filter(h => h.id !== host.id)
     const isFirstTurn = turns.length === 0
 
     // Phase D.4 — Persona NOSTR (kind:30096) override la seed si présente
-    const customPersona = getPersonaForHost(station.id, host.id)
+    // (uniquement pour les hosts ; les guests utilisent leurs propres
+    // instructions livrées via kind:30098)
+    const customPersona = isGuestTurn ? null : getPersonaForHost(station.id, host.id)
     const effectiveHost: RadioHost = customPersona ? {
       id:     host.id,
       name:   customPersona.name,
@@ -146,19 +170,29 @@ async function generateBroadcastBytes(opts: {
       avatar: customPersona.avatar,
     } : host
 
-    const systemPrompt = buildHostSystemPrompt({
-      host:               effectiveHost,
-      kb, selectedEntries, topic,
-      stationName:        station.name,
-      stationDescription: station.description,
-      newsBlock:          formatNewsForPrompt(news),
-      language,
-      otherHosts,
-      currentTurn:        i + 1,
-      totalTurns:         numTurns,
-      customInstructions: customPersona?.instructions,
-      behaviorDirective:  customPersona ? behaviorDirective(customPersona.behavior) : undefined,
-    })
+    const systemPrompt = isGuestTurn
+      ? buildGuestSystemPrompt({
+          guest:              guest!,
+          stationName:        station.name,
+          stationDescription: station.description,
+          language,
+          hostsRecap:         station.hosts.map(h => h.name).join(', '),
+          newsBlock:          formatNewsForPrompt(news),
+          behaviorDirective:  guestBehaviorDirective(guest!.behavior),
+        })
+      : buildHostSystemPrompt({
+          host:               effectiveHost,
+          kb, selectedEntries, topic,
+          stationName:        station.name,
+          stationDescription: station.description,
+          newsBlock:          formatNewsForPrompt(news),
+          language,
+          otherHosts,
+          currentTurn:        i + 1,
+          totalTurns:         numTurns,
+          customInstructions: customPersona?.instructions,
+          behaviorDirective:  customPersona ? behaviorDirective(customPersona.behavior) : undefined,
+        })
 
     const history: LLMMessage[] = turns.slice(-HISTORY_DEPTH).map(t => ({
       role: 'assistant',
@@ -166,14 +200,16 @@ async function generateBroadcastBytes(opts: {
     }))
     const userMessage: LLMMessage = {
       role: 'user',
-      content: isFirstTurn
-        ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
-        : (i === numTurns - 1
-            ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
-            : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).'),
+      content: isGuestTurn
+        ? `Ton tour d'invité. Tu interviens MAINTENANT dans l'émission après avoir entendu le dialogue ci-dessus. Place ta saillie OU réagis franchement à un point évoqué. 1-3 phrases max — tu es un invité, pas un animateur.`
+        : (isFirstTurn
+          ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
+          : (i === numTurns - 1
+              ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
+              : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
     }
 
-    process.stdout.write(`  [${i + 1}/${numTurns}] ${host.name}… `)
+    process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
 
     const resp = await callAnthropic({
       apiKey, model, systemPrompt,

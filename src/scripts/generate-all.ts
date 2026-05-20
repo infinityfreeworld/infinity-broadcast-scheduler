@@ -21,6 +21,7 @@ import { SEED_STATIONS } from '../data/seed-stations'
 import { purgeOldBroadcasts } from '../lib/pinata'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
+import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 
 const exec = promisify(execFile)
 
@@ -108,6 +109,18 @@ async function main() {
   exportHostPersonasToEnv(personas)
   console.log(`   ✓ ${personas.size} persona(s) trouvée(s)${
     personas.size > 0 ? ' : ' + [...personas.values()].slice(0, 5).map(p => `${p.stationId}:${p.hostId}(${p.behavior})`).join(', ') + (personas.size > 5 ? ', …' : '') : ''
+  }`)
+
+  // ── Fetch invités personas (Phase H.4) ────────────────────────────────
+  // Publiés sur NOSTR kind:30098 par l'IHL « 🎭 Invités ». Pool global
+  // cross-stations. Le scheduler choisit 1 guest random par broadcast
+  // (parmi `station.guestIds[]` filtré par langue) et l'insère sur 2
+  // tours d'intervention au milieu du dialogue.
+  console.log(`\n📨 Fetch invités (NOSTR kind:30098)…`)
+  const guests = await fetchRadioGuests()
+  exportGuestsToEnv(guests)
+  console.log(`   ✓ ${guests.size} invité(s) trouvé(s)${
+    guests.size > 0 ? ' : ' + [...guests.values()].slice(0, 5).map(g => g.displayName).join(', ') + (guests.size > 5 ? ', …' : '') : ''
   }`)
 
   const startedAt = Date.now()
