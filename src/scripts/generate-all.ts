@@ -20,6 +20,7 @@ import { promisify } from 'node:util'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { purgeOldBroadcasts } from '../lib/pinata'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
+import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 
 const exec = promisify(execFile)
 
@@ -94,6 +95,20 @@ async function main() {
       mappings.size > 0 ? ' : ' + [...mappings.entries()].slice(0, 5).map(([k, v]) => `${k}→${v}`).join(', ') + (mappings.size > 5 ? ', …' : '') : ''
     }`)
   }
+
+  // ── Fetch personas animateurs (Phase D.4) ────────────────────────────
+  // Publiés sur NOSTR kind:30096 par l'IHL Infinity. Contiennent les
+  // instructions système enrichies + le ton (warm/aggressive/sad/neutral/
+  // adaptive) que l'admin a choisi pour chaque (station, host). Pattern
+  // identique aux voix : 1 round-trip parent, env-serialized aux enfants.
+  // Fallback : si pas de persona NOSTR pour un host, le scheduler utilise
+  // la seed RadioHost (compatibilité ascendante).
+  console.log(`\n📨 Fetch personas animateurs (NOSTR kind:30096)…`)
+  const personas = await fetchHostPersonas()
+  exportHostPersonasToEnv(personas)
+  console.log(`   ✓ ${personas.size} persona(s) trouvée(s)${
+    personas.size > 0 ? ' : ' + [...personas.values()].slice(0, 5).map(p => `${p.stationId}:${p.hostId}(${p.behavior})`).join(', ') + (personas.size > 5 ? ', …' : '') : ''
+  }`)
 
   const startedAt = Date.now()
   const results: Array<{ stationId: string; ok: boolean; error?: string }> = []
