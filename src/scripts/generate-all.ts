@@ -47,7 +47,11 @@ function yesterdayLocalISO(): string {
 }
 
 async function main() {
-  const targetDate = process.argv[2] ?? process.env.TARGET_DATE ?? tomorrowLocalISO()
+  // ATTENTION : `||` (pas `??`) — le workflow YAML set `TARGET_DATE: ''` quand
+  // le cron déclenche sans workflow_dispatch, ce qui faisait propager une date
+  // vide partout (cf bug observé 2026-05-19 : 11 broadcasts publiés sur NOSTR
+  // avec `content.date = ""` car nullish coalescing ne fallback pas sur '').
+  const targetDate = process.argv[2] || process.env.TARGET_DATE || tomorrowLocalISO()
 
   console.log(`\n╔══════════════════════════════════════════════════════════╗`)
   console.log(`║  Infinity Broadcast Scheduler — génération pour ${targetDate}  ║`)
