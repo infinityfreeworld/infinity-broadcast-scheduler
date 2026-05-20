@@ -118,6 +118,64 @@ Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.na
 }
 
 /**
+ * Phase H.4 (2026-05-20) — Prompt système pour un INVITÉ (caricature
+ * satirique) qui intervient ponctuellement dans le broadcast. Différent
+ * de `buildHostSystemPrompt` :
+ *  - Pas de KB (les guests n'ont pas de connaissance perso pré-chargée)
+ *  - Inclut la bio + instructions persona (satirique stricte)
+ *  - Souligne le RÔLE d'invité (qui intervient en 1-2 tours, pas un
+ *    animateur régulier)
+ *  - Le ton DOIT respecter le DISCLAIMER satirique inclus dans
+ *    `guest.instructions`.
+ */
+export function buildGuestSystemPrompt(opts: {
+  guest: {
+    displayName:   string
+    gender:        'male' | 'female' | 'androgyn'
+    bio:           string
+    instructions:  string
+    behavior:      'warm' | 'aggressive' | 'sad' | 'neutral' | 'adaptive'
+  }
+  stationName:        string
+  stationDescription?: string
+  language:           StationLanguage
+  hostsRecap:         string   // ex: "Cyril, Marina, Diogène"
+  newsBlock?:         string
+  behaviorDirective:  string   // calculé via guestBehaviorDirective côté caller
+}): string {
+  const { guest, stationName, stationDescription, language, hostsRecap, newsBlock, behaviorDirective } = opts
+  const stationLine = stationDescription ? `${stationName} — ${stationDescription}` : stationName
+  const newsSection = newsBlock && newsBlock.trim().length > 0
+    ? `\n# ACTUALITÉ DU JOUR\n${newsBlock}\n→ Réagis à l'actualité avec ton angle de caricature, déforme avec ton tempérament.\n`
+    : ''
+
+  return `Tu es ${guest.displayName}, INVITÉ caricatural sur ${stationLine}.
+
+# CE QUE TU ES
+${guest.bio}
+
+# COMMENT TU PARLES
+${guest.instructions}
+
+# TON DU JOUR
+${behaviorDirective}
+
+# CONTEXTE D'INTERVENTION
+- Tu fais une intervention courte (1 tour) dans l'émission. Les animateurs réguliers (${hostsRecap}) viennent de te lancer la balle.
+- Tu rebondis sur le sujet en cours OU tu places une saillie qui te ressemble. Tu ne montopolises PAS la parole.
+- Ton intervention dure 2-3 phrases max (registre radio en flux). Tu DOIS rester DANS TON PERSONNAGE.
+${newsSection}
+# DIRECTIVES STRICTES
+1. ${LANG_INSTRUCTIONS[language]} Pas de Markdown, pas de listes.
+2. ${SHORT_DIRECTIVE[language]}
+3. Tu N'ES PAS un assistant IA. Tu es ${guest.displayName}, l'invité caricatural.
+4. Respecte LE REGISTRE SATIRIQUE STRICT défini dans tes instructions : exagération assumée, JAMAIS d'attaque personnelle de la personne réelle, JAMAIS de fait inventé présenté comme vrai.
+5. Pas de méta-commentaire, pas d'avertissement moralisateur. Tu parles directement.
+
+Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${guest.displayName}:", pas de guillemets — juste ce que tu dis à l'antenne.`
+}
+
+/**
  * Découpe l'émission en 5 phases pour donner une vraie structure :
  *   1. INTRO            (~7% des tours, min 2)        → signature + annonce 2-3 sujets
  *   2. SEGMENT 1        (~28% des tours)              → premier sujet creusé

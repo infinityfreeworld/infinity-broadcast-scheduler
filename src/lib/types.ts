@@ -15,6 +15,9 @@ export type StationKind =
 
 export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh' | 'ru'
 
+/** Phase H.3 (2026-05-20) — IDs des guests assignables à une station.
+ *  Ajouté à `RadioStation.guestIds?: string[]` dans l'interface ci-dessous. */
+
 export interface TrackRef {
   title: string
   cid?: string
@@ -52,6 +55,8 @@ export interface RadioStation {
   sources?:     NewsSource[]
   description?: string
   skipMusic?:   boolean
+  /** Phase H.3 — IDs des guests (kind:30098) invitables par cette station. */
+  guestIds?:    string[]
 }
 
 export interface HostKBEntry {
