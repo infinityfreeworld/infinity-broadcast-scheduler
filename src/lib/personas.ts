@@ -16,6 +16,7 @@ const LANG_INSTRUCTIONS: Record<StationLanguage, string> = {
   hi: 'आप अदृश्य श्रोताओं से हिन्दी में, मौखिक रूप से बात करते हैं।',
   ja: 'あなたは日本語で、目に見えない聴衆に向けて話します。',
   zh: '你用中文，对着看不见的听众说话。',
+  ru: 'Вы говорите по-русски, вслух, для невидимых слушателей.',
 }
 
 const SHORT_DIRECTIVE: Record<StationLanguage, string> = {
@@ -27,6 +28,7 @@ const SHORT_DIRECTIVE: Record<StationLanguage, string> = {
   hi: 'प्रति बारी अधिकतम 3 छोटे वाक्य। यह रेडियो प्रवाह है, निबंध नहीं।',
   ja: '1ターン最大3文の短文。ラジオの流れ、エッセイではない。',
   zh: '每轮最多3个短句。这是电台直播，不是论文。',
+  ru: 'Максимум 3 коротких предложения за ход. Это поток радио, а не эссе.',
 }
 
 export function buildHostSystemPrompt(opts: {
@@ -127,33 +129,32 @@ Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.na
  * attend de lui (transition explicite, citation actu, profondeur, etc.).
  */
 function buildStructureSection(turn: number, total: number, language: StationLanguage): string {
-  if (language !== 'fr') return ''   // structure FR pour l'instant — ajouter EN/etc. plus tard
-
   const introEnd     = Math.max(2, Math.round(total * 0.07))           // 1..introEnd
   const seg1End      = introEnd + Math.round(total * 0.28)             // (introEnd+1)..seg1End
   const seg2End      = seg1End + Math.round(total * 0.28)              // (seg1End+1)..seg2End
   const conclusionStart = total - Math.max(3, Math.round(total * 0.09)) + 1
   const seg3End      = conclusionStart - 1
 
-  let phase: string, instruction: string
-  if (turn <= introEnd) {
-    phase = `INTRO (tours 1-${introEnd})`
-    instruction = `Ouvre l'émission. Pose la signature de la station, le ton du jour. Au moins une fois dans l'intro, ANNONCE explicitement 2 ou 3 sujets concrets que vous allez traiter aujourd'hui (en t'appuyant sur l'actu fournie si elle s'y prête). Donne envie d'écouter la suite.`
-  } else if (turn <= seg1End) {
-    phase = `SEGMENT 1 (tours ${introEnd + 1}-${seg1End})`
-    instruction = `Premier sujet annoncé en intro. Va en profondeur — pas du bavardage, du contenu. Cite l'actu quand c'est juste, contredis-toi entre vous, donne des exemples concrets. L'auditeur doit apprendre, comprendre ou rire.`
-  } else if (turn <= seg2End) {
-    phase = `SEGMENT 2 (tours ${seg1End + 1}-${seg2End})`
-    instruction = `Bascule vers le second sujet annoncé. Si tu es le premier de ce segment : fais une TRANSITION EXPLICITE ("Bon, on passe à…", "Et toi ${otherHostsHint(language)}, sur le sujet X tu en penses quoi ?"). Reste sur le sujet sans dériver.`
-  } else if (turn <= seg3End) {
-    phase = `SEGMENT 3 (tours ${seg2End + 1}-${seg3End})`
-    instruction = `Troisième sujet — fond, décalage ou récit. Si tu es le premier de ce segment : transition explicite. C'est le moment du contenu plus tendu, plus drôle ou plus poétique selon le ton de la station.`
-  } else {
-    phase = `CONCLUSION (tours ${conclusionStart}-${total})`
-    instruction = `Récapitule en une phrase ce qu'on a abordé aujourd'hui. Donne une perspective courte, une idée que l'auditeur emporte. Termine par un teaser de l'émission de demain ("Demain on parlera de…") sans révéler le contenu — donne envie de revenir. Garde le ton de la station.`
-  }
+  if (language === 'fr') {
+    let phase: string, instruction: string
+    if (turn <= introEnd) {
+      phase = `INTRO (tours 1-${introEnd})`
+      instruction = `Ouvre l'émission. Pose la signature de la station, le ton du jour. Au moins une fois dans l'intro, ANNONCE explicitement 2 ou 3 sujets concrets que vous allez traiter aujourd'hui (en t'appuyant sur l'actu fournie si elle s'y prête). Donne envie d'écouter la suite.`
+    } else if (turn <= seg1End) {
+      phase = `SEGMENT 1 (tours ${introEnd + 1}-${seg1End})`
+      instruction = `Premier sujet annoncé en intro. Va en profondeur — pas du bavardage, du contenu. Cite l'actu quand c'est juste, contredis-toi entre vous, donne des exemples concrets. L'auditeur doit apprendre, comprendre ou rire.`
+    } else if (turn <= seg2End) {
+      phase = `SEGMENT 2 (tours ${seg1End + 1}-${seg2End})`
+      instruction = `Bascule vers le second sujet annoncé. Si tu es le premier de ce segment : fais une TRANSITION EXPLICITE ("Bon, on passe à…", "Et toi ${otherHostsHint(language)}, sur le sujet X tu en penses quoi ?"). Reste sur le sujet sans dériver.`
+    } else if (turn <= seg3End) {
+      phase = `SEGMENT 3 (tours ${seg2End + 1}-${seg3End})`
+      instruction = `Troisième sujet — fond, décalage ou récit. Si tu es le premier de ce segment : transition explicite. C'est le moment du contenu plus tendu, plus drôle ou plus poétique selon le ton de la station.`
+    } else {
+      phase = `CONCLUSION (tours ${conclusionStart}-${total})`
+      instruction = `Récapitule en une phrase ce qu'on a abordé aujourd'hui. Donne une perspective courte, une idée que l'auditeur emporte. Termine par un teaser de l'émission de demain ("Demain on parlera de…") sans révéler le contenu — donne envie de revenir. Garde le ton de la station.`
+    }
 
-  return `\n# STRUCTURE DE L'ÉMISSION
+    return `\n# STRUCTURE DE L'ÉMISSION
 Tu es au tour ${turn}/${total} → phase **${phase}**.
 
 → ${instruction}
@@ -164,6 +165,45 @@ L'émission dure environ 15 minutes. La structure totale :
 - ${seg1End + 1}-${seg2End}            : SEGMENT 2 (sujet B)
 - ${seg2End + 1}-${seg3End}            : SEGMENT 3 (sujet C ou récit)
 - ${conclusionStart}-${total}          : CONCLUSION + teaser demain
+
+`
+  }
+
+  // Phase E (2026-05-20) — Structure générique en anglais pour les langues
+  // non-FR (EN, ES, RU, ZH, IT, PT, JA, HI). Haiku comprend les instructions
+  // EN et les applique en produisant la sortie dans la langue cible de la
+  // station (cf. LANG_INSTRUCTIONS au-dessus du prompt principal).
+  let phase: string, instruction: string
+  if (turn <= introEnd) {
+    phase = `INTRO (turns 1-${introEnd})`
+    instruction = `Open the show. State the station's identity, the tone of the day. At least once during the intro, EXPLICITLY ANNOUNCE 2 or 3 concrete topics you'll cover today (lean on the provided news when relevant). Make the listener want to stay.`
+  } else if (turn <= seg1End) {
+    phase = `SEGMENT 1 (turns ${introEnd + 1}-${seg1End})`
+    instruction = `First topic announced during intro. Go deep — not small talk, real content. Cite the news when it fits, push back on each other, give concrete examples. The listener should learn, understand, or laugh.`
+  } else if (turn <= seg2End) {
+    phase = `SEGMENT 2 (turns ${seg1End + 1}-${seg2End})`
+    instruction = `Pivot to the second topic announced. If you're the first to speak in this segment: make an EXPLICIT TRANSITION ("OK, moving on to…", "And you, [colleague name], on topic X — what's your take?"). Stay on the topic without drifting.`
+  } else if (turn <= seg3End) {
+    phase = `SEGMENT 3 (turns ${seg2End + 1}-${seg3End})`
+    instruction = `Third topic — deeper analysis, offbeat angle, or narrative. If you're the first to speak in this segment: explicit transition. This is the moment for tougher, funnier, or more poetic content depending on the station's tone.`
+  } else {
+    phase = `CONCLUSION (turns ${conclusionStart}-${total})`
+    instruction = `Recap in one sentence what was covered today. Offer a short perspective, an idea the listener takes home. End with a teaser for tomorrow's show ("Tomorrow we'll talk about…") without revealing the content — make them want to come back. Keep the station's tone.`
+  }
+
+  return `\n# SHOW STRUCTURE
+You're at turn ${turn}/${total} → phase **${phase}**.
+
+→ ${instruction}
+
+The show runs ~15 minutes. Overall layout:
+- 1-${introEnd}            : INTRO + topic announcement
+- ${introEnd + 1}-${seg1End}            : SEGMENT 1 (topic A)
+- ${seg1End + 1}-${seg2End}            : SEGMENT 2 (topic B)
+- ${seg2End + 1}-${seg3End}            : SEGMENT 3 (topic C or narrative)
+- ${conclusionStart}-${total}          : CONCLUSION + tomorrow's teaser
+
+IMPORTANT: even though these instructions are in English, your spoken output MUST be in the station's language (${language}). Follow the LANGUAGE instruction at the top of the prompt.
 
 `
 }
