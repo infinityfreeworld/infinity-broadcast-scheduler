@@ -278,6 +278,106 @@ export const SEED_STATIONS: RadioStation[] = [
     live: false,
     creatorPubkey: null,
   },
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Phase E (2026-05-20) — Stations multilangues internationales.
+  // 1 station par langue (EN, ES, RU, ZH) pour amorcer. L'admin peut
+  // créer d'autres stations dans ces langues depuis l'IHL → onglet
+  // « 📻 Stations ». Distribution conditionnelle côté Infinity main :
+  // les utilisateurs non-francophones (region != France/Suisse/Belgique/
+  // Québec/Maghreb/Afrique de l'Ouest francophone) voient les stations
+  // dans la langue de leur région — sprint E.2.
+  // ──────────────────────────────────────────────────────────────────────
+
+  {
+    id: 'free-press-fm',
+    kind: 'wtf',
+    language: 'en',
+    frequency: 110.5,
+    name: 'Free Press FM',
+    tagline: 'Independent voices on world news.',
+    description: 'Independent international news station — covers world events with a critical, non-corporate angle. Hosts dig into geopolitics, war coverage, media ownership, and grassroots resistance worldwide. Sources include BBC World, Al Jazeera English, and Reuters.',
+    color: '#3b82f6',
+    hosts: [
+      { id: 'fp-sarah',  name: 'Sarah',  gender: 'female', trait: 'investigative journalist, sharp on geopolitics',     color: '#3b82f6', avatar: '🎤' },
+      { id: 'fp-malik',  name: 'Malik',  gender: 'male',   trait: 'former war correspondent, blunt on power dynamics',  color: '#60a5fa', avatar: '📰' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://feeds.bbci.co.uk/news/world/rss.xml',           title: 'BBC World News' },
+      { type: 'rss', url: 'https://www.aljazeera.com/xml/rss/all.xml',             title: 'Al Jazeera English' },
+      { type: 'rss', url: 'https://feeds.reuters.com/reuters/topNews',             title: 'Reuters Top News' },
+    ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+
+  {
+    id: 'voces-libres',
+    kind: 'wtf',
+    language: 'es',
+    frequency: 119.8,
+    name: 'Voces Libres',
+    tagline: 'Voces de Latinoamérica y del mundo hispano.',
+    description: 'Estación independiente de noticias e ideas en español. Cubre América Latina, España y la diáspora hispana. Los locutores abordan política, movimientos sociales, economía, cultura y resistencias populares con perspectiva crítica.',
+    color: '#f59e0b',
+    hosts: [
+      { id: 'vl-carmen',  name: 'Carmen',  gender: 'female', trait: 'periodista madrileña, dura en política española',       color: '#f59e0b', avatar: '🌹' },
+      { id: 'vl-rafael',  name: 'Rafael',  gender: 'male',   trait: 'analista mexicano, conoce América Latina al detalle',   color: '#fbbf24', avatar: '🌶️' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada',  title: 'El País (Portada)' },
+      { type: 'rss', url: 'https://www.efe.com/efe/espana/portada/rss.xml',                    title: 'EFE Portada España' },
+      { type: 'rss', url: 'https://www.bbc.com/mundo/index.xml',                               title: 'BBC Mundo' },
+    ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+
+  {
+    id: 'svoboda-fm',
+    kind: 'wtf',
+    language: 'ru',
+    frequency: 127.1,
+    name: 'Свобода FM',
+    tagline: 'Свободные голоса о мире и России.',
+    description: 'Независимая радиостанция на русском языке. Журналисты обсуждают политику России и мира, права человека, экономику, культуру и сопротивление. Источники включают независимые издания и международные новостные ленты.',
+    color: '#dc2626',
+    hosts: [
+      { id: 'sv-anna',    name: 'Анна',    gender: 'female', trait: 'журналистка-расследователь, эмигрировала из РФ',     color: '#dc2626', avatar: '🕊️' },
+      { id: 'sv-dmitri',  name: 'Дмитрий', gender: 'male',   trait: 'политический аналитик, специалист по постсоветскому пространству', color: '#ef4444', avatar: '🌍' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://meduza.io/rss/all',                            title: 'Meduza (все)' },
+      { type: 'rss', url: 'https://www.svoboda.org/api/zppopomtemt',              title: 'Радио Свобода' },
+    ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+
+  {
+    id: 'zi-you-zhi-sheng',
+    kind: 'wtf',
+    language: 'zh',
+    frequency: 135.9,
+    name: '自由之声',
+    tagline: '世界与中国，独立的声音。',
+    description: '中文独立新闻台，关注全球事件和中文世界。主持人讨论地缘政治、人权、科技、文化与社会变革。素材来源包括BBC中文、自由亚洲电台和独立媒体。',
+    color: '#eab308',
+    hosts: [
+      { id: 'zy-mei',   name: '美琳', gender: 'female', trait: '资深记者，专注国际政治与中国话题',              color: '#eab308', avatar: '🏮' },
+      { id: 'zy-jian',  name: '建国', gender: 'male',   trait: '科技与人权评论员，前媒体编辑',                  color: '#fcd34d', avatar: '🎋' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://www.bbc.com/zhongwen/simp/index.xml',          title: 'BBC 中文' },
+      { type: 'rss', url: 'https://www.rfa.org/chinese/rss/news/news_news_rss.xml', title: 'Radio Free Asia 中文' },
+    ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
 ]
 
 /** Bornes du dial — 87.5 à 144.0 MHz, comme une vraie radio FM étendue. */

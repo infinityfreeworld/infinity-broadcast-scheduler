@@ -13,7 +13,7 @@ export type StationKind =
   | 'pirate' | 'oasis'
   | 'user'
 
-export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh'
+export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh' | 'ru'
 
 export interface TrackRef {
   title: string
