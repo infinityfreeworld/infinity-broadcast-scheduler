@@ -135,6 +135,29 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
 }
 
 /**
+ * Voix shipées par défaut avec `devnen/chatterbox-tts-server` (Resemble AI
+ * Chatterbox). TOUTES sont entraînées principalement en anglais — utilisées
+ * sur une station non-anglaise, elles produisent un accent anglais marqué
+ * (constaté par l'user 2026-05-20 sur WTF Radio FR).
+ *
+ * Pour les stations dont `language !== 'en'`, on retourne null pour ces
+ * voix → fallback Piper qui est nativement multilingue (FR, ES, IT, PT, …).
+ *
+ * Pour que Chatterbox parle français correctement, il faudra uploader des
+ * voix françaises clonées via l'IHL « Voix Radio » (HF Space upload sample
+ * 5-10s) puis les assigner aux animateurs FR dans l'IHL « Voix Anim. ».
+ * Ces voix custom ne sont PAS dans cette blacklist → elles seront utilisées.
+ */
+const SHIPPED_ENGLISH_VOICES = new Set([
+  'Abigail', 'Adrian', 'Alexander', 'Alice', 'Austin', 'Axel',
+  'Connor', 'Cora', 'Elena', 'Eli', 'Emily', 'Everett',
+  'Gabriel', 'Gianna', 'Henry', 'Ian', 'Jade', 'Jeremiah',
+  'Jordan', 'Julian', 'Layla', 'Leonardo', 'Michael', 'Miles',
+  'Nestor', 'Olivia', 'Owen', 'Penelope', 'Ryan', 'Sophia',
+  'Thomas', 'Victoria', 'William',
+])
+
+/**
  * Retourne le nom de la voix Chatterbox associée à un (station, host),
  * ou null si le mapping n'est pas configuré OU si le host n'a pas de
  * voix custom.
@@ -149,28 +172,52 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
  *
  *   Si Chatterbox n'est pas du tout configuré (`CHATTERBOX_TTS_URL` vide),
  *   on retourne null direct pour basculer sur Piper.
+ *
+ *   Phase E pré-fix (2026-05-20) — si `language` est fourni et != 'en',
+ *   et que la voix résolue est une voix shipée anglaise (Abigail, Adrian…),
+ *   on retourne null pour forcer le fallback Piper (qui est natif
+ *   multilingue). Évite l'accent anglais entendu sur les stations FR.
  */
-export function getChatterboxVoiceForHost(stationId: string, hostId: string): string | null {
+export function getChatterboxVoiceForHost(
+  stationId: string,
+  hostId: string,
+  language?: string,
+): string | null {
   if (!process.env.CHATTERBOX_TTS_URL) return null
+
+  let resolved: string | null = null
 
   // 1. NOSTR mapping (kind:30095) — source de vérité IHL
   const fromNostr = getNostrVoiceForHost(stationId, hostId)
-  if (fromNostr) return fromNostr
+  if (fromNostr) resolved = fromNostr
 
   // 2. Legacy env JSON map (par hostId seulement)
-  const json = process.env.CHATTERBOX_VOICE_MAP
-  if (json) {
-    try {
-      const map = JSON.parse(json) as Record<string, string>
-      if (map[hostId]) return map[hostId]
-    } catch (err) {
-      console.warn('[chatterbox] CHATTERBOX_VOICE_MAP malformé:', (err as Error).message)
+  if (!resolved) {
+    const json = process.env.CHATTERBOX_VOICE_MAP
+    if (json) {
+      try {
+        const map = JSON.parse(json) as Record<string, string>
+        if (map[hostId]) resolved = map[hostId]
+      } catch (err) {
+        console.warn('[chatterbox] CHATTERBOX_VOICE_MAP malformé:', (err as Error).message)
+      }
     }
   }
 
   // 3. Default global
-  const defaultVoice = process.env.CHATTERBOX_DEFAULT_VOICE
-  return defaultVoice && defaultVoice.length > 0 ? defaultVoice : null
+  if (!resolved) {
+    const defaultVoice = process.env.CHATTERBOX_DEFAULT_VOICE
+    if (defaultVoice && defaultVoice.length > 0) resolved = defaultVoice
+  }
+
+  if (!resolved) return null
+
+  // 4. Phase E pré-fix — voix shipée anglaise sur station non-en → Piper
+  if (language && language !== 'en' && SHIPPED_ENGLISH_VOICES.has(resolved)) {
+    return null
+  }
+
+  return resolved
 }
 
 /**
