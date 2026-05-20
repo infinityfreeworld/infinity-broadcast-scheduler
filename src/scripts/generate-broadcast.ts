@@ -176,7 +176,7 @@ async function generateBroadcastBytes(opts: {
     // host, fallback Piper sinon (toujours fallback si Chatterbox fail
     // et CHATTERBOX_FALLBACK_PIPER ≠ false).
     let wav: import('../lib/audio').DecodedWav | null = null
-    const chatterboxVoice = getChatterboxVoiceForHost(host.id)
+    const chatterboxVoice = getChatterboxVoiceForHost(station.id, host.id)
     if (chatterboxVoice) {
       try {
         const buf = await synthesizeWithChatterbox({

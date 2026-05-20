@@ -19,6 +19,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { purgeOldBroadcasts } from '../lib/pinata'
+import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 
 const exec = promisify(execFile)
 
@@ -77,6 +78,21 @@ async function main() {
     } catch (err) {
       console.warn(`   ⚠️  Auto-purge échec (continue quand même) :`, err instanceof Error ? err.message : err)
     }
+  }
+
+  // ── Fetch mappings animateur → voix Chatterbox (Phase C.3) ───────────
+  // Publiés sur NOSTR kind:30095 par l'IHL Infinity. On les fetch UNE FOIS
+  // au démarrage du parent process, on sérialise dans HOST_VOICE_MAP_JSON,
+  // et chaque sous-process generate-broadcast hérite via `env: process.env`.
+  // Évite N × round-trips NOSTR (1 par station). Si fetch échoue, on
+  // continue avec une map vide → fallback CHATTERBOX_DEFAULT_VOICE.
+  if (process.env.CHATTERBOX_TTS_URL) {
+    console.log(`\n📨 Fetch mappings animateurs (NOSTR kind:30095)…`)
+    const mappings = await fetchHostVoiceMappings()
+    exportHostVoiceMappingsToEnv(mappings)
+    console.log(`   ✓ ${mappings.size} mapping(s) trouvé(s)${
+      mappings.size > 0 ? ' : ' + [...mappings.entries()].slice(0, 5).map(([k, v]) => `${k}→${v}`).join(', ') + (mappings.size > 5 ? ', …' : '') : ''
+    }`)
   }
 
   const startedAt = Date.now()

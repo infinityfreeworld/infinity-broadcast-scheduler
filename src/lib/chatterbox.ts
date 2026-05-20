@@ -17,7 +17,7 @@
  *     - CHATTERBOX_FALLBACK_PIPER : 'true' (défaut) pour fallback si Chatterbox fail
  *
  *   Usage typique (depuis generate-broadcast.ts) :
- *     const cbVoice = getChatterboxVoiceForHost(host.id)
+ *     const cbVoice = getChatterboxVoiceForHost(station.id, host.id)
  *     if (cbVoice) {
  *       try {
  *         const buf = await synthesizeWithChatterbox(text, cbVoice)
@@ -28,6 +28,8 @@
  *       }
  *     }
  */
+
+import { getNostrVoiceForHost } from './host-voice-mappings'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -133,17 +135,29 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
 }
 
 /**
- * Retourne le nom de la voix Chatterbox associée à un hostId, ou null
- * si le mapping n'est pas configuré OU si le host n'a pas de voix custom.
+ * Retourne le nom de la voix Chatterbox associée à un (station, host),
+ * ou null si le mapping n'est pas configuré OU si le host n'a pas de
+ * voix custom.
  *
- *   CHATTERBOX_VOICE_MAP = '{"wtf-cyril":"nestor","wtf-marina":"marina-fr"}'
+ * Ordre de résolution (Phase C.3 2026-05-20) :
+ *   1. NOSTR mapping kind:30095 (chargé depuis HOST_VOICE_MAP_JSON)
+ *      — source de vérité gérée par l'IHL Infinity.
+ *   2. CHATTERBOX_VOICE_MAP (legacy, par hostId seulement, pas station)
+ *      — gardé pour rétrocompat tant que la migration n'est pas terminée.
+ *   3. CHATTERBOX_DEFAULT_VOICE (fallback global).
+ *   4. null → fallback Piper (cf isFallbackPiperEnabled).
  *
- *   Si la map est absente mais CHATTERBOX_DEFAULT_VOICE est défini ET
- *   CHATTERBOX_TTS_URL est défini, on retourne la default voice pour
- *   TOUS les hosts (tous bascule sur Chatterbox).
+ *   Si Chatterbox n'est pas du tout configuré (`CHATTERBOX_TTS_URL` vide),
+ *   on retourne null direct pour basculer sur Piper.
  */
-export function getChatterboxVoiceForHost(hostId: string): string | null {
+export function getChatterboxVoiceForHost(stationId: string, hostId: string): string | null {
   if (!process.env.CHATTERBOX_TTS_URL) return null
+
+  // 1. NOSTR mapping (kind:30095) — source de vérité IHL
+  const fromNostr = getNostrVoiceForHost(stationId, hostId)
+  if (fromNostr) return fromNostr
+
+  // 2. Legacy env JSON map (par hostId seulement)
   const json = process.env.CHATTERBOX_VOICE_MAP
   if (json) {
     try {
@@ -153,6 +167,8 @@ export function getChatterboxVoiceForHost(hostId: string): string | null {
       console.warn('[chatterbox] CHATTERBOX_VOICE_MAP malformé:', (err as Error).message)
     }
   }
+
+  // 3. Default global
   const defaultVoice = process.env.CHATTERBOX_DEFAULT_VOICE
   return defaultVoice && defaultVoice.length > 0 ? defaultVoice : null
 }
