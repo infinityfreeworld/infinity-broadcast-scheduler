@@ -1,0 +1,51 @@
+name: Chatterbox Keepalive
+
+# Ping périodique du HF Space Chatterbox pour empêcher le sleep prolongé.
+# HF Pro ($9/mois) débloque ZeroGPU quota + Dev Mode mais ne désactive PAS
+# le sleep automatique des Spaces standards (~15-30 min d'inactivité par
+# défaut). Ce workflow envoie un GET /api/model-info toutes les 4h pour
+# garder le Space chaud. Coût Actions ≈ négligeable (~5s × 6/jour).
+#
+# Si CHATTERBOX_TTS_URL n'est pas configurée, le job se termine en no-op
+# (warning).
+#
+# Manual trigger possible via "Run workflow" (workflow_dispatch).
+
+on:
+  schedule:
+    # toutes les 4 heures (00:13, 04:13, 08:13, ... UTC)
+    # offset de 13min pour décaler du cron daily-broadcast (0 22 * * *)
+    - cron: '13 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Chatterbox HF Space
+        env:
+          CHATTERBOX_TTS_URL: ${{ secrets.CHATTERBOX_TTS_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CHATTERBOX_TTS_URL:-}" ]; then
+            echo "::warning::CHATTERBOX_TTS_URL not set, skipping keepalive"
+            exit 0
+          fi
+          # Strip trailing slash si présent
+          url="${CHATTERBOX_TTS_URL%/}/api/model-info"
+          echo "🌙 Ping $url"
+          # max-time 60s : si le Space dort, le wake peut prendre 30-45s ;
+          # 60s laisse une marge confortable.
+          status=$(curl -o /tmp/resp.txt -s -w "%{http_code}" --max-time 60 "$url" || echo "000")
+          echo "HTTP $status"
+          if [ -s /tmp/resp.txt ]; then
+            echo "--- response (first 300 chars) ---"
+            head -c 300 /tmp/resp.txt
+            echo ""
+          fi
+          if [ "$status" != "200" ]; then
+            echo "::error::Ping failed (HTTP $status)"
+            exit 1
+          fi
+          echo "✓ Chatterbox alive"
