@@ -44,8 +44,15 @@ export function buildHostSystemPrompt(opts: {
    *  l'émission (intro / développement / conclusion). */
   currentTurn?:   number
   totalTurns?:    number
+  /** Phase D.4 (2026-05-20) — Instructions système supplémentaires définies
+   *  par l'admin IHL (kind:30096 RADIO_HOST_PERSONA). Vide = pas d'injection.
+   *  Apparaît en section dédiée juste après PERSONNALITÉ. */
+  customInstructions?: string
+  /** Phase D.4 — Directive de ton du jour calculée depuis `behavior` de la
+   *  persona NOSTR. Phrase complète, déjà localisée. */
+  behaviorDirective?: string
 }): string {
-  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns } = opts
+  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective } = opts
 
   const otherHostsLine = otherHosts.length > 0
     ? `Tes confrères à l'antenne : ${otherHosts.map(h => `${h.name} (${h.trait})`).join(', ')}.`
@@ -82,7 +89,13 @@ ${newsBlock}
 
 # PERSONNALITÉ
 ${kb.personality || '(non renseignée — sois naturel selon ton trait dominant)'}
-
+${customInstructions && customInstructions.trim().length > 0 ? `
+# INSTRUCTIONS ADMIN
+${customInstructions.trim()}
+` : ''}${behaviorDirective ? `
+# TON DU JOUR
+${behaviorDirective}
+` : ''}
 # CE QUE TU SAIS / PENSES (extraits pertinents de ta KB)
 ${kbContext}
 ${newsSection}${structureSection}

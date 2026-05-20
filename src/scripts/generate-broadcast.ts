@@ -26,7 +26,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
-import type { RadioStation, HostKB, BroadcastTurn, RadioBroadcast, NewsItem } from '../lib/types'
+import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem } from '../lib/types'
 import { callAnthropic, type LLMMessage } from '../lib/anthropic'
 import { buildHostSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
@@ -35,6 +35,7 @@ import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, pingUntilReady,
   isFallbackPiperEnabled, ChatterboxError,
 } from '../lib/chatterbox'
+import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
@@ -134,8 +135,20 @@ async function generateBroadcastBytes(opts: {
     const otherHosts = station.hosts.filter(h => h.id !== host.id)
     const isFirstTurn = turns.length === 0
 
+    // Phase D.4 — Persona NOSTR (kind:30096) override la seed si présente
+    const customPersona = getPersonaForHost(station.id, host.id)
+    const effectiveHost: RadioHost = customPersona ? {
+      id:     host.id,
+      name:   customPersona.name,
+      gender: customPersona.gender,
+      trait:  customPersona.trait,
+      color:  customPersona.color,
+      avatar: customPersona.avatar,
+    } : host
+
     const systemPrompt = buildHostSystemPrompt({
-      host, kb, selectedEntries, topic,
+      host:               effectiveHost,
+      kb, selectedEntries, topic,
       stationName:        station.name,
       stationDescription: station.description,
       newsBlock:          formatNewsForPrompt(news),
@@ -143,6 +156,8 @@ async function generateBroadcastBytes(opts: {
       otherHosts,
       currentTurn:        i + 1,
       totalTurns:         numTurns,
+      customInstructions: customPersona?.instructions,
+      behaviorDirective:  customPersona ? behaviorDirective(customPersona.behavior) : undefined,
     })
 
     const history: LLMMessage[] = turns.slice(-HISTORY_DEPTH).map(t => ({
