@@ -126,24 +126,30 @@ async function generateBroadcastBytes(opts: {
   let costIn = 0, costOut = 0
 
   // Phase H.4 — Tirage d'un invité au sort parmi `station.guestIds`
-  // (filtré par langue de la station). Le guest intervient sur 1 tour
-  // en milieu de broadcast (~40% du parcours).
+  // (filtré par langue de la station).
   //
-  // Phase H.8 (interaction) — encadré par 2 tours hosts :
-  //   tour i-1 : host PRÉSENTE + POSE UNE QUESTION concrète au guest
-  //   tour i   : guest RÉPOND à la question (puis saillie satirique libre)
-  //   tour i+1 : host relance brièvement (1-2 phrases) avant d'enchaîner
-  // Le LLM voit le tour précédent via `history` → réponse contextuelle.
+  // Phase H.8 + H.9 — vrai back-and-forth de 5 tours autour du guest :
+  //   tour s-1 : host A PRÉSENTE l'invité + POSE QUESTION 1 (terminée par '?')
+  //   tour s   : guest RÉPOND à Q1 + saillie satirique courte
+  //   tour s+1 : host B (ou A si solo) RELANCE + POSE QUESTION 2 (autre angle)
+  //   tour s+2 : guest RÉPOND à Q2 + amorce de sortie
+  //   tour s+3 : host CONCLUT l'échange (1-2 phrases) puis enchaîne
+  // `s` clampé à [2, numTurns-4] pour que les 5 tours rentrent toujours.
   const guest = pickGuestForStation(station.guestIds, language)
-  const guestTurnIndex = guest ? Math.max(2, Math.floor(numTurns * 0.4)) : -1
+  const guestStart = guest
+    ? Math.max(2, Math.min(Math.floor(numTurns * 0.4), numTurns - 4))
+    : -1
   if (guest) {
-    console.log(`    🎭 Invité programmé tour ${guestTurnIndex + 1}/${numTurns} : ${guest.displayName} (${guest.behavior})`)
+    console.log(`    🎭 Invité programmé tours ${guestStart + 1} & ${guestStart + 3}/${numTurns} : ${guest.displayName} (${guest.behavior})`)
   }
 
   for (let i = 0; i < numTurns; i++) {
-    const isGuestTurn   = guest !== null && i === guestTurnIndex
-    const isPreGuestTurn  = guest !== null && i === guestTurnIndex - 1
-    const isPostGuestTurn = guest !== null && i === guestTurnIndex + 1
+    const isGuestTurn1   = guest !== null && i === guestStart        // réponse Q1
+    const isGuestTurn2   = guest !== null && i === guestStart + 2    // réponse Q2
+    const isGuestTurn    = isGuestTurn1 || isGuestTurn2
+    const isPreGuestTurn = guest !== null && i === guestStart - 1    // intro + Q1
+    const isMidGuestTurn = guest !== null && i === guestStart + 1    // relance + Q2
+    const isPostGuestTurn = guest !== null && i === guestStart + 3   // conclusion
 
     // Speaker effectif : guest si c'est son tour, sinon round-robin host
     const host: RadioHost = isGuestTurn
@@ -208,17 +214,21 @@ async function generateBroadcastBytes(opts: {
     }))
     const userMessage: LLMMessage = {
       role: 'user',
-      content: isGuestTurn
-        ? `Ton tour d'invité. L'animateur vient de te poser une question DIRECTEMENT — RÉPONDS-LUI explicitement (1-2 phrases). Tu peux ensuite ajouter UNE saillie satirique courte dans ton style. Total : 1-3 phrases max.`
-        : isPreGuestTurn
-          ? `Ton tour. ${guest!.displayName} (${guest!.bio.slice(0, 80)}) est en ligne avec nous. Présente-le brièvement en 1 phrase puis POSE-LUI UNE QUESTION CONCRÈTE en lien avec un sujet d'actualité évoqué (ou à évoquer). Termine ton tour par cette question, adressée explicitement à ${guest!.displayName}.`
-          : isPostGuestTurn
-            ? `Ton tour. Réagis brièvement à ce que vient de dire ${guest!.displayName} (1 phrase ironique, complice ou critique selon ton tempérament) puis enchaîne sur le sujet suivant. 2 phrases max.`
-            : (isFirstTurn
-              ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
-              : (i === numTurns - 1
-                  ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
-                  : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
+      content: isGuestTurn1
+        ? `Ton tour d'invité (1/2). L'animateur vient de te poser sa PREMIÈRE question DIRECTEMENT — RÉPONDS-LUI explicitement (1-2 phrases). Tu peux ensuite ajouter UNE saillie satirique courte dans ton style. Total : 1-3 phrases max.`
+        : isGuestTurn2
+          ? `Ton tour d'invité (2/2 — DERNIER). L'animateur vient de te poser une 2e question (autre angle). RÉPONDS-LUI (1-2 phrases) puis amorce ta SORTIE de l'émission (1 phrase, type "merci de m'avoir reçu" dans ton style satirique). Total : 2-3 phrases max.`
+          : isPreGuestTurn
+            ? `Ton tour. ${guest!.displayName} (${guest!.bio.slice(0, 80)}) est en ligne avec nous. Présente-le brièvement en 1 phrase puis POSE-LUI UNE QUESTION CONCRÈTE en lien avec un sujet d'actualité évoqué (ou à évoquer). Termine ton tour par cette question, adressée explicitement à ${guest!.displayName}.`
+            : isMidGuestTurn
+              ? `Ton tour. ${guest!.displayName} vient de répondre — relance avec une 2e question SOUS UN AUTRE ANGLE (provocation, contradiction polie, ou approfondissement). 2-3 phrases max, termine par '?' adressé à ${guest!.displayName}.`
+              : isPostGuestTurn
+                ? `Ton tour. ${guest!.displayName} s'en va — remercie-le brièvement (1 phrase, dans ton style) puis enchaîne sur le sujet suivant (1 phrase). 2 phrases max.`
+                : (isFirstTurn
+                  ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
+                  : (i === numTurns - 1
+                      ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
+                      : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
     }
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
