@@ -191,7 +191,10 @@ async function generateBroadcastBytes(opts: {
     // host, fallback Piper sinon (toujours fallback si Chatterbox fail
     // et CHATTERBOX_FALLBACK_PIPER ≠ false).
     let wav: import('../lib/audio').DecodedWav | null = null
-    const chatterboxVoice = getChatterboxVoiceForHost(station.id, host.id)
+    // Phase E pré-fix : passe `language` pour que les voix shipées anglaises
+    // (Abigail, Adrian…) soient ignorées sur les stations FR/ES/IT/etc. →
+    // fallback Piper natif multilingue.
+    const chatterboxVoice = getChatterboxVoiceForHost(station.id, host.id, language)
     if (chatterboxVoice) {
       try {
         const buf = await synthesizeWithChatterbox({
