@@ -253,7 +253,10 @@ async function main() {
     console.error('Usage: tsx src/scripts/generate-broadcast.ts <stationId> [YYYY-MM-DD]')
     process.exit(1)
   }
-  const targetDate = process.argv[3] ?? process.env.TARGET_DATE ?? tomorrowLocalISO()
+  // `||` (pas `??`) cf bug 2026-05-19 — TARGET_DATE peut être '' venant du
+  // workflow YAML (cron sans workflow_dispatch), `??` ne fallback que sur
+  // null/undefined → propageait `date = ""` dans NOSTR. Voir generate-all.ts.
+  const targetDate = process.argv[3] || process.env.TARGET_DATE || tomorrowLocalISO()
 
   const apiKey = required('ANTHROPIC_API_KEY')
   const pinataJwt = required('PINATA_JWT')
