@@ -7,6 +7,7 @@
   "scripts": {
     "generate:one": "tsx src/scripts/generate-broadcast.ts",
     "generate:all": "tsx src/scripts/generate-all.ts",
+    "generate:tv": "tsx src/scripts/generate-tv-program.ts",
     "typecheck": "tsc --noEmit",
     "setup:piper": "tsx src/scripts/setup-piper.ts",
     "upload:tracks": "tsx src/scripts/upload-tracks.ts",
