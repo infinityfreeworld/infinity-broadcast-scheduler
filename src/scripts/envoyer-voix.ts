@@ -86,10 +86,20 @@ async function envoyer(c: Candidat, cle: string): Promise<string> {
   })
   const texte = await res.text()
   if (!res.ok) throw new Error(`HTTP ${res.status} : ${texte.slice(0, 200)}`)
+  // ⚠️ data-space répond `{"files":[{"cid":"Qm…", "name":…, "size":…}]}`.
+  // La première version ne cherchait le CID qu'à la RACINE : elle a
+  // rapporté 29 échecs sur 29 réussites, le 02/09/2026. Un outil écrit
+  // pour ne pas mentir sur un succès a menti sur un échec — on cherche
+  // donc à tous les endroits plausibles, et on le dit si on ne trouve pas.
   try {
     const j = JSON.parse(texte) as Record<string, unknown>
-    const cid = j.cid ?? j.CID ?? j.Hash ?? (j.data as Record<string, unknown>)?.cid
-    if (typeof cid === 'string') return cid
+    const premierFichier = Array.isArray(j.files) && j.files.length > 0
+      ? (j.files[0] as Record<string, unknown>)
+      : undefined
+    const cid = premierFichier?.cid
+      ?? j.cid ?? j.CID ?? j.Hash
+      ?? (j.data as Record<string, unknown> | undefined)?.cid
+    if (typeof cid === 'string' && cid.length > 0) return cid
   } catch { /* réponse non JSON */ }
   throw new Error(`réponse sans CID reconnaissable : ${texte.slice(0, 200)}`)
 }
