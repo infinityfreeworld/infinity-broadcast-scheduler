@@ -9,6 +9,7 @@
     "generate:all": "tsx src/scripts/generate-all.ts",
     "stations:list": "tsx src/scripts/lister-stations.ts",
     "pinata:purge": "tsx src/scripts/purger-pinata.ts",
+    "voix:envoyer": "tsx src/scripts/envoyer-voix.ts",
     "generate:tv": "tsx src/scripts/generate-tv-program.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/lib/__tests__/*.test.ts",

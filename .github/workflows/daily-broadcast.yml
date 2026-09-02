@@ -17,21 +17,28 @@ name: Daily Broadcast Generation
 # Aucun ne s'approche de la limite, et une station qui échoue n'emporte pas
 # les autres (`fail-fast: false`).
 #
-# `max-parallel` NON BORNÉ — les quinze partent ensemble, et c'est
-# data-space qui l'a demandé (02/09/2026) : leur GPU s'éteint quand la file
-# se vide, et une nouvelle location impose 5 min de refroidissement puis
-# ~12 min de démarrage. Des stations espacées paieraient donc un réveil
-# complet chacune, pour 17 minutes de travail au total.
+# `max-parallel: 2` — et cette borne est PROVISOIRE, pour une raison qu'il
+# faut écrire ici sinon on la relâchera par erreur.
 #
-# Lancées ensemble, les quinze atteignent leur salve de synthèse à peu près
-# au même moment : la file ne se vide pas, une seule location sert la nuit.
+# Nous avions d'abord retiré toute borne, en déférant le débit à la file de
+# data-space : quand elle est pleine, un 429 nous fait patienter et tout
+# s'auto-régule. Le principe est juste. Mais ils nous ont fait remarquer
+# (02/09/2026) que **leur 429 n'existe pas encore** — un parallélisme non
+# borné n'aurait donc rien eu qui le corrige, et nous aurions mesuré des
+# latences ressemblant à une panne sans en être une.
 #
-# ⚠️ Ce n'est PAS en contradiction avec leur mesure « deux requêtes
-# simultanées = 1,6× de débit, au-delà le rendement s'effondre ». Ce n'est
-# pas nous qui décidons combien de requêtes leur GPU traite : c'est LEUR
-# file. Quand elle est pleine, ils rendent un 429 avec `Retry-After` et
-# notre client patiente. Le débit s'auto-régule ; nous, nous nous
-# contentons de ne jamais laisser la file vide.
+# 🔴 NE RELÂCHER CETTE BORNE QU'UNE FOIS LEUR FILE CAPABLE DE NOUS FREINER.
+#
+# Deux est aussi leur mesure : deux requêtes simultanées donnent 1,6× de
+# débit, au-delà le rendement s'effondre.
+#
+# ⚠️ Borner à deux ramène le risque du refroidissement : leur machine
+# s'éteint dès la file vide, et une nouvelle location coûte 5 min de
+# refroidissement + ~12 min de démarrage. Seules quelques stations ont des
+# voix de personnage ; dispersées, leurs salves seraient séparées par des
+# stations qui n'utilisent que Piper. D'où l'ordre imposé par
+# `lister-stations.ts` : les stations qui ont besoin du GPU passent EN
+# PREMIER, leurs salves se suivent, une seule location sert la nuit.
 #
 # ⚠️ LE CRON RESTE À 22 h UTC. J'ai un moment avancé à 20 h « pour tenir
 # dans la fenêtre de 6 h », en croyant que la synthèse durerait ~5 h. C'était
@@ -110,6 +117,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         station: ${{ fromJson(needs.preparer.outputs.stations) }}
 
