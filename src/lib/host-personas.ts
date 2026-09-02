@@ -15,6 +15,26 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event as NostrEvent } from 'nostr-tools/core'
 import { getRelays } from './nostr'
 
+/**
+ * ⚠️ UN RELAIS SEUL PEUT OMETTRE UN DOCUMENT QU'IL STOCKE POURTANT.
+ *
+ * Constaté le 01/09/2026 sur notre relais souverain : une requête large
+ * `{kinds:[30104,30105]}` rendait 9 events là où une interrogation ciblée
+ * par `#d` en trouvait un 10ᵉ, bien présent en base
+ * (`godefroid-de-mont-delire`). Le résultat variait d'un appel à l'autre,
+ * sans erreur ni avertissement.
+ *
+ * ⚠️ Une `limit` explicite est posée par prudence, mais elle NE GARANTIT
+ * RIEN : le même appel avec `limit: 500` a omis le document que
+ * `limit: 200` rapportait. Ce n'est donc pas la limite qui est en cause.
+ *
+ * Ce qui protège réellement, c'est la REDONDANCE : `getRelays()` interroge
+ * 7 relais et l'union est complète (7 personas rendues, 4 essais sur 4).
+ * ⇒ Ne jamais réduire la lecture de la configuration à un relais unique.
+ */
+const LIMITE_REQUETE = 500
+
+
 export const KIND_HOST_PERSONA = 30096
 
 const ENV_KEY = 'HOST_PERSONAS_JSON'
@@ -58,7 +78,7 @@ export async function fetchHostPersonas(timeoutMs = 8000): Promise<Map<string, H
   try {
     const events = await pool.querySync(
       relays,
-      { kinds: [KIND_HOST_PERSONA] },
+      { kinds: [KIND_HOST_PERSONA], limit: LIMITE_REQUETE },
       { maxWait: timeoutMs },
     )
 

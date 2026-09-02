@@ -32,6 +32,25 @@ const exec = promisify(execFile)
 
 const PIPER_DIR  = process.env.PIPER_DIR  ?? join(process.cwd(), 'piper')
 const VOICES_DIR = process.env.VOICES_DIR ?? join(process.cwd(), 'voices')
+/**
+ * ⚠️ macOS aarch64 : l'archive amont NE CONTIENT AUCUNE `.dylib`.
+ *
+ * Relevé le 02/09/2026 en tentant une répétition locale. `piper` réclame
+ * trois bibliothèques par `@rpath` — `libespeak-ng.1.dylib`,
+ * `libpiper_phonemize.1.dylib`, `libonnxruntime.1.14.1.dylib` — et
+ * `piper_macos_aarch64.tar.gz` n'en livre aucune : seulement le paquet de
+ * symboles de débogage `libonnxruntime.1.14.1.dylib.dSYM`, qui a l'air
+ * d'une bibliothèque dans un listing et n'en est pas une.
+ *
+ * `brew install espeak-ng` fournit la première ; les deux autres sont
+ * propres à Piper et épinglées à une version d'onnxruntime. La synthèse
+ * locale est donc IMPOSSIBLE sur ce Mac sans reconstruire Piper.
+ *
+ * 🔴 Ce n'est PAS un problème en production : la CI tourne sous Linux, où
+ * l'archive est complète. Mais toute répétition locale s'arrête à la
+ * synthèse, avec un `dyld: Library not loaded` qui ressemble à une
+ * installation ratée alors que l'archive est simplement incomplète.
+ */
 const PIPER_BIN  = join(PIPER_DIR, 'piper')
 
 const PIPER_VERSION = '2023.11.14-2'   // dernière release stable au 2026-05
@@ -47,14 +66,51 @@ interface VoiceMeta {
 }
 
 const VOICE_REGISTRY: Record<string, VoiceMeta> = {
-  // FR voices testées compatibles (depuis piper-client.ts du repo Infinity)
-  'fr_FR-tom-medium':   { hfPath: 'fr/fr_FR/tom/medium/fr_FR-tom-medium',     sampleRate: 22050 },
+  // ⚠️ Toute voix ajoutée ici DOIT être déclarée dans `voix-licences.ts`.
+  // Une voix inconnue de ce registre de licences est refusée par défaut, et
+  // `__tests__/voix-licences.test.ts` fait rougir la porte.
+  // Les `sampleRate` ci-dessous ont été relevés sur les fiches de modèle
+  // (`<voix>.onnx.json` → `audio.sample_rate`), pas déduits du suffixe.
+
+  // ── FR ────────────────────────────────────────────────────────────
   'fr_FR-siwis-medium': { hfPath: 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium', sampleRate: 22050 },
-  // Ajouter d'autres voix ici quand validées (en, es, etc.)
+  'fr_FR-gilles-low':   { hfPath: 'fr/fr_FR/gilles/low/fr_FR-gilles-low',     sampleRate: 16000 },
+  // `fr_FR-tom-medium` est VOLONTAIREMENT absente : AGPLv3, écartée par
+  // l'audit du 04/08/2026 (cf. voix-licences.ts). Ne pas la remettre.
+
+  // ── ES ────────────────────────────────────────────────────────────
+  'es_ES-davefx-medium':   { hfPath: 'es/es_ES/davefx/medium/es_ES-davefx-medium',     sampleRate: 22050 },
+  // 2 locuteurs dans ce modèle ; faute de `--speaker`, Piper prend le 0.
+  'es_ES-sharvard-medium': { hfPath: 'es/es_ES/sharvard/medium/es_ES-sharvard-medium', sampleRate: 22050 },
+
+  // ── RU ────────────────────────────────────────────────────────────
+  // Pas de voix féminine : `irina` est sans licence, `ruslan` est
+  // NonCommercial. Le timbre féminin retombe sur une voix masculine —
+  // pis-aller ASSUMÉ, pas un défaut technique.
+  'ru_RU-dmitri-medium': { hfPath: 'ru/ru_RU/dmitri/medium/ru_RU-dmitri-medium', sampleRate: 22050 },
+  'ru_RU-denis-medium':  { hfPath: 'ru/ru_RU/denis/medium/ru_RU-denis-medium',   sampleRate: 22050 },
+
+  // ── EN ────────────────────────────────────────────────────────────
+  // Trois voix britanniques auditées le 01/09/2026 ; les voix US usuelles
+  // sont refusées (ryan = NonCommercial, lessac = licence de recherche).
+  'en_GB-cori-medium':                  { hfPath: 'en/en_GB/cori/medium/en_GB-cori-medium',                                   sampleRate: 22050 },
+  'en_GB-alba-medium':                  { hfPath: 'en/en_GB/alba/medium/en_GB-alba-medium',                                   sampleRate: 22050 },
+  'en_GB-northern_english_male-medium': { hfPath: 'en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium', sampleRate: 22050 },
+
+  // ── ZH : AUCUNE voix ──────────────────────────────────────────────
+  // `zh_CN-huayan` n'a aucune licence déclarée et c'était la seule. Le
+  // chinois n'est donc pas synthétisable : `voixPourLangue()` rend null
+  // et la station n'est pas générée du tout, plutôt que de publier une
+  // voix étrangère qui ÉPELLE les sinogrammes (mesuré ×11 en durée).
 }
 
 export function isVoiceSupported(voiceId: string): boolean {
   return voiceId in VOICE_REGISTRY
+}
+
+/** Toutes les voix que ce scheduler sait télécharger et exécuter. */
+export function voixDuRegistre(): string[] {
+  return Object.keys(VOICE_REGISTRY)
 }
 
 // ── Setup binaire Piper ───────────────────────────────────────────────

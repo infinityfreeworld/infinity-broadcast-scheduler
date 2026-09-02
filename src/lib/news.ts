@@ -124,12 +124,65 @@ function textOf(node: unknown): string {
   return String(node)
 }
 
-function cleanText(s: string): string {
-  return s
-    .replace(/<[^>]+>/g, ' ')             // strip HTML tags
-    .replace(/&[a-z]+;/gi, ' ')            // strip basic HTML entities
-    .replace(/\s+/g, ' ')
-    .trim()
+/**
+ * Entités HTML nommées rencontrées dans les flux RSS francophones.
+ * Volontairement courte : ce qui n'y figure pas passe par le décodage
+ * NUMÉRIQUE ci-dessous, qui couvre tout Unicode.
+ */
+const ENTITES_NOMMEES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+  nbsp: ' ', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–',
+  rsquo: '\u2019', lsquo: '\u2018', ldquo: '\u201C', rdquo: '\u201D',
+  eacute: 'é', egrave: 'è', ecirc: 'ê', euml: 'ë',
+  agrave: 'à', acirc: 'â', ccedil: 'ç', ugrave: 'ù', ucirc: 'û',
+  icirc: 'î', iuml: 'ï', ocirc: 'ô', oelig: 'œ', deg: '°', euro: '€',
+  Eacute: 'É', Egrave: 'È', Agrave: 'À', Ccedil: 'Ç',
+}
+
+/**
+ * Décode UNE passe d'entités HTML — nommées et numériques.
+ *
+ * ⚠️ Décoder, pas supprimer. Le code d'avant faisait
+ * `.replace(/&[a-z]+;/gi, ' ')` : `arm&eacute;e` devenait « arm e », un
+ * mot coupé en deux, et les entités NUMÉRIQUES (`&#233;`) traversaient
+ * intactes jusqu'au prompt. Mesuré le 01/09/2026 : **36 % des
+ * actualités** récupérées étaient abîmées, sur 6 sources.
+ */
+function decoderEntites(s: string): string {
+  return s.replace(
+    /&(#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});/g,
+    (entier, corps: string) => {
+      if (corps[0] === '#') {
+        const code = corps[1] === 'x' || corps[1] === 'X'
+          ? Number.parseInt(corps.slice(2), 16)
+          : Number.parseInt(corps.slice(1), 10)
+        // Hors plage Unicode ou point de code interdit : on laisse tel quel
+        // plutôt que de produire un caractère de remplacement.
+        if (!Number.isFinite(code) || code <= 0 || code > 0x10FFFF) return entier
+        try { return String.fromCodePoint(code) } catch { return entier }
+      }
+      return ENTITES_NOMMEES[corps] ?? entier
+    },
+  )
+}
+
+/**
+ * Nettoie un titre ou un résumé de flux RSS.
+ *
+ * Balises et entités s'imbriquent : certains flux publient du HTML
+ * DOUBLEMENT encodé (`&amp;#233;`), où une première passe ne révèle
+ * qu'une seconde entité. On alterne donc décodage et retrait de balises,
+ * avec un nombre de passes BORNÉ — une boucle « jusqu'à stabilité » sur
+ * une entrée hostile ne se terminerait pas forcément.
+ */
+export function cleanText(s: string): string {
+  let texte = s
+  for (let passe = 0; passe < 3; passe++) {
+    const avant = texte
+    texte = decoderEntites(texte).replace(/<[^>]+>/g, ' ')
+    if (texte === avant) break
+  }
+  return texte.replace(/\s+/g, ' ').trim()
 }
 
 export async function fetchNewsForStation(

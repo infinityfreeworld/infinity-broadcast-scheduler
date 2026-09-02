@@ -22,6 +22,8 @@ import { purgeOldBroadcasts } from '../lib/pinata'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
+import { fetchPulse, exportPulseToEnv } from '../lib/pulse'
+import { fetchRadioPersonas, exportRadioPersonasToEnv } from '../lib/radio-personas'
 
 const exec = promisify(execFile)
 
@@ -122,6 +124,48 @@ async function main() {
   console.log(`   ✓ ${guests.size} invité(s) trouvé(s)${
     guests.size > 0 ? ' : ' + [...guests.values()].slice(0, 5).map(g => g.displayName).join(', ') + (guests.size > 5 ? ', …' : '') : ''
   }`)
+
+  // ── Fetch Pulse Pirate (2026-09-01) ──────────────────────────────────
+  // kinds 30101 (global) / 30102 (override station) / 30103 (override
+  // persona), réglés dans le panneau Pirate › ⚙️ Pulse. Jusqu'ici le
+  // scheduler ne les lisait pas : tout ce que l'admin réglait n'avait
+  // AUCUN effet sur la génération. Même patron que ci-dessus : un seul
+  // aller-retour NOSTR, sérialisé en env pour les sous-processus.
+  //
+  // Ces kinds étaient aussi REJETÉS par notre propre relais souverain
+  // (« blocked: event kind 30101 not allowed ») — corrigé le même jour
+  // dans infinity-relay. Sans ce correctif déployé, la récolte reste
+  // vide et le scheduler retombe sur les valeurs par défaut.
+  console.log(`\n📨 Fetch Pulse (NOSTR kinds:30101/30102/30103)…`)
+  const pulse = await fetchPulse(SEED_STATIONS.map(s => s.id))
+  exportPulseToEnv(pulse)
+  const nbStation = Object.keys(pulse.byStation).length
+  const nbPersona = Object.keys(pulse.byPersona).length
+  if (pulse.global) {
+    console.log(`   ✓ global : ${pulse.global.rhythm.globalMood} · densité ${pulse.global.rhythm.dialogueDensity} · invités ${pulse.global.rhythm.interventionRate} · ${pulse.global.behavior.verbosity}`)
+  } else {
+    console.log(`   · aucun Pulse global publié → valeurs par défaut (émissions inchangées)`)
+  }
+  console.log(`   · ${nbStation} override(s) station, ${nbPersona} override(s) persona`)
+
+  // ── Fetch personas unifiées (2026-09-01) ─────────────────────────────
+  // kind:30104 + affinages per-station kind:30105. Modèle qui remplace le
+  // couple animateur(30096)/invité(30098) : chaque persona déclare
+  // elle-même les stations et les rôles qu'elle peut tenir. Le scheduler
+  // ne les lisait pas — 7 personas publiées depuis juin 2026 n'avaient
+  // jamais pris l'antenne.
+  console.log(`\n📨 Fetch personas unifiées (NOSTR kinds:30104/30105)…`)
+  const unified = await fetchRadioPersonas(SEED_STATIONS.map(s => s.id))
+  exportRadioPersonasToEnv(unified)
+  const listePersonas = Object.values(unified.personas)
+  console.log(`   ✓ ${listePersonas.length} persona(s) unifiée(s), ${Object.keys(unified.overrides).length} affinage(s) per-station`)
+  for (const p of listePersonas) {
+    const roles = p.stationRules
+      .filter(r => r.canHost || r.canGuest)
+      .map(r => `${r.stationId}${r.canHost ? '/anim' : ''}${r.canGuest ? '/invité' : ''}`)
+      .join(' ')
+    console.log(`      · ${p.displayName} (${p.id})${p.voiceName ? ` voix=${p.voiceName}` : ''} → ${roles}`)
+  }
 
   const startedAt = Date.now()
   const results: Array<{ stationId: string; ok: boolean; error?: string }> = []

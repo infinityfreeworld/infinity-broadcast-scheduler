@@ -1,9 +1,54 @@
 name: Daily Broadcast Generation
 
-# Cron : tous les jours à 22h UTC = 23h Paris (hiver) / minuit Paris (été)
-# Génère les broadcasts pour J+1 (lendemain) avec l'actu fraîche du moment.
+# ── UN JOB PAR STATION, ET POURQUOI ────────────────────────────────────
 #
-# Manual trigger possible via "Run workflow" (workflow_dispatch).
+# Ce workflow enchaînait les 15 stations dans UN SEUL job, sous
+# `timeout-minutes: 150`. Ce plafond a mordu : le run du 29/08/2026 a duré
+# exactement 150 minutes, a été tué, et seules 9 stations sur 15 ont été
+# publiées le lendemain. Le commentaire disait « 9 stations × ~5 min » — il
+# datait d'une époque où il y en avait 9.
+#
+# À partir du 02/09/2026, data-space héberge la synthèse Chatterbox sur un
+# GPU allumé à la demande, mesuré par eux à un facteur temps réel d'environ
+# 1,0. Nos 4,8 h d'audio quotidiennes demandent donc ~5 h de GPU. Un job
+# unique dépasserait la limite DURE de 6 h par job chez GitHub.
+#
+# D'où la matrice : chaque station est un job, avec son propre compteur.
+# Aucun ne s'approche de la limite, et une station qui échoue n'emporte pas
+# les autres (`fail-fast: false`).
+#
+# `max-parallel: 2` — et cette borne est PROVISOIRE, pour une raison qu'il
+# faut écrire ici sinon on la relâchera par erreur.
+#
+# Nous avions d'abord retiré toute borne, en déférant le débit à la file de
+# data-space : quand elle est pleine, un 429 nous fait patienter et tout
+# s'auto-régule. Le principe est juste. Mais ils nous ont fait remarquer
+# (02/09/2026) que **leur 429 n'existe pas encore** — un parallélisme non
+# borné n'aurait donc rien eu qui le corrige, et nous aurions mesuré des
+# latences ressemblant à une panne sans en être une.
+#
+# 🔴 NE RELÂCHER CETTE BORNE QU'UNE FOIS LEUR FILE CAPABLE DE NOUS FREINER.
+#
+# Deux est aussi leur mesure : deux requêtes simultanées donnent 1,6× de
+# débit, au-delà le rendement s'effondre.
+#
+# ⚠️ Borner à deux ramène le risque du refroidissement : leur machine
+# s'éteint dès la file vide, et une nouvelle location coûte 5 min de
+# refroidissement + ~12 min de démarrage. Seules quelques stations ont des
+# voix de personnage ; dispersées, leurs salves seraient séparées par des
+# stations qui n'utilisent que Piper. D'où l'ordre imposé par
+# `lister-stations.ts` : les stations qui ont besoin du GPU passent EN
+# PREMIER, leurs salves se suivent, une seule location sert la nuit.
+#
+# ⚠️ LE CRON RESTE À 22 h UTC. J'ai un moment avancé à 20 h « pour tenir
+# dans la fenêtre de 6 h », en croyant que la synthèse durerait ~5 h. C'était
+# faux : ces 5 h supposaient que les 330 tours passent par Chatterbox. Simulé
+# le 02/09/2026 avec la vraie configuration, **44 tours sur 330** y passent,
+# soit ~37 min de GPU — et moins encore depuis que la voix par défaut est
+# vide. Tout le reste est synthétisé par Piper, en local, bien plus vite que
+# le temps réel. Avancer le cron n'aurait fait que travailler sur une actu
+# moins fraîche pour rien.
+
 on:
   schedule:
     - cron: '0 22 * * *'
@@ -19,16 +64,66 @@ on:
         default: ''
 
 jobs:
-  generate:
+  # ── Ce qui ne doit tourner QU'UNE FOIS ───────────────────────────────
+  preparer:
     runs-on: ubuntu-latest
-    timeout-minutes: 150    # 9 stations × ~5 min/broadcast = ~45 min, +marge
+    timeout-minutes: 20
+    outputs:
+      stations: ${{ steps.liste.outputs.stations }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+
+      # Une fois, pas quinze : ces deux contrôles portent sur le CODE, qui
+      # est le même pour toutes les stations. Les répéter dans chaque job
+      # de la matrice ajouterait une vingtaine de minutes à une nuit déjà
+      # comptée. S'ils échouent, aucune station ne part.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      # La purge doit précéder TOUTES les stations : lancée par station,
+      # elle effacerait le travail des précédentes.
+      - name: Purge Pinata
+        env:
+          PINATA_JWT:  ${{ secrets.PINATA_JWT }}
+          TARGET_DATE: ${{ github.event.inputs.target_date || '' }}
+        run: npm run pinata:purge
+
+      # La liste vient de `seed-stations.ts`, jamais recopiée ici : une
+      # station ajoutée au code doit être diffusée sans toucher au YAML.
+      - name: Liste des stations
+        id: liste
+        run: |
+          if [ -n "${{ github.event.inputs.single_station }}" ]; then
+            echo "stations=[\"${{ github.event.inputs.single_station }}\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo "stations=$(npm run --silent stations:list)" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Une station, un job ──────────────────────────────────────────────
+  emission:
+    needs: preparer
+    runs-on: ubuntu-latest
+    # Large : une station demande ~20 min de synthèse, mais le réveil du
+    # GPU et la file d'attente s'ajoutent. Loin des 6 h de la limite dure.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        station: ${{ fromJson(needs.preparer.outputs.stations) }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -39,41 +134,108 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # Cache des binaires Piper + voix ONNX pour économiser ~50 MB téléchargés
-      # à chaque run. Clé basée sur la version Piper + voices listées en code.
+      # Cache des binaires Piper + voix ONNX. Piper reste le REPLI : si la
+      # synthèse Chatterbox est injoignable, l'émission sort quand même.
       - name: Cache Piper binary + voices
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             piper/
             voices/
           key: piper-${{ hashFiles('src/lib/piper.ts') }}
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Generate broadcasts
+      - name: Génère ${{ matrix.station }}
         env:
+          # 🔴 PREMIER maillon de la chaîne d'écriture, et le seul gratuit à
+          # notre échelle : offre d'environ 1 milliard de jetons/mois, contre
+          # ~1,17 M/jour pour les 15 stations — soit 3,5 %.
+          # Sans ce secret, CHAQUE émission descend jusqu'à Anthropic et sort
+          # normalement : rien ne distingue une nuit gratuite d'une nuit
+          # payante, sauf la facture. Le job émet donc un ::warning:: quand il
+          # manque.
+          MISTRAL_API_KEY:   ${{ secrets.MISTRAL_API_KEY || '' }}
+          MISTRAL_MODEL:     ${{ vars.MISTRAL_MODEL || 'mistral-small-latest' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Dépôt IPFS PRINCIPAL depuis le 02/09/2026. Pinata plafonne à 1 Go,
+          # et sa purge SUPPRIMAIT nos propres émissions pour tenir sous le
+          # quota ; data-space rend `storageMax` illimité, donc l'archive
+          # survit. Mêmes octets → MÊME CID chez les deux (vérifié le même
+          # jour), donc rien ne change côté application.
+          # 🔑 PRÉFÉRER la clé au jeton : le jeton `ds_live_…` EXPIRE, la clé
+          # non. Le jour où un jeton périmé serait posé ici, la nuit se
+          # déroulerait « normalement » — dépôt principal refusé, Pinata en
+          # relais — et rien ne dirait qu'on a cessé d'être souverain.
+          # La dérivation NIP-98 est dans `lib/dataspace-jeton.ts`.
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY || '' }}
+          # Secours : un jeton déjà obtenu, si l'on préfère ne pas confier la
+          # clé à la CI. À rafraîchir à la main.
+          DATASPACE_API_KEY: ${{ secrets.DATASPACE_API_KEY || '' }}
           PINATA_JWT:        ${{ secrets.PINATA_JWT }}
           NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
-          ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}
+          ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
           NUM_TURNS:         ${{ vars.NUM_TURNS || '22' }}
           NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
           TARGET_DATE:       ${{ github.event.inputs.target_date || '' }}
-          # Sprint DE — Chatterbox TTS (optionnel, ajouter ces secrets+vars dans
-          # Settings → Actions → Secrets pour activer la synthèse Chatterbox
-          # avec fallback Piper auto)
+          # Filtre d'auteur pour la configuration radio (personas, Pulse,
+          # voix). Vide = filtrage par la FORME des events, ce qui suffit
+          # mais laisse la porte plus large. Voir src/lib/pulse.ts.
+          RADIO_ADMIN_PUBKEYS: ${{ vars.RADIO_ADMIN_PUBKEYS || '' }}
+          # ── Synthèse Chatterbox (data-space, GPU à la demande) ────────
           CHATTERBOX_TTS_URL:        ${{ secrets.CHATTERBOX_TTS_URL || '' }}
           CHATTERBOX_API_KEY:        ${{ secrets.CHATTERBOX_API_KEY || '' }}
           CHATTERBOX_VOICE_MAP:      ${{ vars.CHATTERBOX_VOICE_MAP || '' }}
+          # ⚠️ VIDE À DESSEIN. Une voix par défaut faisait passer par
+          # Chatterbox des animateurs à qui PERSONNE n'avait attribué de
+          # voix : simulé le 02/09/2026, les 22 tours de free-press-fm
+          # partaient sur « Abigail », une voix anglaise générique livrée
+          # avec le logiciel — la moitié de notre consommation GPU, pour
+          # aucun personnage. Sans repli global, Chatterbox ne sert plus
+          # que les voix DÉLIBÉRÉMENT assignées ; les autres restent sur
+          # Piper, qui est fait pour ça.
           CHATTERBOX_DEFAULT_VOICE:  ${{ vars.CHATTERBOX_DEFAULT_VOICE || '' }}
           CHATTERBOX_LANGUAGE:       ${{ vars.CHATTERBOX_LANGUAGE || 'fr' }}
           CHATTERBOX_FALLBACK_PIPER: ${{ vars.CHATTERBOX_FALLBACK_PIPER || 'true' }}
+          # Rend le job ROUGE si AUCUNE voix de personnage n'a fonctionné.
+          # L'émission est publiée quand même (Piper vaut mieux que le
+          # silence), mais un service muet ne doit plus passer pour un
+          # succès — c'est ce qui a laissé tout août sortir sans voix.
+          CHATTERBOX_STRICT: ${{ vars.CHATTERBOX_STRICT || 'true' }}
+          # Le GPU s'allume à la demande : démarrer la machine et charger le
+          # modèle prend bien plus que le réveil d'un Space endormi.
+          # Routes data-space (contrat du 02/09/2026). Nous appelions
+          # `/v1/audio/speech`, la convention OpenAI héritée du serveur
+          # Hugging Face : un 404 indiscernable d'un `voice_not_found`.
+          CHATTERBOX_SYNTH_PATH:       ${{ vars.CHATTERBOX_SYNTH_PATH || '/api/v1/gpu/voix' }}
+          CHATTERBOX_SESSION_PATH:     ${{ vars.CHATTERBOX_SESSION_PATH || '/api/v1/gpu/voix/session' }}
+          # Leur station s'éteint après 10 min sans travail et met 15 à 30 min
+          # à se rallumer. On annonce la fenêtre pour qu'ils chauffent pendant
+          # que nous écrivons — 0 désactive.
+          CHATTERBOX_SESSION_MINUTES:  ${{ vars.CHATTERBOX_SESSION_MINUTES || '45' }}
+          CHATTERBOX_WAKE_TIMEOUT_S:    ${{ vars.CHATTERBOX_WAKE_TIMEOUT_S || '720' }}
+          CHATTERBOX_REQUEST_TIMEOUT_S: ${{ vars.CHATTERBOX_REQUEST_TIMEOUT_S || '300' }}
+          # Combien de temps accepter d'ATTENDRE EN FILE (429 + Retry-After)
+          # avant de renoncer et de retomber sur Piper. Quinze stations qui
+          # débitent leur salve en même temps font patienter la dernière une
+          # vingtaine de minutes : un budget de 15 min l'aurait fait retomber
+          # sur Piper alors que tout allait bien.
+          CHATTERBOX_QUEUE_BUDGET_S: ${{ vars.CHATTERBOX_QUEUE_BUDGET_S || '1800' }}
+        run: npm run generate:one -- "${{ matrix.station }}"
+
+  # ── Le compte rendu : combien de stations ont vraiment diffusé ───────
+  #
+  # Sans lui, l'échec de 6 stations sur 15 passe inaperçu : chaque job a
+  # son propre verdict et personne ne regarde la somme. C'est exactement
+  # ce qui s'est produit le 30/08.
+  bilan:
+    needs: [preparer, emission]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verdict
         run: |
-          if [ -n "${{ github.event.inputs.single_station }}" ]; then
-            echo "Génération station unique : ${{ github.event.inputs.single_station }}"
-            npm run generate:one -- "${{ github.event.inputs.single_station }}"
-          else
-            npm run generate:all
+          echo "Stations demandées : $(echo '${{ needs.preparer.outputs.stations }}' | tr -cd ',' | wc -c | awk '{print $1+1}')"
+          echo "Résultat de la matrice : ${{ needs.emission.result }}"
+          if [ "${{ needs.emission.result }}" != "success" ]; then
+            echo "::warning::Au moins une station n'a pas diffusé — ouvrir le détail de la matrice."
           fi

@@ -58,6 +58,26 @@ function getEndpoint(): { url: string; apiKey: string } {
   }
 }
 
+/**
+ * Chemin de la route de synthèse chez data-space.
+ *
+ * 🔴 Nous appelions `/v1/audio/speech` — la convention OpenAI, héritée du
+ * serveur Hugging Face que nous utilisions avant. data-space expose
+ * `POST /api/v1/gpu/voix`, et AUCUNE valeur de `CHATTERBOX_TTS_URL` ne
+ * pouvait rattraper l'écart : une base qui rend la bonne route de synthèse
+ * casse toutes les autres.
+ *
+ * L'erreur aurait été un 404 la nuit de la diffusion — indiscernable, dans
+ * nos journaux, d'un `voice_not_found`, qui est un 404 lui aussi. Nous
+ * aurions cherché du côté des noms de voix, qui sont justes.
+ *
+ * Vérifié en ligne le 02/09/2026 : sur cette route, une voix INCONNUE rend
+ * bien `404 voice_not_found` avec la liste des voix.
+ */
+function cheminSynthese(): string {
+  return process.env.CHATTERBOX_SYNTH_PATH ?? '/api/v1/gpu/voix'
+}
+
 function authHeaders(apiKey: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
 }
@@ -82,19 +102,156 @@ export async function pingChatterbox(): Promise<{ ok: boolean; status: number; m
 }
 
 /**
- * Ping jusqu'à ce que le Space soit éveillé (cold start ~30-60s).
- * Retries avec backoff exponentiel jusqu'à `maxAttempts`.
+ * Attend que le service réponde, en le sondant.
+ *
+ * ── POURQUOI C'EST BEAUCOUP PLUS LONG QU'AVANT ──
+ * Ce compte-à-rebours valait 6 tentatives, soit **66 secondes en tout** —
+ * calibré sur un HF Space endormi, qui se réveille en 30 à 60 s.
+ *
+ * data-space nous héberge désormais Chatterbox sur un **GPU allumé à la
+ * demande** (réponse du 02/09/2026) : il faut démarrer une machine ET
+ * charger le modèle. 66 secondes n'y suffisent pas. La première station
+ * de la nuit échouerait donc et retomberait sur Piper — **sans erreur**,
+ * puisque le repli est un comportement normal. Une antenne qui perd ses
+ * personnages sans que rien ne le signale.
+ *
+ * Le défaut par défaut est donc la PATIENCE : mieux vaut attendre dix
+ * minutes une machine qui démarre que produire une émission entière avec
+ * les mauvaises voix.
+ *
+ * Réglable par `CHATTERBOX_WAKE_TIMEOUT_S` (défaut 720 s : 5 min de
+ * refroidissement + ~12 min de démarrage annoncés par data-space).
  */
-export async function pingUntilReady(maxAttempts = 6, initialDelayMs = 5_000): Promise<boolean> {
+/**
+ * Ce qu'un réveil peut apprendre.
+ *
+ * `voix-absente` est une faute de NOTRE côté (mauvais nom de fichier),
+ * corrigible en une minute. `injoignable` est une panne du service. Les
+ * confondre ferait accuser data-space d'une coquille chez nous — et
+ * inversement, ferait chercher une coquille pendant une panne.
+ */
+export type EtatReveil = 'pret' | 'voix-absente' | 'injoignable'
+
+/**
+ * Réveille le service et PROUVE qu'il peut parler, en lui demandant une
+ * vraie phrase courte avec une vraie voix.
+ *
+ * ── POURQUOI PAS UN SIMPLE PING ──
+ * Un `GET /api/model-info` ne réveille pas forcément une machine allumée
+ * à la demande : rien ne garantit que la porte d'entrée compte une
+ * lecture comme du travail à faire. Nous sonderions alors une machine
+ * endormie jusqu'à épuisement du budget, avant de retomber sur Piper —
+ * le scénario d'échec le plus probable de la première nuit.
+ *
+ * Une synthèse courte, elle, réveille à coup sûr (c'est la route de
+ * travail) ET vérifie la seule chose qui compte : que CETTE voix existe
+ * et rend de l'audio. Un témoin connu-bon plutôt qu'un signe de vie.
+ *
+ * 🔴 data-space expose bien un `GET /api/v1/gpu/voix` qui rend `ready`.
+ * Nous ne l'utilisons PAS comme feu vert, et le 02/09/2026 l'a justifié :
+ * il annonçait `ready: true` pendant que quinze synthèses d'affilée —
+ * trois formats, deux voix, 343 s de relances — restaient bloquées en
+ * `429 not_ready`. Un indicateur d'état n'est pas une preuve de service.
+ * Il reste utile pour SAVOIR S'IL FAUDRA ATTENDRE, jamais pour conclure
+ * que tout va bien.
+ */
+/**
+ * Ouvre une session de diffusion : data-space chauffe sa station tout de
+ * suite et la maintient éveillée pendant la fenêtre demandée.
+ *
+ * ── POURQUOI ÇA NOUS VA SI BIEN ──
+ * Leur station s'éteint après 10 min sans travail, et la rallumer coûte
+ * 15 à 30 min. Notre synthèse est déjà GROUPÉE — tout le texte écrit
+ * d'abord, toute la synthèse d'un trait — donc nos requêtes sont
+ * naturellement serrées. La session ajoute la seule chose qui manquait :
+ * notre PREMIÈRE phrase ne paie plus l'allumage, puisqu'ils chauffent dès
+ * l'annonce, pendant que nous écrivons encore.
+ *
+ * ⚠️ Un échec ici n'est JAMAIS bloquant. La session est un confort, pas
+ * une dépendance : sans elle la synthèse marche, elle attend seulement
+ * plus longtemps. La faire lever ferait perdre une émission entière pour
+ * une optimisation.
+ */
+export async function ouvrirSessionDiffusion(minutes: number): Promise<boolean> {
+  const { url, apiKey } = getEndpoint()
+  const chemin = process.env.CHATTERBOX_SESSION_PATH ?? '/api/v1/gpu/voix/session'
+  try {
+    const res = await fetch(`${url}${chemin}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+      body:    JSON.stringify({ minutes }),
+      signal:  AbortSignal.timeout(60_000),
+    })
+    if (!res.ok) {
+      console.warn(`  [chatterbox] session refusée (HTTP ${res.status}) — on continue sans`)
+      return false
+    }
+    console.log(`  [chatterbox] session de ${minutes} min ouverte — la station chauffe`)
+    return true
+  } catch (err) {
+    console.warn(`  [chatterbox] session injoignable (${(err as Error).message.slice(0, 80)}) — on continue sans`)
+    return false
+  }
+}
+
+export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
+  const budgetMs = Number.parseInt(process.env.CHATTERBOX_WAKE_TIMEOUT_S ?? '720', 10) * 1000
+  const maxTentatives = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10)
+  const debut = Date.now()
+  let delai = 5_000
+
+  for (let i = 0; i < maxTentatives; i++) {
+    const ecoule = Math.round((Date.now() - debut) / 1000)
+    try {
+      // Opus, et non WAV : cet audio-ci est JETÉ — seule compte la réponse.
+      // Le réveil peut demander jusqu'à 24 tentatives ; en Opus la sonde
+      // pèse ~10× moins. ⚠️ Le MONTAGE, lui, reste en WAV (voir plus bas).
+      await synthesizeWithChatterbox({ voice: voix, text: 'Bonjour.', format: 'opus' })
+      console.log(`  [chatterbox] éveillé et vérifié avec « ${voix} » après ${ecoule}s`)
+      return 'pret'
+    } catch (err) {
+      const e = err as ChatterboxError
+      // 404 : le service RÉPOND, mais ce nom de voix lui est inconnu.
+      // Inutile d'attendre : ce n'est pas un réveil, c'est une coquille.
+      if (e.status === 404) {
+        console.warn(`  [chatterbox] service éveillé, mais la voix « ${voix} » lui est INCONNUE`)
+        return 'voix-absente'
+      }
+      console.log(`  [chatterbox] réveil ${i + 1}/${maxTentatives} : ${e.status ?? '—'} (${ecoule}s écoulées)`)
+    }
+    if (i === maxTentatives - 1) break
+    if (Date.now() - debut + delai > budgetMs) {
+      console.warn(`  [chatterbox] budget de réveil épuisé (${budgetMs / 1000}s)`)
+      break
+    }
+    await new Promise(r => setTimeout(r, delai))
+    delai = Math.min(delai * 1.5, 45_000)
+  }
+  return 'injoignable'
+}
+
+export async function pingUntilReady(
+  maxAttempts = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10),
+  initialDelayMs = 5_000,
+): Promise<boolean> {
+  const budgetMs = Number.parseInt(process.env.CHATTERBOX_WAKE_TIMEOUT_S ?? '720', 10) * 1000
+  const debut = Date.now()
   let delay = initialDelayMs
   for (let i = 0; i < maxAttempts; i++) {
     const r = await pingChatterbox()
-    console.log(`  [chatterbox] ping ${i + 1}/${maxAttempts} : ${r.ok ? '✓' : '✗'} ${r.status} (${r.ms}ms)`)
-    if (r.ok) return true
-    if (i < maxAttempts - 1) {
-      await new Promise(resolve => setTimeout(resolve, delay))
-      delay = Math.min(delay * 1.5, 30_000)
+    const ecoule = Math.round((Date.now() - debut) / 1000)
+    console.log(`  [chatterbox] ping ${i + 1}/${maxAttempts} : ${r.ok ? '✓' : '✗'} ${r.status} (${r.ms}ms · ${ecoule}s écoulées)`)
+    if (r.ok) {
+      if (i > 0) console.log(`  [chatterbox] service éveillé après ${ecoule}s`)
+      return true
     }
+    if (i === maxAttempts - 1) break
+    if (Date.now() - debut + delay > budgetMs) {
+      console.warn(`  [chatterbox] budget de réveil épuisé (${budgetMs / 1000}s) — on renonce`)
+      break
+    }
+    await new Promise(resolve => setTimeout(resolve, delay))
+    delay = Math.min(delay * 1.5, 45_000)
   }
   return false
 }
@@ -102,12 +259,59 @@ export async function pingUntilReady(maxAttempts = 6, initialDelayMs = 5_000): P
 /**
  * Synthèse texte → audio. Retourne un Buffer (WAV/MP3/etc selon format).
  */
+/**
+ * Synthèse avec OBÉISSANCE au 429.
+ *
+ * ── LE CONTRAT QUE NOUS PROPOSONS À data-space ──
+ * Leur GPU sérialise. Deux stratégies étaient possibles quand la file est
+ * pleine : qu'ils TIENNENT la connexion ouverte le temps de nous servir,
+ * ou qu'ils nous renvoient tout de suite un 429 avec un `Retry-After`.
+ *
+ * Nous demandons la seconde, et voici pourquoi : une connexion tenue nous
+ * oblige à un délai d'abandon qui couvre la file ENTIÈRE — soit un quart
+ * d'heure — et ce délai devient alors indiscernable d'une panne. Avec un
+ * 429 immédiat, l'attente est EXPLICITE, chiffrée par celui qui sait, et
+ * notre abandon à 300 s ne mesure plus que la synthèse elle-même.
+ *
+ * Nous respectons donc `Retry-After` et réessayons dans un budget borné,
+ * plutôt que de nous acharner.
+ */
 export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Promise<Buffer> {
+  const budgetMs = Number.parseInt(process.env.CHATTERBOX_QUEUE_BUDGET_S ?? '1800', 10) * 1000
+  const debut = Date.now()
+  for (let tentative = 1; ; tentative++) {
+    try {
+      return await synthetiserUneFois(opts)
+    } catch (err) {
+      const e = err as ChatterboxError
+      if (e.status !== 429) throw err
+      const attenteS = Number.parseInt(/Retry-After (\d+)s/.exec(e.message)?.[1] ?? '15', 10)
+      const restant = budgetMs - (Date.now() - debut)
+      if (restant <= attenteS * 1000) {
+        throw new ChatterboxError(
+          `file d'attente saturée au-delà de notre budget (${budgetMs / 1000}s) — repli`,
+          429,
+        )
+      }
+      console.log(`  [chatterbox] file pleine, on patiente ${attenteS}s (tentative ${tentative})`)
+      await new Promise(r => setTimeout(r, attenteS * 1000))
+    }
+  }
+}
+
+async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer> {
   const { url, apiKey } = getEndpoint()
   const body = {
     model:                'chatterbox',
     input:                opts.text,
     voice:                opts.voice.endsWith('.wav') ? opts.voice : `${opts.voice}.wav`,
+    // 🔴 Défaut WAV DÉLIBÉRÉ. data-space propose l'Opus pour alléger le
+    // transfert, et c'est juste pour une sonde ou une livraison finale.
+    // Mais le montage décode chaque tour avec `readWav`, qui exige du
+    // RIFF : un buffer Opus le ferait lever, et l'appelant prendrait
+    // cette erreur pour une panne du service en basculant sur Piper —
+    // zéro voix de personnage, sans qu'aucune ligne ne le dise.
+    // Passer le montage en Opus exige d'abord un décodeur, pas ce flag.
     response_format:      opts.format ?? 'wav',
     language:             opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
     language_id:          opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
@@ -116,18 +320,37 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
     temperature:          opts.temperature ?? 0.75,
     speed:                opts.speed ?? 1.0,
   }
-  const res = await fetch(`${url}/v1/audio/speech`, {
+  const res = await fetch(`${url}${cheminSynthese()}`, {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(apiKey),
     },
     body:    JSON.stringify(body),
-    signal:  AbortSignal.timeout(120_000),
+    // ⚠️ Le tour le plus long RÉELLEMENT diffusé (relevé du 29/08/2026)
+    // fait 82,6 s d'audio. data-space mesure Chatterbox à un facteur temps
+    // réel d'environ 1,0 : ce tour demande donc ~83 s de calcul, contre un
+    // abandon à 120 s — une marge de 1,45× seulement, avant toute file
+    // d'attente. Un abandon ici ne lève pas d'alerte : il fait retomber le
+    // tour sur Piper, et l'émission change de voix en cours de route.
+    signal:  AbortSignal.timeout(
+      Number.parseInt(process.env.CHATTERBOX_REQUEST_TIMEOUT_S ?? '300', 10) * 1000,
+    ),
   })
   if (!res.ok) {
     let detail = ''
     try { detail = await res.text() } catch { /* */ }
+    // 429 — le service nous demande de ralentir. Obéir vaut mieux que
+    // réessayer aveuglément : c'est LUI qui sait combien de requêtes son
+    // GPU absorbe. On respecte `Retry-After` quand il est donné.
+    if (res.status === 429) {
+      const entete = res.headers.get('retry-after')
+      const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 15
+      throw new ChatterboxError(
+        `speech HTTP 429 — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
+        429,
+      )
+    }
     throw new ChatterboxError(`speech HTTP ${res.status}${detail ? ' : ' + detail.slice(0, 200) : ''}`, res.status)
   }
   const arrayBuf = await res.arrayBuffer()

@@ -135,21 +135,46 @@ Pour trigger manuellement (test) :
 - Repo → Actions → "Daily Broadcast Generation" → "Run workflow"
 - Optionnellement spécifie une date ou une station unique
 
-## TTS Chatterbox (optionnel, Sprint DE)
+## TTS Chatterbox
 
 Le pipeline supporte un **mode hybride** : Chatterbox (Resemble AI, voice
-cloning) si configuré, fallback Piper FR sinon. Permet de cloner la voix
-d'un Bâtisseur réel pour son animateur IA.
+cloning) si configuré, repli Piper sinon. C'est ce qui donne aux animateurs
+et invités leur VOIX PROPRE — Piper dirait le même texte avec une voix qui
+n'est pas celle du personnage.
+
+### 🔴 L'hébergement a changé — et le keepalive a été SUPPRIMÉ
+
+Jusqu'au 02/09/2026, Chatterbox vivait sur un HF Space, maintenu éveillé par
+un workflow `keepalive-chatterbox.yml` qui le sondait **toutes les 4 heures**.
+Ce Space a fini **en pause** (`503 : The space is paused`), état dont il ne
+sort pas tout seul : toutes les émissions d'août sont sorties avec les voix
+Piper de repli, sans que rien ne le signale.
+
+data-space héberge désormais Chatterbox sur un **GPU allumé à la demande**,
+éteint dès la file vide. Le keepalive a donc été **supprimé, pas désactivé** :
+le remettre rallumerait leur machine six fois par jour pour rien, et ils nous
+offrent ce service. ⚠️ **Ne pas le recréer.**
+
+Deux conséquences dans le code :
+
+- `CHATTERBOX_WAKE_TIMEOUT_S` (défaut **600 s**) — démarrer une machine et
+  charger le modèle prend bien plus que réveiller un Space endormi. L'ancien
+  compte-à-rebours de 66 s aurait fait échouer la première station de chaque
+  nuit, en silence.
+- `CHATTERBOX_REQUEST_TIMEOUT_S` (défaut **300 s**) — data-space mesure
+  Chatterbox à un facteur temps réel d'environ 1,0 ; le tour le plus long
+  réellement diffusé fait 82,6 s d'audio, donc ~83 s de calcul. L'ancien
+  abandon à 120 s ne laissait que 1,45× de marge.
 
 **Activation** :
 
-1. Déploie un HF Space avec l'image `ghcr.io/devnen/chatterbox-tts-server`
-   (cf. `chatterbox-hf/` dans le repo CPI Neo pour le Dockerfile type)
-2. Upload les samples de voix depuis l'IHL d'Infinity (onglet 🎙️ Voix Radio)
-   ou via l'admin endpoint du Space
+1. Obtenir l'URL du service auprès de data-space
+2. Leur transmettre les échantillons de voix (ils les épinglent et rendent
+   les CID) — ⚠️ sur IPFS, publier n'est pas conserver : nos 14 anciens CID
+   ne répondaient plus faute d'épinglage
 3. Ajoute les secrets GHA :
-   - `CHATTERBOX_TTS_URL` (secret) — URL du HF Space
-   - `CHATTERBOX_API_KEY` (secret) — Bearer token HF
+   - `CHATTERBOX_TTS_URL` (secret) — URL du service
+   - `CHATTERBOX_API_KEY` (secret) — jeton Bearer
 4. Ajoute les vars GHA :
    - `CHATTERBOX_VOICE_MAP` (var) — JSON `{"<hostId>":"<voiceName>"}` (optionnel)
    - `CHATTERBOX_DEFAULT_VOICE` (var) — voix utilisée si pas de mapping
