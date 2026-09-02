@@ -135,7 +135,10 @@ export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
   for (let i = 0; i < maxTentatives; i++) {
     const ecoule = Math.round((Date.now() - debut) / 1000)
     try {
-      await synthesizeWithChatterbox({ voice: voix, text: 'Bonjour.', format: 'wav' })
+      // Opus, et non WAV : cet audio-ci est JETÉ — seule compte la réponse.
+      // Le réveil peut demander jusqu'à 24 tentatives ; en Opus la sonde
+      // pèse ~10× moins. ⚠️ Le MONTAGE, lui, reste en WAV (voir plus bas).
+      await synthesizeWithChatterbox({ voice: voix, text: 'Bonjour.', format: 'opus' })
       console.log(`  [chatterbox] éveillé et vérifié avec « ${voix} » après ${ecoule}s`)
       return 'pret'
     } catch (err) {
@@ -234,6 +237,13 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
     model:                'chatterbox',
     input:                opts.text,
     voice:                opts.voice.endsWith('.wav') ? opts.voice : `${opts.voice}.wav`,
+    // 🔴 Défaut WAV DÉLIBÉRÉ. data-space propose l'Opus pour alléger le
+    // transfert, et c'est juste pour une sonde ou une livraison finale.
+    // Mais le montage décode chaque tour avec `readWav`, qui exige du
+    // RIFF : un buffer Opus le ferait lever, et l'appelant prendrait
+    // cette erreur pour une panne du service en basculant sur Piper —
+    // zéro voix de personnage, sans qu'aucune ligne ne le dise.
+    // Passer le montage en Opus exige d'abord un décodeur, pas ce flag.
     response_format:      opts.format ?? 'wav',
     language:             opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
     language_id:          opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',

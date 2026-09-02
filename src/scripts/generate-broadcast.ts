@@ -363,11 +363,29 @@ async function generateBroadcastBytes(opts: {
         // Écrit le buffer dans un tmpfile WAV pour réutiliser readWav.
         const tmpPath = join(tmpdir(), `chatterbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
         writeFileSync(tmpPath, buf)
-        wav = readWav(tmpPath)
+        // 🔴 Le décodage est HORS du try d'appel : une erreur ici n'est PAS une
+        // panne de Chatterbox, c'est un défaut CHEZ NOUS (mauvais format
+        // demandé, réponse tronquée). La confondre avec un échec de service la
+        // ferait avaler par le repli Piper : on perdrait toutes les voix de
+        // personnage en lisant « repli piper » comme une soirée normale.
+        try {
+          wav = readWav(tmpPath)
+        } catch (errDecodage) {
+          throw new Error(
+            `Chatterbox a répondu ${buf.length} octets pour « ${plan.voixPersonnage} », `
+            + `mais ce n'est pas du WAV décodable : ${(errDecodage as Error).message}. `
+            + `Ce n'est pas une panne du service — vérifier response_format.`,
+          )
+        }
         voixObtenues++
         process.stdout.write(`chatterbox:${plan.voixPersonnage}\n`)
       } catch (err) {
         const msg = err instanceof ChatterboxError ? err.message : (err as Error).message
+        // Un défaut de décodage n'est jamais un motif de repli : il ne se
+        // réparera pas tout seul et se répéterait sur les 22 tours en silence.
+        if (!(err instanceof ChatterboxError) && msg.includes('pas du WAV décodable')) {
+          throw err
+        }
         console.warn(`\n  ⚠ chatterbox fail [${plan.voixPersonnage}]: ${msg.slice(0, 120)}`)
         if (!isFallbackPiperEnabled()) throw err
         process.stdout.write('  (repli piper)\n')
