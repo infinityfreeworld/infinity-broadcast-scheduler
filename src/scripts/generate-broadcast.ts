@@ -475,12 +475,25 @@ async function main() {
   // workflow YAML (cron sans workflow_dispatch), `??` ne fallback que sur
   // null/undefined → propageait `date = ""` dans NOSTR. Voir generate-all.ts.
   const targetDate = process.argv[3] || process.env.TARGET_DATE || tomorrowLocalISO()
+  // ── MODE RÉPÉTITION ──
+  // Tout se déroule normalement — écriture, voix, montage, découpe musicale,
+  // encodage — SAUF l'épinglage IPFS et la publication NOSTR. Le fichier est
+  // écrit en local, écoutable.
+  //
+  // 🔴 Il existe parce que la seule façon d'essayer la chaîne était jusqu'ici
+  // de PUBLIER : une répétition mettait une vraie émission à l'antenne et
+  // consommait un épinglage. On ne répétait donc jamais, et chaque défaut se
+  // découvrait en production.
+  const repetition = process.argv.includes('--repetition')
 
   // ⚠️ Plus de `required('ANTHROPIC_API_KEY')` : Anthropic n'est que le
   // DERNIER maillon de la chaîne. Exiger sa clé rendait impossible de
   // tourner entièrement sur du gratuit, ce qui est pourtant le but.
   const pinataJwt = required('PINATA_JWT')
-  const nostrPriv = required('NOSTR_PRIVATE_KEY')
+  // En répétition on ne publie pas : exiger la clé de publication
+  // interdirait de répéter sur une machine qui ne doit pas publier — ce qui
+  // est exactement la machine sur laquelle on veut répéter.
+  const nostrPriv = repetition ? '' : required('NOSTR_PRIVATE_KEY')
   const model = process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
   // 22 tours ≈ 15 min audio (décision user 2026-05-11 : émissions courtes +
   // 5 min de musique entre = cycle 20 min en boucle 72×/jour). Ajustable via
@@ -619,6 +632,18 @@ async function main() {
   // Sauve aussi l'Opus en debug
   const localOpusPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.opus`)
   writeFileSync(localOpusPath, opusBlob)
+
+  if (repetition) {
+    const wavPath = join(tmpdir(), `repetition-${stationId}-${targetDate}.wav`)
+    writeFileSync(wavPath, Buffer.from(result.audioBlob))
+    console.log('\n🎧 RÉPÉTITION — rien n\'a été épinglé ni publié.')
+    console.log(`    WAV  : ${wavPath}`)
+    console.log(`    Opus : ${localOpusPath}`)
+    console.log(`    durée : ${Math.round(result.durationSec)} s · ${result.turns.length} tour(s)`)
+    console.log(`    maillons LLM : ${bilanDesMaillons()}`)
+    console.log(`\n    Écouter :  afplay "${wavPath}"`)
+    return
+  }
 
   // 4. Upload IPFS (Opus, pas WAV)
   console.log('\n📡 Upload Pinata IPFS…')
