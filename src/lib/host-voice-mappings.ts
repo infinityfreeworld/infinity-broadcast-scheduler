@@ -60,6 +60,82 @@ export function mappingKey(stationId: string, hostId: string): string {
  * Robuste : timeout côté pool, erreur réseau → Map vide (le scheduler
  * tombera sur CHATTERBOX_DEFAULT_VOICE).
  */
+/**
+ * Auteurs reconnus pour la configuration radio, ou null si aucun n'est
+ * déclaré. Même variable que `pulse.ts` et `radio-personas.ts` : une seule
+ * liste pour les trois, sinon on en durcit un et on oublie les autres —
+ * ce qui est exactement ce qui est arrivé à ce module-ci.
+ */
+function adminPubkeys(): Set<string> | null {
+  const raw = process.env.RADIO_ADMIN_PUBKEYS
+  if (!raw) return null
+  const set = new Set(raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean))
+  return set.size > 0 ? set : null
+}
+
+/**
+ * Résout les events en « d-tag → event retenu », par AUTEUR.
+ *
+ * Pure et exportée : c'est la logique qui a laissé un tiers piloter notre
+ * antenne, elle doit pouvoir être éprouvée sans réseau.
+ */
+export function resoudreParAuteur(
+  events: NostrEvent[],
+  allowed: Set<string> | null,
+  nous: string,
+): Map<string, NostrEvent> {
+  // 🔴 Un event remplaçable est identifié par le TRIPLET (auteur, kind,
+  // d-tag) — NIP-01. Cette fonction indexait par le d-tag SEUL et gardait
+  // le plus récent : n'importe quel auteur pouvait donc écraser notre
+  // configuration de voix en publiant après nous, et rien ne l'aurait dit.
+  //
+  // Constaté le 02/09/2026 : `pirate-radio:pi-hex` portait DEUX events, sur
+  // `nos.lol` et `nostr.mom`, signés par deux clés différentes — un tiers
+  // (`f1abc0b8…`, inconnu du dépôt) disant « alain », et la nôtre disant
+  // « Layla ». Le tiers gagnait, parce qu'il était plus récent de 55 s.
+  //
+  // C'est le seul des trois modules de configuration radio qui n'avait
+  // AUCUN filtre par auteur : `pulse.ts` et `radio-personas.ts` en ont un.
+    const parAuteur = new Map<string, NostrEvent>()
+  for (const e of events) {
+    if (allowed && !allowed.has(e.pubkey.toLowerCase())) continue
+    const dTag = e.tags.find(t => t[0] === 'd')?.[1]
+    if (!dTag) continue
+    const cle = `${e.pubkey.toLowerCase()}:${dTag}`
+    const existing = parAuteur.get(cle)
+    if (!existing || e.created_at > existing.created_at) parAuteur.set(cle, e)
+  }
+
+  // Regrouper par d-tag pour détecter les revendications concurrentes.
+  const parDTag = new Map<string, NostrEvent[]>()
+  for (const e of parAuteur.values()) {
+    const dTag = e.tags.find(t => t[0] === 'd')![1]
+    const l = parDTag.get(dTag); if (l) l.push(e); else parDTag.set(dTag, [e])
+  }
+
+    const latest = new Map<string, NostrEvent>()
+  for (const [dTag, liste] of parDTag.entries()) {
+    if (liste.length === 1) { latest.set(dTag, liste[0]); continue }
+    // Plusieurs auteurs revendiquent le même d-tag. On ne choisit PAS en
+    // silence : le plus récent n'a aucune autorité particulière.
+    const mien = nous ? liste.find(e => e.pubkey.toLowerCase() === nous) : undefined
+    const auteurs = liste.map(e => e.pubkey.slice(0, 8)).join(', ')
+    if (mien) {
+      console.warn(`[host-voice-mappings] « ${dTag} » revendiqué par ${liste.length} `
+        + `auteurs (${auteurs}) — on retient LE NÔTRE.`)
+      latest.set(dTag, mien)
+    } else {
+      // Aucun candidat de confiance : on n'en prend AUCUN. La voix
+      // retombera sur Piper — moins beau, jamais piloté par un tiers.
+      console.warn(`[host-voice-mappings] 🔴 « ${dTag} » revendiqué par ${liste.length} `
+        + `auteurs (${auteurs}), aucun reconnu — mapping IGNORÉ, repli Piper. `
+        + `Poser RADIO_ADMIN_PUBKEYS pour trancher.`)
+    }
+  }
+
+  return latest
+}
+
 export async function fetchHostVoiceMappings(timeoutMs = 8000): Promise<Map<string, string>> {
   const relays = getRelays()
   const pool = new SimplePool()
@@ -70,16 +146,9 @@ export async function fetchHostVoiceMappings(timeoutMs = 8000): Promise<Map<stri
       { maxWait: timeoutMs },
     )
 
-    // Replaceable : garder le plus récent par d-tag
-    const latest = new Map<string, NostrEvent>()
-    for (const e of events) {
-      const dTag = e.tags.find(t => t[0] === 'd')?.[1]
-      if (!dTag) continue
-      const existing = latest.get(dTag)
-      if (!existing || e.created_at > existing.created_at) {
-        latest.set(dTag, e)
-      }
-    }
+    const latest = resoudreParAuteur(
+      events, adminPubkeys(),
+      process.env.NOSTR_PUBLIC_KEY?.toLowerCase() ?? '')
 
     const result = new Map<string, string>()
     for (const [dTag, event] of latest.entries()) {
