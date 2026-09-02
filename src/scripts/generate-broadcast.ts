@@ -21,7 +21,7 @@
  */
 
 import 'dotenv/config'
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
@@ -661,11 +661,19 @@ async function main() {
   writeFileSync(localOpusPath, opusBlob)
 
   if (repetition) {
-    const wavPath = join(tmpdir(), `repetition-${stationId}-${targetDate}.wav`)
+    // Dossier explicite plutôt que `tmpdir()` : celui-ci vaut `/tmp` sous
+    // Linux mais `/var/folders/…` sous macOS. Un workflow qui copierait
+    // `/tmp/repetition-*` produirait un artefact VIDE sur un autre système,
+    // sans rien dire.
+    const dossier = process.env.REPETITION_DIR ?? tmpdir()
+    mkdirSync(dossier, { recursive: true })
+    const wavPath = join(dossier, `repetition-${stationId}-${targetDate}.wav`)
     writeFileSync(wavPath, Buffer.from(result.audioBlob))
+    const opusCopie = join(dossier, `repetition-${stationId}-${targetDate}.opus`)
+    writeFileSync(opusCopie, opusBlob)
     console.log('\n🎧 RÉPÉTITION — rien n\'a été épinglé ni publié.')
     console.log(`    WAV  : ${wavPath}`)
-    console.log(`    Opus : ${localOpusPath}`)
+    console.log(`    Opus : ${opusCopie}`)
     console.log(`    durée : ${Math.round(result.durationSec)} s · ${result.turns.length} tour(s)`)
     console.log(`    maillons LLM : ${bilanDesMaillons()}`)
     console.log(`\n    Écouter :  afplay "${wavPath}"`)

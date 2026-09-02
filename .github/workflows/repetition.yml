@@ -1,0 +1,112 @@
+# Répétition d'une émission — SANS RIEN PUBLIER.
+#
+# ── POURQUOI CE WORKFLOW ──
+# Jusqu'au 02/09/2026, la seule façon d'essayer la chaîne était de la lancer
+# pour de vrai : elle épinglait sur IPFS et publiait un kind:30093. Une
+# répétition mettait donc une vraie émission à l'antenne. Conséquence : on ne
+# répétait jamais, et chaque défaut se découvrait la nuit, en production.
+#
+# ── POURQUOI EN CI ET PAS EN LOCAL ──
+# 🔴 Piper NE PEUT PAS tourner sur macOS aarch64 : l'archive amont ne contient
+# aucune `.dylib` (seulement le paquet de symboles `…dylib.dSYM`, qui ressemble
+# à une bibliothèque dans un listing). Sous Linux elle est complète. Une
+# répétition locale s'arrête donc à la synthèse, sur un `dyld: Library not
+# loaded` qui a l'air d'une installation ratée.
+#
+# L'audio sort en artefact téléchargeable : c'est le seul moyen d'ÉCOUTER une
+# émission — et sa découpe musicale — avant de la diffuser.
+
+name: Répétition (aucune publication)
+
+on:
+  workflow_dispatch:
+    inputs:
+      station:
+        description: 'Station à répéter'
+        required: true
+        default: 'deglingos-radio'
+      date:
+        description: 'Date YYYY-MM-DD (vide = demain)'
+        required: false
+        default: ''
+      tours:
+        description: 'Nombre de tours (moins = plus rapide)'
+        required: false
+        default: '22'
+
+jobs:
+  repetition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install espeak-ng + opus-tools
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Cache Piper binary + voices
+        uses: actions/cache@v6
+        with:
+          path: |
+            piper/
+            voices/
+          key: piper-${{ hashFiles('src/lib/piper.ts') }}
+
+      # Croise les voix que la station va demander avec le catalogue distant.
+      # Ne fait pas échouer la répétition : une voix manquante retombe sur
+      # Piper, et c'est justement ce qu'on veut pouvoir constater.
+      - name: Contrôle des voix (informatif)
+        continue-on-error: true
+        env:
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY || '' }}
+          DATASPACE_API_KEY:   ${{ secrets.DATASPACE_API_KEY || '' }}
+          CHATTERBOX_TTS_URL:  ${{ secrets.CHATTERBOX_TTS_URL || 'https://data-space.world' }}
+        run: npx tsx src/scripts/verifier-voix.ts
+
+      - name: Répète ${{ github.event.inputs.station }}
+        env:
+          MISTRAL_API_KEY:   ${{ secrets.MISTRAL_API_KEY || '' }}
+          MISTRAL_MODEL:     ${{ vars.MISTRAL_MODEL || 'mistral-small-latest' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
+          NUM_TURNS:         ${{ github.event.inputs.tours }}
+          NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
+          # ⚠️ Ni PINATA_JWT ni NOSTR_PRIVATE_KEY : le mode répétition n'en a
+          # pas besoin, et ne pas les fournir GARANTIT qu'il ne peut rien
+          # publier — plus sûr qu'un drapeau qu'on pourrait oublier.
+          CHATTERBOX_TTS_URL:        ${{ secrets.CHATTERBOX_TTS_URL || '' }}
+          DATASPACE_NOSTR_KEY:       ${{ secrets.DATASPACE_NOSTR_KEY || '' }}
+          CHATTERBOX_SYNTH_PATH:     ${{ vars.CHATTERBOX_SYNTH_PATH || '/api/v1/gpu/voix' }}
+          CHATTERBOX_SESSION_PATH:   ${{ vars.CHATTERBOX_SESSION_PATH || '/api/v1/gpu/voix/session' }}
+          CHATTERBOX_SESSION_MINUTES: ${{ vars.CHATTERBOX_SESSION_MINUTES || '45' }}
+          CHATTERBOX_LANGUAGE:       ${{ vars.CHATTERBOX_LANGUAGE || 'fr' }}
+          CHATTERBOX_FALLBACK_PIPER: 'true'
+          # Dossier explicite : `tmpdir()` vaut /tmp sous Linux mais
+          # /var/folders/… sous macOS. Un `cp /tmp/…` produirait un artefact
+          # VIDE ailleurs, sans rien dire.
+          REPETITION_DIR: sortie
+        run: |
+          npx tsx src/scripts/generate-broadcast.ts \
+            "${{ github.event.inputs.station }}" \
+            ${{ github.event.inputs.date }} \
+            --repetition
+          # 🔴 Pas de `|| true` : un artefact vide se télécharge sans erreur
+          # et se prend pour une répétition réussie. S'il n'y a pas d'audio,
+          # le job doit ROUGIR.
+          ls -l sortie/
+          test -s sortie/*.wav || { echo "::error::aucun audio produit"; exit 1; }
+
+      - name: Publie l'audio en artefact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repetition-${{ github.event.inputs.station }}
+          path: sortie/
+          retention-days: 7
