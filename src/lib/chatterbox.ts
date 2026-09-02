@@ -99,7 +99,8 @@ export async function pingChatterbox(): Promise<{ ok: boolean; status: number; m
  * minutes une machine qui démarre que produire une émission entière avec
  * les mauvaises voix.
  *
- * Réglable par `CHATTERBOX_WAKE_TIMEOUT_S` (défaut 600 s).
+ * Réglable par `CHATTERBOX_WAKE_TIMEOUT_S` (défaut 720 s : 5 min de
+ * refroidissement + ~12 min de démarrage annoncés par data-space).
  */
 /**
  * Ce qu'un réveil peut apprendre.
