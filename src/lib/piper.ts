@@ -32,6 +32,25 @@ const exec = promisify(execFile)
 
 const PIPER_DIR  = process.env.PIPER_DIR  ?? join(process.cwd(), 'piper')
 const VOICES_DIR = process.env.VOICES_DIR ?? join(process.cwd(), 'voices')
+/**
+ * ⚠️ macOS aarch64 : l'archive amont NE CONTIENT AUCUNE `.dylib`.
+ *
+ * Relevé le 02/09/2026 en tentant une répétition locale. `piper` réclame
+ * trois bibliothèques par `@rpath` — `libespeak-ng.1.dylib`,
+ * `libpiper_phonemize.1.dylib`, `libonnxruntime.1.14.1.dylib` — et
+ * `piper_macos_aarch64.tar.gz` n'en livre aucune : seulement le paquet de
+ * symboles de débogage `libonnxruntime.1.14.1.dylib.dSYM`, qui a l'air
+ * d'une bibliothèque dans un listing et n'en est pas une.
+ *
+ * `brew install espeak-ng` fournit la première ; les deux autres sont
+ * propres à Piper et épinglées à une version d'onnxruntime. La synthèse
+ * locale est donc IMPOSSIBLE sur ce Mac sans reconstruire Piper.
+ *
+ * 🔴 Ce n'est PAS un problème en production : la CI tourne sous Linux, où
+ * l'archive est complète. Mais toute répétition locale s'arrête à la
+ * synthèse, avec un `dyld: Library not loaded` qui ressemble à une
+ * installation ratée alors que l'archive est simplement incomplète.
+ */
 const PIPER_BIN  = join(PIPER_DIR, 'piper')
 
 const PIPER_VERSION = '2023.11.14-2'   // dernière release stable au 2026-05

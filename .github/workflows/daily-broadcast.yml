@@ -146,6 +146,15 @@ jobs:
 
       - name: Génère ${{ matrix.station }}
         env:
+          # 🔴 PREMIER maillon de la chaîne d'écriture, et le seul gratuit à
+          # notre échelle : offre d'environ 1 milliard de jetons/mois, contre
+          # ~1,17 M/jour pour les 15 stations — soit 3,5 %.
+          # Sans ce secret, CHAQUE émission descend jusqu'à Anthropic et sort
+          # normalement : rien ne distingue une nuit gratuite d'une nuit
+          # payante, sauf la facture. Le job émet donc un ::warning:: quand il
+          # manque.
+          MISTRAL_API_KEY:   ${{ secrets.MISTRAL_API_KEY || '' }}
+          MISTRAL_MODEL:     ${{ vars.MISTRAL_MODEL || 'mistral-small-latest' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Dépôt IPFS PRINCIPAL depuis le 02/09/2026. Pinata plafonne à 1 Go,
           # et sa purge SUPPRIMAIT nos propres émissions pour tenir sous le

@@ -539,6 +539,22 @@ async function main() {
   if (maillonsDisponibles().every(m => m.raison)) {
     throw new Error('Aucun maillon LLM utilisable — poser MISTRAL_API_KEY, ou laisser la passerelle HL active.')
   }
+  // 🔴 Le silence coûteux : sans Mistral, la chaîne descend jusqu'à
+  // Anthropic et l'émission sort NORMALEMENT. Rien ne distingue une nuit
+  // gratuite d'une nuit payante — sauf la facture, un mois plus tard.
+  //
+  // Relevé le 02/09/2026 en répétition : 20 tours sur 22 écrits par
+  // Anthropic, parce que Mistral n'était pas configuré et que la
+  // passerelle HL rendait 429. Le but affiché était pourtant de ne payer
+  // qu'en dernier recours.
+  const mistral = maillonsDisponibles().find(m => m.nom === 'mistral')
+  if (mistral?.raison) {
+    const msg = `Mistral indisponible (${mistral.raison}) — cette émission `
+      + `descendra vers la passerelle HL puis ANTHROPIC, qui est payant. `
+      + `Le gratuit était le mode attendu.`
+    console.warn(`\n⚠️  ${msg}`)
+    if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`)
+  }
 
   // 1. Préparation Piper (binaire + voix) — gardé même si Chatterbox
   // configuré : sert de fallback robuste si le HF Space est down ou
