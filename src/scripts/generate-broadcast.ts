@@ -55,6 +55,7 @@ import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '..
 import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
 import { dataspacePinFile } from '../lib/dataspace'
+import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast } from '../lib/nostr'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { licenceDe } from '../lib/voix-licences'
@@ -494,9 +495,10 @@ async function main() {
   // n'est plus le dépôt principal, et exiger sa clé interdirait de tourner
   // en souverain. En répétition, aucun des deux n'est nécessaire.
   const pinataJwt = process.env.PINATA_JWT ?? ''
-  if (!repetition && !pinataJwt && !process.env.DATASPACE_API_KEY) {
-    console.error('❌ Aucun dépôt IPFS : définir DATASPACE_API_KEY (principal) '
-      + 'ou PINATA_JWT (secours).')
+  if (!repetition && !pinataJwt
+      && !process.env.DATASPACE_API_KEY && !process.env.DATASPACE_NOSTR_KEY) {
+    console.error('❌ Aucun dépôt IPFS : définir DATASPACE_NOSTR_KEY (préférée, ne périme '
+      + 'pas) ou DATASPACE_API_KEY, ou à défaut PINATA_JWT.')
     process.exit(1)
   }
   // En répétition on ne publie pas : exiger la clé de publication
@@ -684,7 +686,16 @@ async function main() {
   // chaque passerelle sert les deux encodages (`Qm…` v0 comme `bafy…` v1)
   // en 206. Basculer ne change donc rien côté application.
   const nomFichier = `broadcast-${stationId}-${targetDate}.opus`
-  const cleDataspace = process.env.DATASPACE_API_KEY ?? ''
+  // Le jeton donné, sinon dérivé de la clé NOSTR. 🔴 Le jeton EXPIRE ; la
+  // clé, non. Sans dérivation, le jour de l'expiration la nuit se déroule
+  // « normalement » — dépôt principal refusé, Pinata prend le relais — et
+  // personne ne voit qu'on a cessé d'être souverain.
+  let cleDataspace = ''
+  try {
+    cleDataspace = await jetonDataspace()
+  } catch (err) {
+    console.warn(`  ⚠ jeton data-space indérivable : ${(err as Error).message.slice(0, 140)}`)
+  }
   let pin: { cid: string; size: number } | null = null
 
   if (cleDataspace) {
@@ -701,7 +712,7 @@ async function main() {
       console.warn(`      → repli sur Pinata pour CETTE émission.`)
     }
   } else {
-    console.log('\n· DATASPACE_API_KEY absente — dépôt principal sauté, Pinata seul.')
+    console.log('\n· Ni DATASPACE_API_KEY ni DATASPACE_NOSTR_KEY — dépôt principal sauté, Pinata seul.')
   }
 
   // Pinata : second dépôt quand data-space a réussi (redondance), ou

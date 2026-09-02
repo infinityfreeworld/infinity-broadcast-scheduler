@@ -161,9 +161,14 @@ jobs:
           # quota ; data-space rend `storageMax` illimité, donc l'archive
           # survit. Mêmes octets → MÊME CID chez les deux (vérifié le même
           # jour), donc rien ne change côté application.
-          # ⚠️ Ce jeton NE SE STOCKE PAS, il se redéduit d'une clé NOSTR
-          # (scripts/provision-dataspace.mjs) : le secret doit être rafraîchi,
-          # ou la dérivation portée dans ce workflow.
+          # 🔑 PRÉFÉRER la clé au jeton : le jeton `ds_live_…` EXPIRE, la clé
+          # non. Le jour où un jeton périmé serait posé ici, la nuit se
+          # déroulerait « normalement » — dépôt principal refusé, Pinata en
+          # relais — et rien ne dirait qu'on a cessé d'être souverain.
+          # La dérivation NIP-98 est dans `lib/dataspace-jeton.ts`.
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY || '' }}
+          # Secours : un jeton déjà obtenu, si l'on préfère ne pas confier la
+          # clé à la CI. À rafraîchir à la main.
           DATASPACE_API_KEY: ${{ secrets.DATASPACE_API_KEY || '' }}
           PINATA_JWT:        ${{ secrets.PINATA_JWT }}
           NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
