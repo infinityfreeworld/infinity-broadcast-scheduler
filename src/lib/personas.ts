@@ -53,8 +53,13 @@ export function buildHostSystemPrompt(opts: {
   /** Phase D.4 — Directive de ton du jour calculée depuis `behavior` de la
    *  persona NOSTR. Phrase complète, déjà localisée. */
   behaviorDirective?: string
+  /** Pulse Pirate (2026-09-01, kinds 30101/30102/30103) — rythme de
+   *  l'antenne + tenue de la persona, réglés par l'admin. Distinct du
+   *  « ton du jour » : ici c'est le TEMPO et la LONGUEUR, pas l'humeur.
+   *  Vide = pas d'injection (le Pulse n'a jamais été publié). */
+  pulseDirective?: string
 }): string {
-  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective } = opts
+  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective, pulseDirective } = opts
 
   const otherHostsLine = otherHosts.length > 0
     ? `Tes confrères à l'antenne : ${otherHosts.map(h => `${h.name} (${h.trait})`).join(', ')}.`
@@ -97,6 +102,9 @@ ${customInstructions.trim()}
 ` : ''}${behaviorDirective ? `
 # TON DU JOUR
 ${behaviorDirective}
+` : ''}${pulseDirective && pulseDirective.trim().length > 0 ? `
+# RYTHME ET TENUE D'ANTENNE
+${pulseDirective.trim()}
 ` : ''}
 # CE QUE TU SAIS / PENSES (extraits pertinents de ta KB)
 ${kbContext}
@@ -142,8 +150,11 @@ export function buildGuestSystemPrompt(opts: {
   hostsRecap:         string   // ex: "Cyril, Marina, Diogène"
   newsBlock?:         string
   behaviorDirective:  string   // calculé via guestBehaviorDirective côté caller
+  /** Pulse Pirate (2026-09-01) — tenue de la persona invitée (longueur,
+   *  propension à couper / contredire). Vide = pas d'injection. */
+  pulseDirective?:    string
 }): string {
-  const { guest, stationName, stationDescription, language, hostsRecap, newsBlock, behaviorDirective } = opts
+  const { guest, stationName, stationDescription, language, hostsRecap, newsBlock, behaviorDirective, pulseDirective } = opts
   const stationLine = stationDescription ? `${stationName} — ${stationDescription}` : stationName
   const newsSection = newsBlock && newsBlock.trim().length > 0
     ? `\n# ACTUALITÉ DU JOUR\n${newsBlock}\n→ Réagis à l'actualité avec ton angle de caricature, déforme avec ton tempérament.\n`
@@ -159,7 +170,10 @@ ${guest.instructions}
 
 # TON DU JOUR
 ${behaviorDirective}
-
+${pulseDirective && pulseDirective.trim().length > 0 ? `
+# RYTHME ET TENUE D'ANTENNE
+${pulseDirective.trim()}
+` : ''}
 # CONTEXTE D'INTERVENTION
 - Tu fais une intervention courte (1 tour) dans l'émission. Les animateurs réguliers (${hostsRecap}) viennent de te lancer la balle.
 - Tu rebondis sur le sujet en cours OU tu places une saillie qui te ressemble. Tu ne montopolises PAS la parole.
