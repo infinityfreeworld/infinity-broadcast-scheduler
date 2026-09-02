@@ -88,3 +88,49 @@ test("la sonde de réveil, elle, demande de l'Opus : son audio est jeté", () =>
   const src = readFileSync(SRC_CHATTERBOX, 'utf8')
   assert.match(src, /text: 'Bonjour\.', format: 'opus'/)
 })
+
+/**
+ * 🔴 LA ROUTE. Nous appelions `/v1/audio/speech` — la convention OpenAI,
+ * héritée du serveur Hugging Face précédent. data-space expose
+ * `POST /api/v1/gpu/voix`.
+ *
+ * Ce qui rend l'erreur vicieuse : elle aurait rendu un **404**, exactement
+ * comme `voice_not_found`. Nos journaux auraient montré un 404 la nuit de
+ * la diffusion, et nous aurions cherché du côté des noms de voix — qui
+ * sont justes, et que nous venions de déclarer.
+ */
+/** Le source privé de ses commentaires — une MENTION en documentation est
+ *  légitime, un USAGE ne l'est pas. Sans cette distinction le garde
+ *  interdirait d'expliquer l'erreur qu'il empêche. */
+function codeSeul(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+}
+
+test('la route de synthèse est celle de data-space, pas la convention OpenAI', () => {
+  const src = readFileSync(SRC_CHATTERBOX, 'utf8')
+  const code = codeSeul(src)
+  assert.match(code, /'\/api\/v1\/gpu\/voix'/)
+  assert.ok(
+    !code.includes('/v1/audio/speech'),
+    'la route OpenAI ne doit plus être UTILISÉE : elle rendrait un 404 pris pour un voice_not_found',
+  )
+  // Témoin : le retrait des commentaires ne doit pas avoir tout vidé, sinon
+  // l'assertion ci-dessus passerait quoi qu'il arrive.
+  assert.ok(code.includes('cheminSynthese'), 'le dépouillement a trop retiré')
+})
+
+test("la session de diffusion vise la route d'annonce, pas celle de synthèse", () => {
+  const src = readFileSync(SRC_CHATTERBOX, 'utf8')
+  assert.match(src, /'\/api\/v1\/gpu\/voix\/session'/)
+})
+
+test("l'ouverture de session ne peut JAMAIS faire échouer une émission", () => {
+  // Elle est un confort, pas une dépendance : sans elle la synthèse marche,
+  // elle attend seulement plus longtemps. La laisser lever ferait perdre
+  // une émission entière pour une optimisation.
+  const src = readFileSync(SRC_CHATTERBOX, 'utf8')
+  const corps = /export async function ouvrirSessionDiffusion[\s\S]*?\n}/.exec(src)?.[0] ?? ''
+  assert.ok(corps.length > 0, 'ouvrirSessionDiffusion introuvable')
+  assert.ok(corps.includes('try {') && corps.includes('catch'), 'elle doit attraper ses propres erreurs')
+  assert.ok(!/\bthrow\b/.test(corps), 'elle ne doit jamais lever')
+})

@@ -58,6 +58,26 @@ function getEndpoint(): { url: string; apiKey: string } {
   }
 }
 
+/**
+ * Chemin de la route de synthèse chez data-space.
+ *
+ * 🔴 Nous appelions `/v1/audio/speech` — la convention OpenAI, héritée du
+ * serveur Hugging Face que nous utilisions avant. data-space expose
+ * `POST /api/v1/gpu/voix`, et AUCUNE valeur de `CHATTERBOX_TTS_URL` ne
+ * pouvait rattraper l'écart : une base qui rend la bonne route de synthèse
+ * casse toutes les autres.
+ *
+ * L'erreur aurait été un 404 la nuit de la diffusion — indiscernable, dans
+ * nos journaux, d'un `voice_not_found`, qui est un 404 lui aussi. Nous
+ * aurions cherché du côté des noms de voix, qui sont justes.
+ *
+ * Vérifié en ligne le 02/09/2026 : sur cette route, une voix INCONNUE rend
+ * bien `404 voice_not_found` avec la liste des voix.
+ */
+function cheminSynthese(): string {
+  return process.env.CHATTERBOX_SYNTH_PATH ?? '/api/v1/gpu/voix'
+}
+
 function authHeaders(apiKey: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
 }
@@ -126,7 +146,54 @@ export type EtatReveil = 'pret' | 'voix-absente' | 'injoignable'
  * Une synthèse courte, elle, réveille à coup sûr (c'est la route de
  * travail) ET vérifie la seule chose qui compte : que CETTE voix existe
  * et rend de l'audio. Un témoin connu-bon plutôt qu'un signe de vie.
+ *
+ * 🔴 data-space expose bien un `GET /api/v1/gpu/voix` qui rend `ready`.
+ * Nous ne l'utilisons PAS comme feu vert, et le 02/09/2026 l'a justifié :
+ * il annonçait `ready: true` pendant que quinze synthèses d'affilée —
+ * trois formats, deux voix, 343 s de relances — restaient bloquées en
+ * `429 not_ready`. Un indicateur d'état n'est pas une preuve de service.
+ * Il reste utile pour SAVOIR S'IL FAUDRA ATTENDRE, jamais pour conclure
+ * que tout va bien.
  */
+/**
+ * Ouvre une session de diffusion : data-space chauffe sa station tout de
+ * suite et la maintient éveillée pendant la fenêtre demandée.
+ *
+ * ── POURQUOI ÇA NOUS VA SI BIEN ──
+ * Leur station s'éteint après 10 min sans travail, et la rallumer coûte
+ * 15 à 30 min. Notre synthèse est déjà GROUPÉE — tout le texte écrit
+ * d'abord, toute la synthèse d'un trait — donc nos requêtes sont
+ * naturellement serrées. La session ajoute la seule chose qui manquait :
+ * notre PREMIÈRE phrase ne paie plus l'allumage, puisqu'ils chauffent dès
+ * l'annonce, pendant que nous écrivons encore.
+ *
+ * ⚠️ Un échec ici n'est JAMAIS bloquant. La session est un confort, pas
+ * une dépendance : sans elle la synthèse marche, elle attend seulement
+ * plus longtemps. La faire lever ferait perdre une émission entière pour
+ * une optimisation.
+ */
+export async function ouvrirSessionDiffusion(minutes: number): Promise<boolean> {
+  const { url, apiKey } = getEndpoint()
+  const chemin = process.env.CHATTERBOX_SESSION_PATH ?? '/api/v1/gpu/voix/session'
+  try {
+    const res = await fetch(`${url}${chemin}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+      body:    JSON.stringify({ minutes }),
+      signal:  AbortSignal.timeout(60_000),
+    })
+    if (!res.ok) {
+      console.warn(`  [chatterbox] session refusée (HTTP ${res.status}) — on continue sans`)
+      return false
+    }
+    console.log(`  [chatterbox] session de ${minutes} min ouverte — la station chauffe`)
+    return true
+  } catch (err) {
+    console.warn(`  [chatterbox] session injoignable (${(err as Error).message.slice(0, 80)}) — on continue sans`)
+    return false
+  }
+}
+
 export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_WAKE_TIMEOUT_S ?? '720', 10) * 1000
   const maxTentatives = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10)
@@ -253,7 +320,7 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
     temperature:          opts.temperature ?? 0.75,
     speed:                opts.speed ?? 1.0,
   }
-  const res = await fetch(`${url}/v1/audio/speech`, {
+  const res = await fetch(`${url}${cheminSynthese()}`, {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',

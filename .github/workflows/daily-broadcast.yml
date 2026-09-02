@@ -179,6 +179,15 @@ jobs:
           CHATTERBOX_STRICT: ${{ vars.CHATTERBOX_STRICT || 'true' }}
           # Le GPU s'allume à la demande : démarrer la machine et charger le
           # modèle prend bien plus que le réveil d'un Space endormi.
+          # Routes data-space (contrat du 02/09/2026). Nous appelions
+          # `/v1/audio/speech`, la convention OpenAI héritée du serveur
+          # Hugging Face : un 404 indiscernable d'un `voice_not_found`.
+          CHATTERBOX_SYNTH_PATH:       ${{ vars.CHATTERBOX_SYNTH_PATH || '/api/v1/gpu/voix' }}
+          CHATTERBOX_SESSION_PATH:     ${{ vars.CHATTERBOX_SESSION_PATH || '/api/v1/gpu/voix/session' }}
+          # Leur station s'éteint après 10 min sans travail et met 15 à 30 min
+          # à se rallumer. On annonce la fenêtre pour qu'ils chauffent pendant
+          # que nous écrivons — 0 désactive.
+          CHATTERBOX_SESSION_MINUTES:  ${{ vars.CHATTERBOX_SESSION_MINUTES || '45' }}
           CHATTERBOX_WAKE_TIMEOUT_S:    ${{ vars.CHATTERBOX_WAKE_TIMEOUT_S || '720' }}
           CHATTERBOX_REQUEST_TIMEOUT_S: ${{ vars.CHATTERBOX_REQUEST_TIMEOUT_S || '300' }}
           # Combien de temps accepter d'ATTENDRE EN FILE (429 + Retry-After)

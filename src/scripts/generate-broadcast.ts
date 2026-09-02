@@ -33,6 +33,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
+  ouvrirSessionDiffusion,
   isFallbackPiperEnabled, ChatterboxError,
 } from '../lib/chatterbox'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
@@ -545,6 +546,14 @@ async function main() {
   // réveille AVANT de commencer à synthétiser, pour éviter un long
   // timeout au 1er turn.
   if (process.env.CHATTERBOX_TTS_URL) {
+    // Leur station s'éteint après 10 min sans travail et met 15 à 30 min à
+    // se rallumer. On l'annonce MAINTENANT, avant même d'avoir choisi la
+    // voix témoin : ils chauffent pendant que nous préparons, et notre
+    // première phrase ne paie plus l'allumage. Jamais bloquant — sans
+    // session la synthèse marche, elle attend seulement plus longtemps.
+    const fenetreMin = Number.parseInt(process.env.CHATTERBOX_SESSION_MINUTES ?? '45', 10)
+    if (fenetreMin > 0) await ouvrirSessionDiffusion(fenetreMin)
+
     // Quelle voix cette station va-t-elle réellement demander ? On réveille
     // AVEC celle-là : un service qui répond mais ne connaît pas notre voix
     // n'est pas « prêt », et mieux vaut l'apprendre en dix secondes qu'au
