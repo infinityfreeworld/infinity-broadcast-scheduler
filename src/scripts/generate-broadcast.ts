@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
 import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem } from '../lib/types'
-import { callAnthropic, type LLMMessage } from '../lib/anthropic'
+import { appelerLLM, maillonsDisponibles, bilanDesMaillons, type LLMMessage } from '../lib/llm'
 import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
@@ -103,13 +103,11 @@ interface GenResult {
 
 async function generateBroadcastBytes(opts: {
   station:  RadioStation
-  apiKey:   string
-  model:    string
   numTurns: number
   topic:    string
   news:     NewsItem[]
 }): Promise<GenResult> {
-  const { station, apiKey, model, numTurns, topic, news } = opts
+  const { station, numTurns, topic, news } = opts
   const language = station.language ?? 'fr'
   const turns: BroadcastTurn[] = []
   const wavEntries: ConcatEntry[] = []
@@ -289,8 +287,8 @@ async function generateBroadcastBytes(opts: {
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
 
-    const resp = await callAnthropic({
-      apiKey, model, systemPrompt,
+    const resp = await appelerLLM({
+      systemPrompt,
       messages: [...history, userMessage],
     })
     costIn += resp.inputTokens
@@ -459,7 +457,9 @@ async function main() {
   // null/undefined → propageait `date = ""` dans NOSTR. Voir generate-all.ts.
   const targetDate = process.argv[3] || process.env.TARGET_DATE || tomorrowLocalISO()
 
-  const apiKey = required('ANTHROPIC_API_KEY')
+  // ⚠️ Plus de `required('ANTHROPIC_API_KEY')` : Anthropic n'est que le
+  // DERNIER maillon de la chaîne. Exiger sa clé rendait impossible de
+  // tourner entièrement sur du gratuit, ce qui est pourtant le but.
   const pinataJwt = required('PINATA_JWT')
   const nostrPriv = required('NOSTR_PRIVATE_KEY')
   const model = process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
@@ -490,7 +490,14 @@ async function main() {
   await assurerConfigNostr(SEED_STATIONS.map(s => s.id))
 
   console.log(`\n🎙  Génération broadcast : ${station.name} pour ${targetDate}`)
-  console.log(`    Model : ${model} · ${numTurns} tours · ${station.hosts.length} animateur(s)`)
+  console.log(`    ${numTurns} tours · ${station.hosts.length} animateur(s)`)
+  console.log(`    Chaîne LLM (gratuit d'abord, Anthropic en dernier recours) :`)
+  for (const m of maillonsDisponibles()) {
+    console.log(`      ${m.raison ? '·' : '✓'} ${m.nom.padEnd(14)} ${m.raison ?? 'utilisable'}`)
+  }
+  if (maillonsDisponibles().every(m => m.raison)) {
+    throw new Error('Aucun maillon LLM utilisable — poser MISTRAL_API_KEY, ou laisser la passerelle HL active.')
+  }
 
   // 1. Préparation Piper (binaire + voix) — gardé même si Chatterbox
   // configuré : sert de fallback robuste si le HF Space est down ou
@@ -559,11 +566,14 @@ async function main() {
   console.log('\n🤖 Dialogue + TTS…')
   const t0 = Date.now()
   const result = await generateBroadcastBytes({
-    station, apiKey, model, numTurns, topic: '', news,
+    station, numTurns, topic: '', news,
   })
   const genSec = (Date.now() - t0) / 1000
   console.log(`    ✓ ${result.turns.length} tours, ${(result.durationSec / 60).toFixed(1)} min audio (${genSec.toFixed(0)}s wall)`)
   console.log(`    Tokens : ${result.costInputTokens} in / ${result.costOutputTokens} out`)
+  // Sans cette ligne, on croirait tourner sur le gratuit alors qu'on paye —
+  // ou l'inverse. Le maillon qui sert doit être DIT, pas supposé.
+  console.log(`    Maillons ayant écrit : ${bilanDesMaillons()}`)
   const costUsd = (result.costInputTokens / 1e6) * 0.80 + (result.costOutputTokens / 1e6) * 4
   console.log(`    Coût estimé Haiku 4.5 : $${costUsd.toFixed(4)}`)
 
