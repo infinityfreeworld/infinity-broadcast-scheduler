@@ -147,6 +147,15 @@ jobs:
       - name: Génère ${{ matrix.station }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Dépôt IPFS PRINCIPAL depuis le 02/09/2026. Pinata plafonne à 1 Go,
+          # et sa purge SUPPRIMAIT nos propres émissions pour tenir sous le
+          # quota ; data-space rend `storageMax` illimité, donc l'archive
+          # survit. Mêmes octets → MÊME CID chez les deux (vérifié le même
+          # jour), donc rien ne change côté application.
+          # ⚠️ Ce jeton NE SE STOCKE PAS, il se redéduit d'une clé NOSTR
+          # (scripts/provision-dataspace.mjs) : le secret doit être rafraîchi,
+          # ou la dérivation portée dans ce workflow.
+          DATASPACE_API_KEY: ${{ secrets.DATASPACE_API_KEY || '' }}
           PINATA_JWT:        ${{ secrets.PINATA_JWT }}
           NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
           ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}

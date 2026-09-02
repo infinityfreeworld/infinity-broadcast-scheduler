@@ -54,6 +54,7 @@ import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encodeWavToOpus } from '../lib/opus'
 import { pinataPinFile } from '../lib/pinata'
+import { dataspacePinFile } from '../lib/dataspace'
 import { publishBroadcast } from '../lib/nostr'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { licenceDe } from '../lib/voix-licences'
@@ -489,7 +490,15 @@ async function main() {
   // ⚠️ Plus de `required('ANTHROPIC_API_KEY')` : Anthropic n'est que le
   // DERNIER maillon de la chaîne. Exiger sa clé rendait impossible de
   // tourner entièrement sur du gratuit, ce qui est pourtant le but.
-  const pinataJwt = required('PINATA_JWT')
+  // Ni l'un ni l'autre n'est obligatoire SEUL, mais il en faut un : Pinata
+  // n'est plus le dépôt principal, et exiger sa clé interdirait de tourner
+  // en souverain. En répétition, aucun des deux n'est nécessaire.
+  const pinataJwt = process.env.PINATA_JWT ?? ''
+  if (!repetition && !pinataJwt && !process.env.DATASPACE_API_KEY) {
+    console.error('❌ Aucun dépôt IPFS : définir DATASPACE_API_KEY (principal) '
+      + 'ou PINATA_JWT (secours).')
+    process.exit(1)
+  }
   // En répétition on ne publie pas : exiger la clé de publication
   // interdirait de répéter sur une machine qui ne doit pas publier — ce qui
   // est exactement la machine sur laquelle on veut répéter.
@@ -645,17 +654,63 @@ async function main() {
     return
   }
 
-  // 4. Upload IPFS (Opus, pas WAV)
-  console.log('\n📡 Upload Pinata IPFS…')
-  const pin = await pinataPinFile(
-    opusBlob,
-    `broadcast-${stationId}-${targetDate}.opus`,
-    'audio/ogg',
-    pinataJwt,
-    // Metadata pour l'auto-purge (purgeOldBroadcasts filtre par date)
-    { station: stationId, date: targetDate },
-  )
-  console.log(`    ✓ CID ${pin.cid} (${(pin.size / 1024 / 1024).toFixed(1)} MB)`)
+  // 4. Dépôt IPFS — data-space en PRINCIPAL, Pinata en second.
+  //
+  // ── POURQUOI DATA-SPACE D'ABORD ──
+  // Pinata plafonne à 1 Go sur son offre gratuite, et ce plafond avait
+  // une conséquence que personne n'avait choisie : une purge automatique
+  // SUPPRIMAIT nos propres émissions pour rester sous le quota. Nous
+  // effacions nos archives pour continuer à diffuser. data-space rend
+  // `storageMax` illimité — les émissions peuvent être conservées, et
+  // l'infrastructure est celle d'un partenaire, pas d'un tiers commercial.
+  //
+  // Vérifié le 02/09/2026 : mêmes octets → MÊME CID chez les deux, et
+  // chaque passerelle sert les deux encodages (`Qm…` v0 comme `bafy…` v1)
+  // en 206. Basculer ne change donc rien côté application.
+  const nomFichier = `broadcast-${stationId}-${targetDate}.opus`
+  const cleDataspace = process.env.DATASPACE_API_KEY ?? ''
+  let pin: { cid: string; size: number } | null = null
+
+  if (cleDataspace) {
+    console.log('\n📡 Dépôt data-space (principal)…')
+    try {
+      const r = await dataspacePinFile(opusBlob, nomFichier, 'audio/ogg', cleDataspace)
+      pin = { cid: r.cid, size: r.size }
+      console.log(`    ✓ CID ${r.cid} (${(r.size / 1024 / 1024).toFixed(1)} MB)`)
+    } catch (err) {
+      // Un dépôt principal en panne ne doit pas faire perdre la nuit :
+      // Pinata prend le relais juste en dessous. Mais on le DIT — sans
+      // cette ligne, on croirait être souverain en payant un tiers.
+      console.warn(`    ⚠ data-space a refusé : ${(err as Error).message.slice(0, 140)}`)
+      console.warn(`      → repli sur Pinata pour CETTE émission.`)
+    }
+  } else {
+    console.log('\n· DATASPACE_API_KEY absente — dépôt principal sauté, Pinata seul.')
+  }
+
+  // Pinata : second dépôt quand data-space a réussi (redondance), ou
+  // dépôt de secours quand il a échoué.
+  //
+  // 🔴 Le double épinglage n'est pas un luxe : nos 14 premiers CID de voix
+  // ne répondaient plus sur AUCUNE passerelle parce qu'ils avaient été
+  // publiés sans jamais être épinglés. Sur IPFS, publier n'est pas
+  // conserver — et un seul dépôt reste un point unique de défaillance.
+  if (pinataJwt) {
+    const role = pin ? 'second' : 'secours'
+    console.log(`\n📡 Dépôt Pinata (${role})…`)
+    try {
+      const p = await pinataPinFile(opusBlob, nomFichier, 'audio/ogg', pinataJwt,
+        { station: stationId, date: targetDate })
+      console.log(`    ✓ CID ${p.cid} (${(p.size / 1024 / 1024).toFixed(1)} MB)`)
+      if (!pin) pin = { cid: p.cid, size: p.size }
+    } catch (err) {
+      const m = (err as Error).message.slice(0, 140)
+      if (!pin) throw new Error(`Les DEUX dépôts ont échoué. Pinata : ${m}`)
+      console.warn(`    ⚠ Pinata a refusé : ${m} — l'émission n'a qu'UN épinglage.`)
+    }
+  }
+
+  if (!pin) throw new Error('Aucun dépôt IPFS configuré : ni DATASPACE_API_KEY ni PINATA_JWT.')
 
   // 5. Publish NOSTR
   console.log('\n📨 Publish NOSTR kind:30093…')
