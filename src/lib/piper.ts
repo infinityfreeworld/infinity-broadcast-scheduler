@@ -54,6 +54,8 @@ const VOICES_DIR = process.env.VOICES_DIR ?? join(process.cwd(), 'voices')
 const PIPER_BIN  = join(PIPER_DIR, 'piper')
 
 const PIPER_VERSION = '2023.11.14-2'   // dernière release stable au 2026-05
+import CIDS_PIPER from '../data/piper-cids.json'
+
 const HF_VOICES_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0'
 
 // ── Voix supportées (fr/en seulement pour les seed stations) ──────────
@@ -171,12 +173,60 @@ export async function ensureVoice(voiceId: string): Promise<void> {
   await mkdir(VOICES_DIR, { recursive: true })
 
   console.log(`[piper] Téléchargement voix ${voiceId}…`)
-  const tasks = [
-    downloadFile(`${HF_VOICES_BASE}/${meta.hfPath}.onnx`, onnxPath),
-    downloadFile(`${HF_VOICES_BASE}/${meta.hfPath}.onnx.json`, jsonPath),
-  ]
+  // 🔴 SOUVERAINETÉ. Nous avions quitté Hugging Face pour les voix clonées
+  // en croyant nous en être affranchis — mais Piper, qui porte 93 % des
+  // tours (308 sur 330 chaque nuit), y téléchargeait toujours ses modèles.
+  // Nous avions libéré les 7 % et laissé les 93 %.
+  //
+  // Ces fichiers sont FIGÉS — une release datée, jamais modifiée : le cas
+  // idéal pour l'adressage par contenu. Ils sont déposés chez data-space,
+  // chacun vérifié par relecture (`souverainiser-piper.ts`).
+  //
+  // Hugging Face reste en SECOURS, et c'est délibéré : un dépôt unique est
+  // un point unique de défaillance, et nous l'avons appris avec les
+  // passerelles IPFS. Un repli est ANNONCÉ — sans quoi on se croirait
+  // souverain en dépendant toujours d'un tiers.
+  const source = cidsDeLaVoix(voiceId)
+  const tasks = source
+    ? [
+        telechargerAvecRepli(urlDataspace(source.onnx), `${HF_VOICES_BASE}/${meta.hfPath}.onnx`, onnxPath),
+        telechargerAvecRepli(urlDataspace(source.json), `${HF_VOICES_BASE}/${meta.hfPath}.onnx.json`, jsonPath),
+      ]
+    : [
+        downloadFile(`${HF_VOICES_BASE}/${meta.hfPath}.onnx`, onnxPath),
+        downloadFile(`${HF_VOICES_BASE}/${meta.hfPath}.onnx.json`, jsonPath),
+      ]
   await Promise.all(tasks)
   console.log(`[piper] Voix ${voiceId} prête.`)
+}
+
+/** Passerelle du dépôt souverain. */
+function urlDataspace(cid: string): string {
+  const base = process.env.DATASPACE_GATEWAY ?? 'https://data-space.world/api/ipfs'
+  return `${base}/${cid}`
+}
+
+/** Le CID de cette voix, s'il a été déposé. */
+function cidsDeLaVoix(voiceId: string): { onnx: string; json: string } | null {
+  const e = (CIDS_PIPER as Record<string, { onnx?: string; json?: string }>)[voiceId]
+  return e?.onnx && e?.json ? { onnx: e.onnx, json: e.json } : null
+}
+
+/**
+ * Essaie le dépôt souverain, retombe sur Hugging Face en le DISANT.
+ *
+ * Un repli silencieux ferait croire à une indépendance qu'on n'a plus :
+ * c'est exactement l'erreur qui nous a fait annoncer « sans Hugging Face »
+ * alors que 93 % des tours en dépendaient encore.
+ */
+async function telechargerAvecRepli(souverain: string, secours: string, dest: string): Promise<void> {
+  try {
+    await downloadFile(souverain, dest)
+  } catch (err) {
+    console.warn(`  [piper] dépôt souverain indisponible (${(err as Error).message.slice(0, 70)})`)
+    console.warn(`  [piper] ⚠ repli sur Hugging Face pour ${dest.split('/').pop()}`)
+    await downloadFile(secours, dest)
+  }
 }
 
 async function downloadFile(url: string, dest: string): Promise<void> {

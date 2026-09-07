@@ -1,0 +1,38 @@
+{
+  "fr_FR-siwis-medium": {
+    "onnx": "QmR7wor43GNBhCAnm6gAesYsygncVGG4icrEwnEHsra59K",
+    "json": "QmQhS7SVfY7Qc9ZLvfz9hPu9xswnJJNyzmESf5hNaQKTU6"
+  },
+  "fr_FR-gilles-low": {
+    "onnx": "QmY46xvmBg7brQg988BQu98A9zgmvLH4CFXHv8PTcHQ1AZ",
+    "json": "QmVDHxNZ9S8Te5pSjR17XhqBX3vv1KSPwGohjQSc6QXhW6"
+  },
+  "es_ES-davefx-medium": {
+    "onnx": "QmTysDWmBCsnBPCCUy8gDkG32bCL3whrN2t4ytgx8vZywU",
+    "json": "QmeHDzLEkfzsFv8wz2Su3vE1oM1wgRyd3ZskXT6qY3NsZm"
+  },
+  "es_ES-sharvard-medium": {
+    "onnx": "QmaKxzWR2qPqQKDRkTYY2rcWfb52LdTWjdxjZyYkQdgb6L",
+    "json": "QmQptFXWXjjkBNmBSHtUK33jJZWkq4oB5GpCK6Ahxix2zc"
+  },
+  "ru_RU-dmitri-medium": {
+    "onnx": "QmZ4hqsS9G1PZFgXYJnu5TusH53Lf24UtzaMCYiSs39cTt",
+    "json": "QmZgYAzRxnknAy5GbpfNx2tktfDNE83FrFyFZyFNKWEXoS"
+  },
+  "ru_RU-denis-medium": {
+    "onnx": "QmXZENBPLB19EHKACEEu8jPWYuGx1et5CfaYMYPhzbYpSY",
+    "json": "QmbjGmmiRbn8gME28WEYxK3DYU9AE2x8DRsPn1h9swHMRF"
+  },
+  "en_GB-cori-medium": {
+    "onnx": "QmfT8DVdivGgrFBPCh19Kr7DLaGh8s2GNz2aDJCLncEjkJ",
+    "json": "Qmb8eBn3J3PYipHUXK2wnceuJm78Hc5f61Asb45drr7wQg"
+  },
+  "en_GB-alba-medium": {
+    "onnx": "QmTEfscXS8wNbmqfwtPV1i11SJ2u2vqo9L6RCRYyx3zsnP",
+    "json": "QmNhGmoAXyAciTzJGZHoniGi88i4PXrvBXCkWSrCXSWXvE"
+  },
+  "en_GB-northern_english_male-medium": {
+    "onnx": "QmcmLSrmdNpaQh4zh9UYDHkCwiz3Sgd6fxpDQ4vYLkKakJ",
+    "json": "QmfKhiqi9RxhLsFy79v2ricfZteBJZS9PQWzmuhUP4RVyX"
+  }
+}
