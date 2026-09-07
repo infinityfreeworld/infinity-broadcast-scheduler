@@ -65,6 +65,33 @@ let jetonResolu: string | null = null
  * À appeler UNE FOIS avant toute synthèse. Sépare la résolution du jeton
  * (asynchrone, réseau) de son usage (synchrone, appelé à chaque tour).
  */
+/**
+ * Échéance de la phase de synthèse clonée, pour TOUTE l'émission.
+ *
+ * 🔴 POURQUOI UN MUR, ALORS QU'IL Y A DÉJÀ DEUX BUDGETS
+ * Le 07/09/2026, une émission est restée bloquée **8 h 25 sur son premier
+ * tour**. Le budget de réveil (720 s) avait correctement abandonné ; le
+ * budget de file (1800 s) n'a jamais parlé — pas une ligne « file pleine ».
+ * L'appel était donc figé DANS un seul `fetch`, malgré son `AbortSignal`
+ * de 300 s. Nous n'avons pas établi pourquoi.
+ *
+ * Un garde qui dépend de la bonne volonté du réseau n'est pas un garde.
+ * Celui-ci ne dépend que de l'horloge : passé l'échéance, la synthèse
+ * clonée est ABANDONNÉE pour le reste de l'émission, qui se termine en
+ * Piper. Une émission en repli vaut mieux qu'une nuit sans émission.
+ */
+let echeanceClone = 0
+
+export function ouvrirEcheanceClone(secondes = Number.parseInt(
+  process.env.CHATTERBOX_ECHEANCE_S ?? '1200', 10,
+)): void {
+  echeanceClone = Date.now() + secondes * 1000
+}
+
+export function echeanceClonePassee(): boolean {
+  return echeanceClone > 0 && Date.now() > echeanceClone
+}
+
 export async function preparerAccesChatterbox(): Promise<void> {
   if (jetonResolu !== null) return
   const direct = process.env.CHATTERBOX_API_KEY ?? ''
@@ -308,6 +335,11 @@ export async function pingUntilReady(
  * plutôt que de nous acharner.
  */
 export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Promise<Buffer> {
+  if (echeanceClonePassee()) {
+    throw new ChatterboxError(
+      'échéance de synthèse clonée dépassée pour cette émission — repli Piper', 408,
+    )
+  }
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_QUEUE_BUDGET_S ?? '1800', 10) * 1000
   const debut = Date.now()
   for (let tentative = 1; ; tentative++) {

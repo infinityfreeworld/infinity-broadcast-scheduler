@@ -33,7 +33,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
-  ouvrirSessionDiffusion, preparerAccesChatterbox,
+  ouvrirSessionDiffusion, preparerAccesChatterbox, ouvrirEcheanceClone,
   isFallbackPiperEnabled, ChatterboxError,
 } from '../lib/chatterbox'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
@@ -600,6 +600,9 @@ async function main() {
     // Résoudre le jeton AVANT toute requête : il se dérive d'une clé qui,
     // elle, ne périme pas.
     await preparerAccesChatterbox()
+    // Le mur commence à courir MAINTENANT : réveil compris. Sans quoi un
+    // réveil de 12 min mangerait la fenêtre avant le premier tour.
+    ouvrirEcheanceClone()
     const fenetreMin = Number.parseInt(process.env.CHATTERBOX_SESSION_MINUTES ?? '45', 10)
     if (fenetreMin > 0) await ouvrirSessionDiffusion(fenetreMin)
 
