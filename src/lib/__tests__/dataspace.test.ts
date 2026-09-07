@@ -16,6 +16,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { lireCid } from '../dataspace'
 
 test('forme réelle de data-space : le CID est dans files[0]', () => {
@@ -45,4 +46,20 @@ test('une réponse non JSON lève en le disant', () => {
   // Une passerelle qui rend une page HTML d'erreur ne doit pas être lue
   // comme « pas de CID » : la cause est ailleurs et le message doit aider.
   assert.throws(() => lireCid('<html>502 Bad Gateway</html>'), /réponse illisible/)
+})
+
+test("🔴 l'aller-retour est ACTIVÉ PAR DÉFAUT, pas en option", () => {
+  // Le 07/09/2026, deux modèles de 63 Mo ont rendu le même CID, qui
+  // servait 4 888 octets de JSON. Un CID faux ne se voit NULLE PART :
+  // l'envoi rend 200, le manifeste s'écrit, et des semaines plus tard une
+  // voix parle avec le mauvais modèle. Le défaut doit donc être « vérifie ».
+  const src = readFileSync(new URL('../dataspace.ts', import.meta.url), 'utf8')
+  assert.match(src, /verifier: boolean = true/)
+  assert.match(src, /sert d'AUTRES octets/)
+  assert.match(src, /rendu\.length !== data\.length/)
+})
+
+test('un CID injoignable est un ÉCHEC, pas un succès silencieux', () => {
+  const src = readFileSync(new URL('../dataspace.ts', import.meta.url), 'utf8')
+  assert.match(src, /rendu mais INJOIGNABLE/)
 })

@@ -12,6 +12,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { marqueAbsente, deriverJeton } from '../dataspace-jeton'
 
 test('la marque est détectée dans une URL, quelle que soit la casse', () => {
@@ -47,4 +48,17 @@ test('une clé de 64 hex est acceptée par le contrôle de forme', async () => {
       }
     },
   )
+})
+
+test('🔴 un 429 PASSAGER ne doit pas coûter la nuit entière', () => {
+  // Vécu le 07/09/2026 : un dépôt de 9 modèles a échoué en bloc sur un
+  // plafond d'une minute. La clé était bonne — le jeton se dérivait
+  // parfaitement dix minutes plus tard. Sans reprise, un à-coup coûte le
+  // dépôt souverain ET les voix de personnage.
+  const src = readFileSync(new URL('../dataspace-jeton.ts', import.meta.url), 'utf8')
+  assert.match(src, /resp\.status !== 429 \|\| essai >= 4/)
+  assert.match(src, /retry-after/i)
+  // Et la reprise doit être BORNÉE : une boucle infinie sur un plafond
+  // durable ferait pendre le job jusqu'au délai de GitHub Actions.
+  assert.ok(src.includes('essai >= 4'), 'la reprise doit être bornée')
 })

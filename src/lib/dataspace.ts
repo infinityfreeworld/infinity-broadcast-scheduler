@@ -33,6 +33,8 @@
  *   passerelle le 01/09. Pinata continue donc en second, au mieux.
  */
 
+import { createHash } from 'node:crypto'
+
 export interface DepotResultat {
   cid:   string
   /** Octets tels que comptés par le dépôt, ou la taille envoyée à défaut. */
@@ -76,6 +78,8 @@ export async function dataspacePinFile(
   fileName: string,
   mimeType: string,
   cle:      string,
+  /** Relire le CID et comparer les octets. Défaut : OUI. */
+  verifier: boolean = true,
 ): Promise<DepotResultat> {
   const corps = new FormData()
   corps.append('file', new Blob([new Uint8Array(data)], { type: mimeType }), fileName)
@@ -87,5 +91,35 @@ export async function dataspacePinFile(
   })
   const texte = await res.text()
   if (!res.ok) throw new Error(`data-space HTTP ${res.status} : ${texte.slice(0, 200)}`)
-  return { cid: lireCid(texte), size: data.length, depot: 'data-space' }
+  const cid = lireCid(texte)
+
+  // 🔴 ALLER-RETOUR OBLIGATOIRE.
+  //
+  // Le 07/09/2026, en déposant les modèles Piper, deux fichiers de 63 Mo
+  // ont rendu le MÊME CID — qui servait en réalité 4 888 octets de JSON.
+  // Un CID faux ne se voit nulle part : l'envoi rend 200, le manifeste
+  // s'écrit, et c'est des semaines plus tard qu'une voix parle avec le
+  // mauvais modèle, ou qu'une émission est muette.
+  //
+  // Reproduit sur de petits fichiers : l'aller-retour était correct. Nous
+  // n'avons donc PAS de cause établie — raison de plus pour vérifier à
+  // chaque fois plutôt que de faire confiance à un 200.
+  if (verifier) {
+    const ctrl = await fetch(`https://data-space.world/api/ipfs/${cid}`, {
+      signal: AbortSignal.timeout(300_000),
+    })
+    if (!ctrl.ok) {
+      throw new Error(`data-space : CID ${cid} rendu mais INJOIGNABLE (HTTP ${ctrl.status})`)
+    }
+    const rendu = Buffer.from(await ctrl.arrayBuffer())
+    if (rendu.length !== data.length) {
+      throw new Error(`data-space : CID ${cid} sert ${rendu.length} octets, nous en avons envoyé ${data.length}`)
+    }
+    const a = createHash('sha256').update(data).digest('hex')
+    const b = createHash('sha256').update(rendu).digest('hex')
+    if (a !== b) {
+      throw new Error(`data-space : CID ${cid} sert d'AUTRES octets (${b.slice(0,16)} au lieu de ${a.slice(0,16)})`)
+    }
+  }
+  return { cid, size: data.length, depot: 'data-space' }
 }

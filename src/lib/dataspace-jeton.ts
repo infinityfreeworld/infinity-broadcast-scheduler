@@ -81,14 +81,27 @@ export async function deriverJeton(cleHex: string): Promise<string> {
     throw new Error('La marque apparaît dans la requête de provisionnement — interdit.')
   }
 
-  const resp = await fetch(URL_PROVISION, {
-    method: 'POST', headers: entetes, signal: AbortSignal.timeout(30_000),
-  })
-  const brut = await resp.text()
+  // 🔴 Le 07/09/2026, un dépôt de 9 modèles a échoué en bloc sur un 429
+  // PASSAGER de cette route — la clé était bonne, le jeton se dérivait
+  // parfaitement dix minutes plus tard. Sans reprise, un plafond d'une
+  // minute coûte à la fois le dépôt souverain ET les voix de personnage
+  // de toute une nuit.
+  let resp: Response
+  let brut = ''
+  for (let essai = 1; ; essai++) {
+    resp = await fetch(URL_PROVISION, {
+      method: 'POST', headers: entetes, signal: AbortSignal.timeout(30_000),
+    })
+    brut = await resp.text()
+    if (resp.status !== 429 || essai >= 4) break
+    const attente = Number(resp.headers.get('retry-after')) || 20 * essai
+    console.warn(`  [data-space] provision plafonnée, reprise dans ${attente}s (essai ${essai}/3)`)
+    await new Promise(r => setTimeout(r, attente * 1000))
+  }
   if (!resp.ok) {
     const indice = resp.status === 401
       ? ' (401 = preuve absente, invalide ou EXPIRÉE — vérifier l\'heure avant la clé)'
-      : resp.status === 429 ? ' (429 = trop de demandes pour cette clé)' : ''
+      : resp.status === 429 ? ' (429 après 3 reprises — plafond durable, pas un à-coup)' : ''
     throw new Error(`provision HTTP ${resp.status}${indice} : ${brut.slice(0, 200)}`)
   }
   let data: { token?: string }
