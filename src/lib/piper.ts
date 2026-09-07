@@ -193,6 +193,48 @@ async function downloadFile(url: string, dest: string): Promise<void> {
  * Synthétise du texte → fichier WAV. Retourne le path local du WAV.
  * Le caller est responsable de cleanup (le fichier reste dans tmpdir).
  */
+/**
+ * Comment lancer Piper sur CETTE machine.
+ *
+ * 🔴 Le binaire natif ne tourne pas partout. `piper_macos_aarch64.tar.gz`
+ * ne livre AUCUNE `.dylib` — seulement le paquet de symboles
+ * `libonnxruntime.1.14.1.dylib.dSYM`, qui ressemble à une bibliothèque
+ * dans un listing et n'en est pas une. Sous Linux l'archive est complète.
+ *
+ * On ESSAIE donc le binaire, et on retombe sur le pont Python
+ * (`piper-tts`, qui embarque son propre onnxruntime) s'il refuse. La
+ * bascule est ANNONCÉE : croire qu'on utilise le binaire natif alors
+ * qu'on passe par Python fausserait toute mesure de débit.
+ */
+type Moteur = { cmd: string; args: string[] }
+let moteurResolu: Moteur | null = null
+
+function pythonDuVenv(): string {
+  return process.env.PIPER_PYTHON ?? join(process.cwd(), '.venv-piper', 'bin', 'python')
+}
+
+async function resoudreMoteur(): Promise<Moteur> {
+  if (moteurResolu) return moteurResolu
+  const natif: Moteur = { cmd: PIPER_BIN, args: [] }
+  const utilisable = await new Promise<boolean>(res => {
+    execFile(PIPER_BIN, ['--help'], { timeout: 15_000 }, err => res(!err))
+  })
+  if (utilisable) { moteurResolu = natif; return natif }
+
+  const pont = join(process.cwd(), 'scripts', 'piper-python.py')
+  if (!existsSync(pont) || !existsSync(pythonDuVenv())) {
+    throw new Error(
+      'Piper inutilisable : le binaire natif refuse de démarrer (archive amont '
+      + 'sans .dylib sur macOS aarch64) et le pont Python est absent. '
+      + 'Créer le venv : uv venv .venv-piper --python 3.12 '
+      + '&& uv pip install --python .venv-piper/bin/python piper-tts',
+    )
+  }
+  console.warn('  [piper] binaire natif inutilisable — bascule sur le pont Python')
+  moteurResolu = { cmd: pythonDuVenv(), args: [pont] }
+  return moteurResolu
+}
+
 export async function synthesize(text: string, voiceId: string): Promise<string> {
   if (!isVoiceSupported(voiceId)) {
     throw new Error(`Voix non supportée : ${voiceId}`)
@@ -207,8 +249,10 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
   // --sentence_silence=0.05 réduit le silence en fin de phrase de 0.2s
   // (défaut Piper) à 0.05s. Combiné avec INTER_TURN_SILENCE_S=0.10 dans
   // audio.ts, le pacing est naturel sans "trous" perceptibles.
+  const moteur = await resoudreMoteur()
   return new Promise((resolve, reject) => {
-    const child = execFile(PIPER_BIN, [
+    const child = execFile(moteur.cmd, [
+      ...moteur.args,
       '--model',            voicePath,
       '--output_file',      outPath,
       '--sentence_silence', '0.05',

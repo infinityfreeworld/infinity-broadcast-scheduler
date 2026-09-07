@@ -170,3 +170,14 @@ test('la clé Chatterbox se DÉRIVE quand elle n\'est pas fournie', () => {
   assert.ok(bloc.includes('catch'), 'elle doit attraper ses propres erreurs')
   assert.ok(!/\bthrow\b/.test(bloc), 'elle ne doit jamais lever')
 })
+
+test('🔴 un drapeau ne doit jamais être pris pour une date', () => {
+  // `generate-broadcast.ts deglingos-radio --repetition` prenait
+  // « --repetition » pour la date : fichier nommé
+  // `broadcast-deglingos-radio---repetition.opus`, émission datée d'un jour
+  // qui n'existe pas. Le défaut ne se voit qu'en LISANT le nom du fichier.
+  const src = readFileSync(SRC_GENERATE, 'utf8')
+  assert.match(src, /filter\(a => !a\.startsWith\('--'\)\)/)
+  assert.ok(!codeSeul(src).includes('process.argv[3] ||'),
+    'la date ne doit plus venir de argv[3] brut')
+})

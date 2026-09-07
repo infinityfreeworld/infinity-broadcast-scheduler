@@ -468,7 +468,13 @@ async function assurerConfigNostr(stationIds: string[]): Promise<void> {
 }
 
 async function main() {
-  const stationId = process.argv[2]
+  // 🔴 Les DRAPEAUX ne sont pas des arguments de position. Sans ce filtre,
+  // `generate-broadcast.ts deglingos-radio --repetition` prenait
+  // « --repetition » pour la DATE : le fichier sortait nommé
+  // `broadcast-deglingos-radio---repetition.opus` et l'émission portait une
+  // date qui n'existe pas. Vu en vrai le 07/09/2026.
+  const positionnels = process.argv.slice(2).filter(a => !a.startsWith('--'))
+  const stationId = positionnels[0]
   if (!stationId) {
     console.error('Usage: tsx src/scripts/generate-broadcast.ts <stationId> [YYYY-MM-DD]')
     process.exit(1)
@@ -476,7 +482,7 @@ async function main() {
   // `||` (pas `??`) cf bug 2026-05-19 — TARGET_DATE peut être '' venant du
   // workflow YAML (cron sans workflow_dispatch), `??` ne fallback que sur
   // null/undefined → propageait `date = ""` dans NOSTR. Voir generate-all.ts.
-  const targetDate = process.argv[3] || process.env.TARGET_DATE || tomorrowLocalISO()
+  const targetDate = positionnels[1] || process.env.TARGET_DATE || tomorrowLocalISO()
   // ── MODE RÉPÉTITION ──
   // Tout se déroule normalement — écriture, voix, montage, découpe musicale,
   // encodage — SAUF l'épinglage IPFS et la publication NOSTR. Le fichier est
