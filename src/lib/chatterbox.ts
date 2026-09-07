@@ -30,6 +30,7 @@
  */
 
 import { getNostrVoiceForHost } from './host-voice-mappings'
+import { jetonDataspace } from './dataspace-jeton'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -49,12 +50,42 @@ export class ChatterboxError extends Error {
   }
 }
 
+/**
+ * Jeton résolu une fois par exécution.
+ *
+ * 🔴 `CHATTERBOX_API_KEY` est un jeton `ds_live_…` qui EXPIRE. Le poser en
+ * secret de CI obligeait à le renouveler à la main — et le jour de
+ * l'expiration, l'émission serait sortie NORMALEMENT, tout en Piper, sans
+ * qu'une ligne ne dise qu'on avait perdu les voix de personnage. On le
+ * dérive donc de `DATASPACE_NOSTR_KEY`, qui ne périme pas.
+ */
+let jetonResolu: string | null = null
+
+/**
+ * À appeler UNE FOIS avant toute synthèse. Sépare la résolution du jeton
+ * (asynchrone, réseau) de son usage (synchrone, appelé à chaque tour).
+ */
+export async function preparerAccesChatterbox(): Promise<void> {
+  if (jetonResolu !== null) return
+  const direct = process.env.CHATTERBOX_API_KEY ?? ''
+  if (direct) { jetonResolu = direct; return }
+  try {
+    jetonResolu = await jetonDataspace()
+  } catch (err) {
+    console.warn(`  [chatterbox] jeton indérivable : ${(err as Error).message.slice(0, 120)}`)
+    jetonResolu = ''
+  }
+}
+
 function getEndpoint(): { url: string; apiKey: string } {
-  const url = process.env.CHATTERBOX_TTS_URL
-  if (!url) throw new ChatterboxError('CHATTERBOX_TTS_URL non défini')
+  // Défaut explicite : data-space est notre fournisseur depuis le
+  // 02/09/2026. Sans ce défaut, un secret vide faisait lever ici, et
+  // l'appelant repliait TOUT sur Piper — une soirée sans aucune voix de
+  // personnage, indiscernable d'une soirée où le service dort.
+  const url = process.env.CHATTERBOX_TTS_URL || 'https://data-space.world'
   return {
     url:    url.replace(/\/+$/, ''),
-    apiKey: process.env.CHATTERBOX_API_KEY ?? '',
+    apiKey: jetonResolu ?? process.env.CHATTERBOX_API_KEY ?? '',
   }
 }
 

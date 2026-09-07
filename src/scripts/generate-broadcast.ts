@@ -33,7 +33,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
-  ouvrirSessionDiffusion,
+  ouvrirSessionDiffusion, preparerAccesChatterbox,
   isFallbackPiperEnabled, ChatterboxError,
 } from '../lib/chatterbox'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
@@ -591,6 +591,9 @@ async function main() {
     // voix témoin : ils chauffent pendant que nous préparons, et notre
     // première phrase ne paie plus l'allumage. Jamais bloquant — sans
     // session la synthèse marche, elle attend seulement plus longtemps.
+    // Résoudre le jeton AVANT toute requête : il se dérive d'une clé qui,
+    // elle, ne périme pas.
+    await preparerAccesChatterbox()
     const fenetreMin = Number.parseInt(process.env.CHATTERBOX_SESSION_MINUTES ?? '45', 10)
     if (fenetreMin > 0) await ouvrirSessionDiffusion(fenetreMin)
 

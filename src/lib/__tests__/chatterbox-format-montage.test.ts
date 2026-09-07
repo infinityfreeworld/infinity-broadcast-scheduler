@@ -144,3 +144,29 @@ test('🔴 le poids de guidage reste à 0,50 — mesuré, pas deviné', () => {
   assert.match(codeSeul(src), /cfg_weight:\s+opts\.cfgWeight \?\? 0\.50/)
   assert.ok(src.includes('0,65 → 5,00 s'), 'la mesure qui justifie le chiffre doit rester')
 })
+
+test("🔴 l'adresse data-space a un défaut — un secret vide ne doit pas tout replier sur Piper", () => {
+  // Avant : `CHATTERBOX_TTS_URL` vide faisait LEVER, l'appelant attrapait,
+  // et l'émission sortait entièrement en Piper — indiscernable d'une
+  // soirée où le service dort. Un secret oublié coûtait toutes les voix
+  // de personnage, en silence.
+  const code = codeSeul(readFileSync(SRC_CHATTERBOX, 'utf8'))
+  assert.match(code, /CHATTERBOX_TTS_URL \|\| 'https:\/\/data-space\.world'/)
+  assert.ok(
+    !code.includes("throw new ChatterboxError('CHATTERBOX_TTS_URL non défini')"),
+    "l'absence d'URL ne doit plus lever : elle a un défaut",
+  )
+})
+
+test('la clé Chatterbox se DÉRIVE quand elle n\'est pas fournie', () => {
+  // Le jeton `ds_live_…` expire ; la clé NOSTR non. Sans dérivation, le
+  // jour de l'expiration l'émission sort normalement, tout en Piper.
+  const code = codeSeul(readFileSync(SRC_CHATTERBOX, 'utf8'))
+  assert.match(code, /jetonResolu = await jetonDataspace\(\)/)
+  // Et elle ne doit JAMAIS lever : un jeton indérivable dégrade, il
+  // n'annule pas la nuit.
+  const bloc = /export async function preparerAccesChatterbox[\s\S]*?\n}/.exec(code)?.[0] ?? ''
+  assert.ok(bloc.length > 0, 'preparerAccesChatterbox introuvable')
+  assert.ok(bloc.includes('catch'), 'elle doit attraper ses propres erreurs')
+  assert.ok(!/\bthrow\b/.test(bloc), 'elle ne doit jamais lever')
+})
