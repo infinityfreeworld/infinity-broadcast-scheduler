@@ -16,13 +16,91 @@ JOURNAL="$HOME/Library/Logs/infinity-radio"
 mkdir -p "$JOURNAL"
 FICHIER="$JOURNAL/nuit-$(date -u +%Y-%m-%d).log"
 
-exec >> "$FICHIER" 2>&1
+# En mode --decision on n'écrit PAS dans le journal : cette sortie sert à
+# éprouver la décision depuis un terminal, et un verdict invisible ne
+# s'éprouve pas.
+if [ "${1:-}" != "--decision" ]; then
+  exec >> "$FICHIER" 2>&1
+fi
 echo ""
 echo "════════════════════════════════════════════════════════════"
 echo "  NUIT DU $(date -u '+%Y-%m-%d %H:%M UTC')"
 echo "════════════════════════════════════════════════════════════"
 
 cd "$DEPOT" || { echo "🔴 dépôt introuvable : $DEPOT"; exit 1; }
+
+# ── FENÊTRE D'OPPORTUNITÉ ────────────────────────────────────────────
+#
+# Décision du Bâtisseur (07/09/2026) : plutôt qu'une heure fixe, la nuit se
+# fabrique à la PREMIÈRE occasion entre 20 h et minuit où le Mac est
+# allumé. Une heure fixe est le pire des deux mondes : si la machine dort,
+# launchd rattrape au réveil — à une heure imprévisible, et rien ne
+# distingue « rattrapé » de « jamais lancé ».
+#
+# 🔴 Deux garde-fous, sans lesquels la fenêtre serait pire que l'heure fixe :
+#   1. un TÉMOIN de dernière exécution, sinon on rediffuse toutes les
+#      15 minutes pendant quatre heures ;
+#   2. un RATTRAPAGE au-delà de 26 h, sinon un Mac éteint quatre soirs de
+#      suite ne produit rien et personne ne le voit.
+TEMOIN="$HOME/Library/Application Support/infinity-radio/derniere-nuit"
+mkdir -p "$(dirname "$TEMOIN")"
+
+HEURE=$(date +%H); HEURE=${HEURE#0}   # "08" → 8, sinon bash lit de l'octal
+AUJOURDHUI=$(date +%F)
+DERNIERE=$(cat "$TEMOIN" 2>/dev/null || echo "")
+
+# Décision isolée dans UNE fonction, pour pouvoir l'éprouver sans rien
+# produire : `nuit-locale.sh --decision` imprime le verdict et sort.
+decider() {
+  local heure="$1" derniere="$2" ecoule="$3" aujourdhui="$4"
+  if [ -n "$derniere" ] && [ "$derniere" = "$aujourdhui" ]; then
+    echo "DEJA_FAIT"; return
+  fi
+  if [ "$heure" -ge 20 ] && [ "$heure" -le 23 ]; then
+    echo "FENETRE"; return
+  fi
+  # 🔴 Un PREMIER lancement n'est pas un retard. Sans cette condition, une
+  # installation à 14 h se croyait en retard de 9 999 heures et publiait
+  # quinze émissions sur-le-champ. Vu en vrai le 07/09/2026 — arrêté à
+  # temps, aucune émission publiée, mais c'était de justesse.
+  if [ -n "$derniere" ] && [ "$ecoule" -ge 26 ]; then
+    echo "RATTRAPAGE"; return
+  fi
+  echo "ATTENDRE"
+}
+
+if [ -f "$TEMOIN" ]; then
+  ECOULE=$(( ( $(date +%s) - $(stat -f %m "$TEMOIN") ) / 3600 ))
+else
+  ECOULE=0
+fi
+
+VERDICT=$(decider "$HEURE" "$DERNIERE" "$ECOULE" "$AUJOURDHUI")
+
+if [ "${1:-}" = "--decision" ]; then
+  echo "heure=${HEURE} derniere=${DERNIERE:-aucune} ecoule=${ECOULE}h -> $VERDICT"
+  exit 0
+fi
+
+case "$VERDICT" in
+  DEJA_FAIT)  echo "  déjà produit aujourd'hui ($AUJOURDHUI) — rien à faire."; exit 0 ;;
+  ATTENDRE)   echo "  hors fenêtre (il est ${HEURE} h) — on attend 20 h."; exit 0 ;;
+  FENETRE)    echo "  fenêtre 20 h–minuit, il est ${HEURE} h — on y va." ;;
+  RATTRAPAGE) echo "  ⚠️ RATTRAPAGE : ${ECOULE} h sans émission (dernière : $DERNIERE)." ;;
+esac
+
+if dans_la_fenetre; then
+  echo "  fenêtre 20 h–minuit, il est ${HEURE} h — on y va."
+elif [ "$ECOULE" -ge 26 ]; then
+  # Le silence prolongé l'emporte sur la fenêtre : mieux vaut une émission
+  # à une heure inhabituelle que quatre soirs sans radio.
+  echo "  ⚠️ RATTRAPAGE : ${ECOULE} h sans émission (dernière : $DERNIERE) — on produit hors fenêtre."
+else
+  echo "  hors fenêtre (il est ${HEURE} h, ${ECOULE} h depuis la dernière) — on attend."
+  exit 0
+fi
+
+
 
 # Le PATH d'un service launchd est minimal : node et uv n'y sont pas.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -48,6 +126,15 @@ echo "  generate-all → code $CODE"
 echo ""
 echo "── purge (rétention ${RETENTION_JOURS:-10} jours) ──"
 npx tsx src/scripts/purger-emissions.ts --executer || echo "  ⚠️ purge en échec — pas bloquant pour la diffusion"
+
+# Le témoin n'est posé QUE sur un succès : un échec doit pouvoir être
+# retenté à la prochaine occasion, pas être compté comme une nuit faite.
+if [ "$CODE" -eq 0 ]; then
+  echo "$AUJOURDHUI" > "$TEMOIN"
+  echo "  témoin posé : $AUJOURDHUI"
+else
+  echo "  ⚠️ témoin NON posé (code $CODE) — nouvelle tentative à la prochaine occasion"
+fi
 
 echo ""
 echo "  FIN $(date -u '+%H:%M UTC') · code de sortie $CODE"
