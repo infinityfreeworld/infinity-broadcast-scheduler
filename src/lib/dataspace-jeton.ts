@@ -65,7 +65,7 @@ export async function deriverJeton(cleHex: string): Promise<string> {
   const sk = Uint8Array.from(Buffer.from(cleHex, 'hex'))
   const { t, source } = await horlogeServeur()
   const derive = t - Math.floor(Date.now() / 1000)
-  console.log(`  [data-space] horloge ${source}${source === 'serveur'
+  console.error(`  [data-space] horloge ${source}${source === 'serveur'
     ? ` — dérive de ce poste ${derive >= 0 ? '+' : ''}${derive} s, compensée (fenêtre ±60 s)`
     : ' — ⚠️ un 401 sera probablement un problème d\'HEURE, pas de clé'}`)
 
@@ -111,7 +111,7 @@ export async function deriverJeton(cleHex: string): Promise<string> {
     throw new Error(`provision : 200 mais réponse illisible — ${brut.slice(0, 200)}`)
   }
   if (!data.token) throw new Error(`provision : 200 sans jeton — ${brut.slice(0, 200)}`)
-  console.log(`  [data-space] jeton dérivé pour ${getPublicKey(sk).slice(0, 12)}…`)
+  console.error(`  [data-space] jeton dérivé pour ${getPublicKey(sk).slice(0, 12)}…`)
   return data.token
 }
 
