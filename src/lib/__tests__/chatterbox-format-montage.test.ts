@@ -134,3 +134,13 @@ test("l'ouverture de session ne peut JAMAIS faire échouer une émission", () =>
   assert.ok(corps.includes('try {') && corps.includes('catch'), 'elle doit attraper ses propres erreurs')
   assert.ok(!/\bthrow\b/.test(corps), 'elle ne doit jamais lever')
 })
+
+test('🔴 le poids de guidage reste à 0,50 — mesuré, pas deviné', () => {
+  // 0,65 étirait la même phrase de 47 % (5,00 s contre 3,40 s). Un défaut
+  // qui remonterait ferait revenir une élocution traînante que l'oreille
+  // prend pour un accent étranger. Le chiffre est dans le code avec sa
+  // mesure : sans elle, la prochaine personne le « corrigera » au feeling.
+  const src = readFileSync(SRC_CHATTERBOX, 'utf8')
+  assert.match(codeSeul(src), /cfg_weight:\s+opts\.cfgWeight \?\? 0\.50/)
+  assert.ok(src.includes('0,65 → 5,00 s'), 'la mesure qui justifie le chiffre doit rester')
+})

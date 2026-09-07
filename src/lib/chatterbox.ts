@@ -316,7 +316,17 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
     language:             opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
     language_id:          opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
     emotion_exaggeration: opts.emotionExaggeration ?? 0.55,
-    cfg_weight:           opts.cfgWeight ?? 0.65,
+    // 🔴 0,50 et non 0,65 — mesuré le 07/09/2026 sur la voix « ranouna »,
+    // même phrase, seul ce paramètre variant :
+    //     0,30 → 3,56 s   0,50 → 3,40 s   0,65 → 5,00 s
+    // Notre ancien défaut étirait la phrase de 47 %. Cette élocution
+    // traînante s'entend comme une voix synthétique et mal articulée — le
+    // Bâtisseur l'avait prise pour un accent étranger, ce qu'elle n'était
+    // qu'en partie. Choix fait À L'OREILLE entre les trois rendus : un
+    // écart de durée dit qu'il se passe quelque chose, jamais lequel est
+    // le plus naturel.
+    // Plus le poids est BAS, plus la voix de RÉFÉRENCE domine le modèle.
+    cfg_weight:           opts.cfgWeight ?? 0.50,
     temperature:          opts.temperature ?? 0.75,
     speed:                opts.speed ?? 1.0,
   }
