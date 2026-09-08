@@ -159,3 +159,21 @@ test("la session s'ouvre AVANT l'écriture des dialogues", () => {
   assert.ok(iSession > 0, 'la nuit doit ouvrir une session')
   assert.ok(iSession < iGen, "la session doit précéder la génération")
 })
+
+test("🔴 le plafond court depuis l'OUVERTURE — ouvrir tôt raccourcit la couverture", () => {
+  // data-space, 08/09/2026 : fin = min(chaude + demandées, ouverture + 360).
+  // Une ouverture à 17 h finit à 22h35 — une heure et demie AVANT la fin de
+  // notre fenêtre. Notre garde accuserait leur station d'être morte, sur
+  // une session que NOUS aurions ouverte trop tôt en croyant bien faire.
+  //
+  // Troisième occurrence du même piège cette semaine : un désaccord de
+  // configuration qui accuse le partenaire.
+  const src = readFileSync(new URL('../../scripts/ouvrir-session.ts', import.meta.url), 'utf8')
+  assert.match(src, /PLAFOND_MIN/, 'le plafond doit être pris en compte')
+  assert.match(src, /Math\.min\(CHAUFFE_MIN \+ minutes, PLAFOND_MIN\)/,
+    "la fin réelle est le MINIMUM des deux, pas la durée demandée")
+  // Et le refus doit précéder l'ouverture : ouvrir puis constater ne sert à rien.
+  const iRefus = src.indexOf('Session NON ouverte')
+  const iOuvre = src.indexOf('await ouvrirSessionDiffusion(minutes)')
+  assert.ok(iRefus > 0 && iRefus < iOuvre, "le refus doit précéder l'ouverture")
+})
