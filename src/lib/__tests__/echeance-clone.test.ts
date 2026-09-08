@@ -126,3 +126,36 @@ test("un état de session illisible ne bloque pas la nuit", () => {
   assert.match(bloc, /return null/)
   assert.ok(!/\bthrow\b/.test(bloc), 'etatSession ne doit jamais lever')
 })
+
+test('🔴 la session couvre la fenêtre ENTIÈRE de production', () => {
+  // data-space (08/09/2026) : « votre session de 120 minutes ne couvre pas
+  // votre fenêtre de trois heures. Si vous ouvrez à 19h20 et produisez à
+  // 22h50, la session aura expiré, la station sera froide, et votre
+  // première phrase repaiera les 35 minutes d'allumage — à l'intérieur de
+  // votre échéance de 55 minutes. Vous atteindriez votre garde-fou sans
+  // qu'aucun défaut ne soit en cause. »
+  //
+  // Un garde qui se déclenche sur un réglage mal accordé accuse le
+  // partenaire à tort. La session doit couvrir la fenêtre, marge comprise.
+  const env = readFileSync(new URL('../../../.env', import.meta.url), 'utf8')
+  const minutes = Number(/^CHATTERBOX_SESSION_MINUTES=(\d+)/m.exec(env)?.[1] ?? '0')
+  const nuit = readFileSync(new URL('../../../scripts/nuit-locale.sh', import.meta.url), 'utf8')
+  const debut = Number(/heure" -ge (\d+)/.exec(nuit)?.[1] ?? '0')
+  const fin = Number(/heure" -le (\d+)/.exec(nuit)?.[1] ?? '0')
+  const fenetreMin = (fin + 1 - debut) * 60
+  assert.ok(fenetreMin > 0, 'fenêtre illisible')
+  assert.ok(
+    minutes >= fenetreMin,
+    `session ${minutes} min < fenêtre ${fenetreMin} min : un déclenchement tardif trouverait la station froide`,
+  )
+})
+
+test("la session s'ouvre AVANT l'écriture des dialogues", () => {
+  // Leur alerte se déclenche à l'ouverture, pas à notre première requête.
+  // Ouvrir tard, c'est leur retirer le temps de rattraper une panne.
+  const nuit = readFileSync(new URL('../../../scripts/nuit-locale.sh', import.meta.url), 'utf8')
+  const iSession = nuit.indexOf('ouvrir-session.ts')
+  const iGen = nuit.indexOf('generate-all.ts')
+  assert.ok(iSession > 0, 'la nuit doit ouvrir une session')
+  assert.ok(iSession < iGen, "la session doit précéder la génération")
+})

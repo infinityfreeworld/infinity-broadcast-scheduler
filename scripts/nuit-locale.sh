@@ -111,6 +111,15 @@ echo "  node $(node --version) · $(sw_vers -productVersion 2>/dev/null)"
 
 # ── 1. Contrôle de couture : les voix demandées existent-elles ? ──
 # Informatif : une voix manquante retombe sur Piper, ce n'est pas bloquant.
+# ── Annoncer la diffusion, AVANT tout le reste ───────────────────────
+# data-space : leur alerte se déclenche à l'OUVERTURE de la session, pas à
+# notre première requête. Ouvrir tôt leur laisse le temps de rattraper une
+# panne d'allumage avant qu'elle ne devienne la nôtre — et leur station
+# chauffe pendant que nous écrivons les dialogues.
+echo ""
+echo "── ouverture de la session de diffusion ──"
+npx tsx src/scripts/ouvrir-session.ts || echo "  (sans session — pas bloquant)"
+
 echo ""
 echo "── contrôle des voix ──"
 npx tsx src/scripts/verifier-voix.ts || echo "  (voix manquantes — repli Piper attendu)"
