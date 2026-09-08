@@ -75,6 +75,52 @@ export interface RenderResult {
   durationSec: number
 }
 
+export interface WafUpload {
+  id: string
+  url: string
+  ipfs?: string
+  type: 'audio' | 'image'
+  bytes: number
+}
+
+/**
+ * Dépose un média fabriqué ici (la voix-off du JT) dans la forge, et renvoie
+ * son `assetId` — utilisable tel quel comme `audio.assetId` du montage.
+ *
+ * Pourquoi ce détour : le montage n'accepte qu'un asset local ou une URL
+ * publiquement joignable. La piste est produite dans un exécuteur GitHub qui
+ * n'expose rien sur le réseau ; sans dépôt, il faudrait la faire transiter par
+ * un hébergeur tiers pour obtenir une adresse — la dépendance que la forge
+ * souveraine cherche justement à retirer.
+ */
+export async function uploadMedia(
+  data: Buffer | Uint8Array,
+  opts: { filename: string; mime: string; label?: string },
+): Promise<WafUpload> {
+  const form = new FormData()
+  // On laisse `fetch` poser lui-même le Content-Type : écrit à la main, la
+  // frontière multipart manquerait et le serveur ne verrait aucun fichier.
+  form.append('file', new Blob([new Uint8Array(data)], { type: opts.mime }), opts.filename)
+  if (opts.label) form.append('prompt', opts.label)
+
+  const key = process.env.WAF_API_KEY
+  const res = await fetch(`${wafBase()}/api/v1/upload`, {
+    method: 'POST',
+    headers: key ? { Authorization: `Bearer ${key}` } : {},
+    body: form,
+  })
+  const text = await res.text()
+  let parsed: unknown
+  try { parsed = JSON.parse(text) } catch { parsed = { raw: text } }
+  if (!res.ok) {
+    const msg = (parsed as { error?: string })?.error ?? `HTTP ${res.status}`
+    throw new Error(`WAF /api/v1/upload → ${msg}`)
+  }
+  const up = parsed as WafUpload
+  if (!up?.id) throw new Error('WAF /upload : aucun identifiant renvoyé')
+  return up
+}
+
 /** Monte une timeline en .mp4 (Ken Burns + lower-thirds + audio) → CID/URL. */
 export async function renderTimeline(payload: {
   shots: RenderShot[]

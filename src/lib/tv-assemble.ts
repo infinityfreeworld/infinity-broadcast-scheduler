@@ -6,6 +6,27 @@
  */
 import type { TvChannelConfig, TvConductor, TvProgram } from './tv-types'
 import type { RenderShot, RenderResult } from './waf'
+import type { VoiceTiming } from './tv-voice'
+
+/**
+ * Réécrit les durées du conducteur avec celles MESURÉES à la synthèse vocale.
+ *
+ * Le LLM propose une durée sans savoir combien de temps sa phrase prend à dire.
+ * Une fois la voix enregistrée, cette proposition n'a plus lieu d'être : on la
+ * remplace, sinon l'image et le son dérivent l'un de l'autre dès le deuxième
+ * sujet (le montage cale la vidéo sur la durée de l'audio).
+ *
+ * Fonction PURE — c'est elle qu'on vérifie hors ligne, pas la synthèse.
+ */
+export function applyTimings(conductor: TvConductor, timings: VoiceTiming[]): TvConductor {
+  return {
+    ...conductor,
+    segments: conductor.segments.map((s, i) => {
+      const t = timings.find(x => x.index === i)
+      return t ? { ...s, durationSec: t.durationSec } : s
+    }),
+  }
+}
 
 /** Conducteur + assetIds d'images WAF → shots pour /api/v1/render.
  *  Le mouvement Ken Burns alterne in/out pour du rythme. */
@@ -50,6 +71,7 @@ export function buildProgram(
   conductor: TvConductor,
   airDateMs: number,
   render?: RenderResult,
+  opts: { generator?: string } = {},
 ): TvProgram {
   const id = `${channel.id}:${isoDate(airDateMs)}`
   return {
@@ -61,6 +83,6 @@ export function buildProgram(
     durationSec: render?.durationSec ?? totalDuration(conductor),
     airDateMs,
     segments: buildEpg(conductor),
-    generator: 'ffmpeg-compose+llm',
+    generator: opts.generator ?? 'ffmpeg-compose+llm',
   }
 }
