@@ -51,3 +51,27 @@ test('🔴 un repli sur Hugging Face est ANNONCÉ, jamais silencieux', () => {
   assert.match(bloc, /repli sur Hugging Face/)
   assert.ok(bloc.includes('console.warn'), 'le repli doit être écrit dans le journal')
 })
+
+test("🔴 aucune SONDE de processus pour choisir le moteur", () => {
+  // Le 08/09/2026, `piper --help` a bloqué deux répétitions NEUF HEURES.
+  // Le binaire est x86_64 sous Rosetta ; sur ce Mac il ne rend jamais la
+  // main, le processus reste en état `UE` (ininterruptible), et le
+  // `timeout` d'`execFile` ne peut pas le tuer — le rappel n'est jamais
+  // appelé. Nous avons accusé le débit de notre partenaire pendant ce
+  // temps.
+  //
+  // Un garde qui dépend de la coopération de ce qu'il surveille n'est pas
+  // un garde. Le choix du moteur se fait sur des FICHIERS, pas sur un
+  // processus qu'il faudrait lancer pour l'interroger.
+  // ⚠️ On dépouille les COMMENTAIRES : ce test doit interdire un USAGE,
+  // pas une explication. Sans ça il interdirait de documenter le défaut
+  // qu'il empêche — et il a d'abord échoué pour cette raison exacte.
+  const codeSeul = (t: string) =>
+    t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const src = codeSeul(readFileSync(SRC, 'utf8'))
+  const bloc = /async function resoudreMoteur[\s\S]*?\n}/.exec(src)?.[0] ?? ''
+  assert.ok(bloc.length > 0, 'resoudreMoteur introuvable')
+  assert.ok(!bloc.includes("'--help'"), 'aucune sonde --help ne doit subsister')
+  assert.ok(!bloc.includes('execFile'), 'aucun processus ne doit être lancé pour décider')
+  assert.match(bloc, /existsSync\(pont\)/, 'la décision se prend sur des fichiers')
+})

@@ -265,14 +265,28 @@ function pythonDuVenv(): string {
 
 async function resoudreMoteur(): Promise<Moteur> {
   if (moteurResolu) return moteurResolu
-  const natif: Moteur = { cmd: PIPER_BIN, args: [] }
-  const utilisable = await new Promise<boolean>(res => {
-    execFile(PIPER_BIN, ['--help'], { timeout: 15_000 }, err => res(!err))
-  })
-  if (utilisable) { moteurResolu = natif; return natif }
 
+  // 🔴 PAS DE SONDE. La première version lançait `piper --help` avec un
+  // `timeout: 15_000` pour savoir si le binaire natif marchait.
+  //
+  // Le 08/09/2026, cette sonde a bloqué DEUX répétitions pendant neuf
+  // heures. Le binaire est x86_64, tourne sous Rosetta, et sur ce Mac il
+  // ne rend jamais la main : le processus reste en état `UE`
+  // (ininterruptible), et le `timeout` d'`execFile` ne peut pas le tuer —
+  // le rappel n'est jamais appelé, la promesse ne se résout jamais.
+  //
+  // Nous avons accusé le débit de notre partenaire pendant ce temps.
+  //
+  // La leçon est la même que pour le mur d'échéance : un garde qui dépend
+  // de la coopération de ce qu'il surveille n'est pas un garde. Ici, la
+  // seule question sûre est une question de FICHIERS, pas de processus.
   const pont = join(process.cwd(), 'scripts', 'piper-python.py')
-  if (!existsSync(pont) || !existsSync(pythonDuVenv())) {
+  if (existsSync(pont) && existsSync(pythonDuVenv())) {
+    moteurResolu = { cmd: pythonDuVenv(), args: [pont] }
+    return moteurResolu
+  }
+
+  if (!existsSync(PIPER_BIN)) {
     throw new Error(
       'Piper inutilisable : le binaire natif refuse de démarrer (archive amont '
       + 'sans .dylib sur macOS aarch64) et le pont Python est absent. '
@@ -280,8 +294,9 @@ async function resoudreMoteur(): Promise<Moteur> {
       + '&& uv pip install --python .venv-piper/bin/python piper-tts',
     )
   }
-  console.warn('  [piper] binaire natif inutilisable — bascule sur le pont Python')
-  moteurResolu = { cmd: pythonDuVenv(), args: [pont] }
+  // Le pont manque : on tente le binaire natif, qui marche sous Linux.
+  console.warn('  [piper] pont Python absent — usage du binaire natif')
+  moteurResolu = { cmd: PIPER_BIN, args: [] }
   return moteurResolu
 }
 
