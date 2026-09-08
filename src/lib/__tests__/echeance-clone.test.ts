@@ -100,3 +100,29 @@ test("🔴 la course est BRANCHÉE dans la synthèse — pas seulement disponibl
     'la synthèse ne doit jamais être appelée sans course',
   )
 })
+
+test('🔴 le réveil consulte `warming` AVANT de tenter une synthèse', () => {
+  // data-space (08/09/2026) : leur capacité apparaît dans l'inventaire
+  // huit minutes AVANT d'être utilisable. Se fier à sa première
+  // apparition, c'est marteler une station qui ne sait pas répondre —
+  // et consommer des tentatives pour rien.
+  //
+  // Tant que `warming` est vrai, la fenêtre payée n'a pas commencé et
+  // rien n'est consommé : attendre ne coûte rien, s'acharner coûte tout.
+  const src = readFileSync(SRC, 'utf8')
+  const bloc = /export async function reveillerEtVerifier[\s\S]*?\n}/.exec(src)?.[0] ?? ''
+  assert.ok(bloc.length > 0, 'reveillerEtVerifier introuvable')
+  const iWarming = bloc.indexOf('sess?.warming')
+  const iSynth = bloc.indexOf('synthesizeWithChatterbox')
+  assert.ok(iWarming > 0, 'le réveil doit consulter warming')
+  assert.ok(iWarming < iSynth, 'warming doit être consulté AVANT la synthèse, pas après')
+})
+
+test("un état de session illisible ne bloque pas la nuit", () => {
+  // Un indicateur est un confort. Le rendre bloquant ferait perdre une
+  // émission pour une route de diagnostic en panne.
+  const src = readFileSync(SRC, 'utf8')
+  const bloc = /export async function etatSession[\s\S]*?\n}/.exec(src)?.[0] ?? ''
+  assert.match(bloc, /return null/)
+  assert.ok(!/\bthrow\b/.test(bloc), 'etatSession ne doit jamais lever')
+})

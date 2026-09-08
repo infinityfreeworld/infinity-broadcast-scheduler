@@ -288,6 +288,41 @@ export async function ouvrirSessionDiffusion(minutes: number): Promise<boolean> 
   }
 }
 
+export interface EtatSession {
+  open:               boolean
+  warming:            boolean
+  station_ready:      boolean
+  minutes_left?:      number
+  window_started_at?: string
+}
+
+/**
+ * Interroge la session ouverte.
+ *
+ * 🔴 POURQUOI `warming` CHANGE TOUT (data-space, 08/09/2026)
+ * Leur capacité APPARAÎT dans l'inventaire environ huit minutes avant
+ * d'être réellement utilisable — ils exigent un travail abouti, pas une
+ * déclaration. Se fier à sa première apparition, c'est marteler une
+ * station qui ne sait pas encore répondre.
+ *
+ * Tant que `warming` est vrai, la fenêtre payée n'a pas commencé et rien
+ * n'est consommé : on peut attendre sans rien perdre. C'est exactement la
+ * différence entre patienter et s'acharner.
+ */
+export async function etatSession(): Promise<EtatSession | null> {
+  const { url, apiKey } = getEndpoint()
+  const chemin = process.env.CHATTERBOX_SESSION_PATH ?? '/api/v1/gpu/voix/session'
+  try {
+    const r = await fetch(`${url}${chemin}`, {
+      headers: authHeaders(apiKey), signal: AbortSignal.timeout(30_000),
+    })
+    if (!r.ok) return null
+    return await r.json() as EtatSession
+  } catch {
+    return null   // injoignable : on ne bloque pas la nuit pour un indicateur
+  }
+}
+
 export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_WAKE_TIMEOUT_S ?? '720', 10) * 1000
   const maxTentatives = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10)
@@ -296,6 +331,17 @@ export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
 
   for (let i = 0; i < maxTentatives; i++) {
     const ecoule = Math.round((Date.now() - debut) / 1000)
+
+    // Demander AVANT de frapper. Si la station chauffe encore, une
+    // synthèse ne peut qu'échouer — et data-space nous prévient que sa
+    // capacité apparaît huit minutes avant d'être utilisable.
+    const sess = await etatSession()
+    if (sess?.warming === true) {
+      console.log(`  [chatterbox] station en préchauffage (${ecoule}s écoulées) — on patiente sans consommer`)
+      await new Promise(r => setTimeout(r, 45_000))
+      continue
+    }
+
     try {
       // Opus, et non WAV : cet audio-ci est JETÉ — seule compte la réponse.
       // Le réveil peut demander jusqu'à 24 tentatives ; en Opus la sonde
