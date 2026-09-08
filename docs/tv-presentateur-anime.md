@@ -54,10 +54,22 @@ meilleur que l'original pour notre usage, en plus d'être libre.
 synchronisé) — licence communautaire, gratuite sous 10 M$ de CA, mondiale, mais
 avec un seuil. À reconsidérer si l'audio natif devient décisif.
 
-⚠️ **Conséquence à traiter** : la capacité `video` des stations DATASPACE
-installe aujourd'hui `Lightricks/LTX-Video`, en affirmant en commentaire
-« Apache-2.0 » alors que le Hub le classe en licence communautaire. Sous
-doctrine stricte, cette capacité doit basculer sur Wan 2.2.
+Le seuil n'est pas qu'une formalité : la licence LTX prévoit, en cas de
+manquement, des **dommages forfaitaires au double des redevances dues**. Ce n'est
+donc pas un risque d'aujourd'hui mais une **dette à déclenchement différé — elle
+se réveille le jour où l'entreprise réussit** (formulation de la session
+DATASPACE, qui a vérifié le texte de son côté le 08/09/2026).
+
+⚠️ **Conséquences à traiter** (côté DATASPACE, hors de ce dépôt) :
+
+1. La capacité `video` installe `Lightricks/LTX-Video` en affirmant
+   « Apache-2.0 » : faux, le Hub le classe en licence communautaire. **Commentaire
+   corrigé le 08/09/2026** par la session DATASPACE ; la bascule vers Wan 2.2,
+   elle, attend la parole directe du fondateur (remplacer un moteur en production
+   est un changement substantiel) — et l'image de station, cf. §4.
+2. `stabilityai/sdxl-turbo` (`license:other`, non commercial) n'est plus posé sur
+   les nouvelles stations, mais **le chemin de repli l'utilise encore** pour les
+   stations déjà installées. Sous doctrine stricte, ce reliquat doit disparaître.
 
 ## 4. Ce que ça coûte vraiment — et ce que ça impose au montage
 
@@ -93,8 +105,19 @@ Ce n'est pas un compromis de pauvreté : c'est la grammaire du journal télévis
 32,6 Go téléchargés à chaque location seraient absurdes (temps d'allumage déjà
 mesuré à ~35 min, facturé). Le présentateur animé suppose donc une **image de
 station pré-cuite embarquant les poids** — le même chantier que celui déjà ouvert
-pour la 3D. Tant qu'elle n'est pas reconstruite, S2V reste un essai manuel sur
-machine louée, pas un service quotidien.
+pour la 3D.
+
+⚠️ **Et cette image est CASSÉE depuis le 23/07/2026** (numpy 2.x, tiktoken) :
+les installeurs ont été corrigés, l'image ne l'a jamais été. Confirmé par la
+session DATASPACE le 08/09/2026. Conséquence directe sur l'ordre des travaux :
+
+> **Reconstruire l'image AVANT toute bascule du moteur vidéo.** Migrer sans elle,
+> c'est échanger une dette juridique contre une station inutilisable : ce n'est pas
+> le coût qui pique (0,0674 $/h) mais la latence — l'allumage passerait de 35 min à
+> plus du double, à chaque location.
+
+Tant que l'image n'est pas refaite, S2V reste un **essai manuel** sur machine
+louée, pas un service quotidien.
 
 ## 5. Protocole d'essai (à faire hors fenêtre radio, budget à surveiller)
 
