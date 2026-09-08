@@ -88,6 +88,42 @@ export function ouvrirEcheanceClone(secondes = Number.parseInt(
   echeanceClone = Date.now() + secondes * 1000
 }
 
+/**
+ * Fait courir une promesse CONTRE l'horloge.
+ *
+ * 🔴 POURQUOI CETTE FONCTION EXISTE, ET POURQUOI LA PREMIÈRE VERSION DU
+ * MUR NE SUFFISAIT PAS.
+ *
+ * Le mur consultait l'échéance AVANT de lancer l'appel. Il empêchait donc
+ * d'en DÉMARRER un nouveau après le délai — mais n'interrompait pas celui
+ * qui était déjà en vol. Le 07/09/2026, une répétition est restée figée
+ * **9 heures** dans un appel commencé avant l'expiration : le mur n'a pas
+ * dit un mot, parce qu'on ne le lui a jamais redemandé.
+ *
+ * Une vérification n'est pas une garantie. Seule une COURSE en est une :
+ * ici, le perdant est toujours interrompu, quoi que fasse le réseau.
+ */
+export async function avecEcheance<T>(
+  promesse: Promise<T>,
+  ms: number,
+  quoi: string,
+): Promise<T> {
+  let minuteur: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promesse,
+      new Promise<never>((_, rejeter) => {
+        minuteur = setTimeout(
+          () => rejeter(new ChatterboxError(`${quoi} : abandonné après ${Math.round(ms / 1000)}s`, 408)),
+          ms,
+        )
+      }),
+    ])
+  } finally {
+    if (minuteur) clearTimeout(minuteur)
+  }
+}
+
 export function echeanceClonePassee(): boolean {
   return echeanceClone > 0 && Date.now() > echeanceClone
 }
@@ -340,6 +376,16 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
       'échéance de synthèse clonée dépassée pour cette émission — repli Piper', 408,
     )
   }
+  // 🔴 La vérification ci-dessus ne suffit PAS : elle empêche de démarrer
+  // après l'échéance, pas de rester bloqué dedans. Ce qui suit est la
+  // garantie — le temps restant borne l'appel, quoi qu'il arrive.
+  const restant = echeanceClone > 0
+    ? Math.max(1_000, echeanceClone - Date.now())
+    : Number.parseInt(process.env.CHATTERBOX_ECHEANCE_S ?? '1200', 10) * 1000
+  return avecEcheance(synthetiserSansMur(opts), restant, `synthèse « ${opts.voice} »`)
+}
+
+async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_QUEUE_BUDGET_S ?? '1800', 10) * 1000
   const debut = Date.now()
   for (let tentative = 1; ; tentative++) {
