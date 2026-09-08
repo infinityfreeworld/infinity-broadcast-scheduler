@@ -123,6 +123,28 @@ CODE=$?
 echo "  generate-all → code $CODE"
 
 # ── 3. Rétention : les émissions vivent 10 jours ──
+# ── Archive du dépôt, relue ──────────────────────────────────────────
+# 🔴 Onze commits ont vécu sur ce seul disque le 08/09/2026, faute d'accès
+# au dépôt distant. Une sauvegarde qu'on ne refait pas vieillit ; une
+# sauvegarde qu'on ne relit pas n'existe pas.
+echo ""
+echo "── archive du dépôt ──"
+ARCHIVE="/tmp/infinity-scheduler-$(date +%Y%m%d).bundle"
+if git bundle create "$ARCHIVE" --all 2>/dev/null; then
+  # Relecture : un paquet fabriqué depuis un clone superficiel a l'air
+  # sain et ne contient rien. Seul un clone réel le prouve.
+  TMPC="/tmp/verif-bundle-$$"
+  if git clone -q "$ARCHIVE" "$TMPC" 2>/dev/null \
+     && [ "$(git -C "$TMPC" rev-parse HEAD)" = "$(git rev-parse HEAD)" ]; then
+    npx tsx src/scripts/deposer-archive.ts "$ARCHIVE" || echo "  ⚠️ dépôt de l'archive en échec"
+  else
+    echo "  🔴 ARCHIVE ILLISIBLE — rien déposé"
+  fi
+  rm -rf "$TMPC" "$ARCHIVE"
+else
+  echo "  ⚠️ fabrication de l'archive en échec"
+fi
+
 echo ""
 echo "── purge (rétention ${RETENTION_JOURS:-10} jours) ──"
 npx tsx src/scripts/purger-emissions.ts --executer || echo "  ⚠️ purge en échec — pas bloquant pour la diffusion"
