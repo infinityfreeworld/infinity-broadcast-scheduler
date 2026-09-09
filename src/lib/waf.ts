@@ -73,6 +73,53 @@ export interface RenderResult {
   /** CID IPFS si déjà pinné par WAF (sinon undefined → utiliser `url`). */
   ipfs?: string
   durationSec: number
+  /** Vignette extraite du rendu (asset à part entière, épinglé lui aussi). */
+  poster?: { id: string; url: string; ipfs?: string }
+}
+
+export interface WafAsset {
+  id: string
+  type: string
+  url: string
+  ipfs?: string
+  mime?: string
+}
+
+/** Relit un asset — sert à récupérer le CID, épinglé APRÈS la réponse. */
+export async function getAsset(id: string): Promise<WafAsset> {
+  const res = await fetch(`${wafBase()}/api/v1/assets/${encodeURIComponent(id)}`, {
+    headers: authHeaders(),
+  })
+  const text = await res.text()
+  let data: unknown
+  try { data = JSON.parse(text) } catch { data = { raw: text } }
+  if (!res.ok) throw new Error(`WAF /assets → ${(data as { error?: string })?.error ?? `HTTP ${res.status}`}`)
+  return data as WafAsset
+}
+
+/**
+ * Attend que le CID d'un asset apparaisse, sans jamais bloquer la production.
+ *
+ * L'épinglage IPFS de la forge est lancé APRÈS sa réponse : au moment du
+ * rendu, le CID n'existe pas encore. Sans cette attente, le programme partait
+ * sur NOSTR avec la seule URL de la forge — et devenait injouable le jour où
+ * cette adresse change. On sonde donc un temps borné, puis on publie ce qu'on
+ * a : une vidéo servie par la forge vaut mieux qu'aucune vidéo.
+ */
+export async function attendreCid(id: string, opts: { timeoutMs?: number; pasMs?: number } = {}): Promise<string | undefined> {
+  const timeoutMs = opts.timeoutMs ?? 90_000
+  const pasMs = opts.pasMs ?? 5_000
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const a = await getAsset(id)
+      if (a.ipfs) return a.ipfs
+    } catch {
+      // Un échec de sondage n'est pas un échec de production.
+    }
+    await new Promise(r => setTimeout(r, pasMs))
+  }
+  return undefined
 }
 
 export interface WafUpload {
