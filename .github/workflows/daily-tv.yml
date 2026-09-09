@@ -60,9 +60,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Les durées de plans se calent sur la voix : si ce test casse, l'image
-      # et le son dérivent à l'antenne. On le passe avant de produire.
-      - name: Test voix/image (hors ligne)
+      # Deux garde-fous avant de produire :
+      #  · les durées de plans se calent sur la voix — si ça casse, l'image et
+      #    le son dérivent à l'antenne ;
+      #  · l'event publié doit rester lisible par le module TV d'Infinity, qui
+      #    vit dans un AUTRE dépôt. La comparaison inter-dépôts s'ignore ici
+      #    (Infinity absent de l'exécuteur) et ne s'exerce qu'en local.
+      - name: Tests hors ligne (voix/image + contrat de publication)
         run: npm run test:tv
 
       - name: Generate TV programs

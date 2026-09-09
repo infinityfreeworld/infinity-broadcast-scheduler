@@ -96,7 +96,9 @@ async function main() {
     console.log(`      ${track.spokenCount}/${conductor.segments.length} segments parlés — ${track.durationSec}s de bande`)
     // Les durées mesurées remplacent celles proposées à l'aveugle par le LLM.
     conductor = applyTimings(conductor, track.timings)
-    track.timings.forEach(t => console.log(`      plan ${t.index + 1} : ${t.startSec}s → ${t.durationSec}s (${t.spokenSec}s parlés)`))
+    track.timings.forEach(t => console.log(
+      `      plan ${t.index + 1} : ${t.startSec}s → ${(t.startSec + t.durationSec).toFixed(2)}s`
+      + ` · ${t.durationSec}s à l'écran (${t.spokenSec}s parlés)`))
     const dep = await uploadMedia(track.wav, {
       filename: `${channel.id}-${new Date(airDateMs).toISOString().slice(0, 10)}.wav`,
       mime: 'audio/wav',

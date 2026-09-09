@@ -12,7 +12,7 @@
  *   plafonds de dépense interdisent.
  *
  *   Usage :
- *     tsx src/scripts/generate-tv-all.ts [--muet]
+ *     tsx src/scripts/generate-tv-all.ts [--muet] [--fixture]
  *     TV_AIR_MS=... tsx src/scripts/generate-tv-all.ts
  *
  *   Variables d'env : cf. generate-tv-program.ts
@@ -26,11 +26,15 @@ const exec = promisify(execFile)
 
 async function main() {
   const muet = process.argv.includes('--muet')
+  // Se transmet aux chaînes : éprouver TOUTES les chaînes d'un coup, sans clé
+  // de langage et sans rien publier, est le seul moyen de vérifier qu'une
+  // chaîne seed nouvellement ajoutée produit bien quelque chose.
+  const fixture = process.argv.includes('--fixture')
   const startedAt = Date.now()
   const results: Array<{ id: string; ok: boolean; error?: string }> = []
 
   console.log(`\n╔══════════════════════════════════════════════════════════╗`)
-  console.log(`║  Infinity TV — ${TV_CHANNELS.length} chaîne(s) à produire${muet ? ' (SANS VOIX)' : ''}`)
+  console.log(`║  Infinity TV — ${TV_CHANNELS.length} chaîne(s) à produire${muet ? ' (SANS VOIX)' : ''}${fixture ? ' [FIXTURE, sans publication]' : ''}`)
   console.log(`╚══════════════════════════════════════════════════════════╝`)
 
   for (const channel of TV_CHANNELS) {
@@ -40,6 +44,7 @@ async function main() {
     try {
       const args = ['tsx', 'src/scripts/generate-tv-program.ts', channel.id]
       if (muet) args.push('--muet')
+      if (fixture) args.push('--fixture')
       const { stdout, stderr } = await exec('npx', args, {
         env: process.env,
         maxBuffer: 50 * 1024 * 1024,
