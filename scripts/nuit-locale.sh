@@ -11,8 +11,19 @@
 
 set -u  # PAS de `set -e` : une station qui tombe ne doit pas emporter les 14 autres.
 
-DEPOT="/Users/med/Claude code Fichier Vs code/infinity-broadcast-scheduler"
-JOURNAL="$HOME/Library/Logs/infinity-radio"
+# 🔴 Le dépôt était NOMMÉ EN DUR, sur un chemin qui n'existe que sur le Mac du
+# Bâtisseur : partout ailleurs — l'intégration continue comprise — ce script
+# s'arrêtait sur « dépôt introuvable », et le test qui l'exerce échouait. On le
+# déduit de l'emplacement du script, ce qui marche sur toute machine ; DEPOT
+# reste surchargeable pour un cas particulier.
+DEPOT="${DEPOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# Le journal suit la convention du système : ~/Library/Logs sur macOS,
+# ~/.local/state ailleurs (base directory de freedesktop).
+if [ -d "$HOME/Library/Logs" ]; then
+  JOURNAL="$HOME/Library/Logs/infinity-radio"
+else
+  JOURNAL="${XDG_STATE_HOME:-$HOME/.local/state}/infinity-radio"
+fi
 mkdir -p "$JOURNAL"
 FICHIER="$JOURNAL/nuit-$(date -u +%Y-%m-%d).log"
 
