@@ -69,6 +69,26 @@ jobs:
       - name: Tests hors ligne (voix/image + contrat de publication)
         run: npm run test:tv
 
+      # Un cron qui échoue chaque soir sans dire pourquoi est pire qu'un cron
+      # absent : on finit par ignorer ses alertes. Si la clé de la forge manque,
+      # on le DIT, en toutes lettres et avec le geste à faire.
+      - name: Vérifier la clé de la forge
+        env:
+          WAF_API_KEY: ${{ secrets.WAF_API_KEY }}
+        run: |
+          if [ -z "$WAF_API_KEY" ]; then
+            echo "::error title=Secret WAF_API_KEY manquant::La TV ne peut ni générer d'images ni monter la vidéo sans clé de la forge."
+            echo ""
+            echo "  Pour la créer, deux gestes :"
+            echo "   1. https://weareforger.data-space.world/compte → section clés API → créer (elle commence par wafk_)"
+            echo "   2. Réglages du dépôt → Secrets and variables → Actions → New repository secret"
+            echo "      nom : WAF_API_KEY   valeur : la clé copiée"
+            echo ""
+            echo "  Tant qu'elle manque, la TV ne produit rien. La radio, elle, n'est pas concernée."
+            exit 1
+          fi
+          echo "✓ clé de la forge présente"
+
       - name: Generate TV programs
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
