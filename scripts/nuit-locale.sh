@@ -89,16 +89,6 @@ case "$VERDICT" in
   RATTRAPAGE) echo "  ⚠️ RATTRAPAGE : ${ECOULE} h sans émission (dernière : $DERNIERE)." ;;
 esac
 
-if dans_la_fenetre; then
-  echo "  fenêtre 20 h–minuit, il est ${HEURE} h — on y va."
-elif [ "$ECOULE" -ge 26 ]; then
-  # Le silence prolongé l'emporte sur la fenêtre : mieux vaut une émission
-  # à une heure inhabituelle que quatre soirs sans radio.
-  echo "  ⚠️ RATTRAPAGE : ${ECOULE} h sans émission (dernière : $DERNIERE) — on produit hors fenêtre."
-else
-  echo "  hors fenêtre (il est ${HEURE} h, ${ECOULE} h depuis la dernière) — on attend."
-  exit 0
-fi
 
 
 
