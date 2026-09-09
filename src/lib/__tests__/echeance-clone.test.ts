@@ -14,7 +14,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { ouvrirEcheanceClone, echeanceClonePassee, synthesizeWithChatterbox, avecEcheance } from '../chatterbox'
 
 const SRC = new URL('../chatterbox.ts', import.meta.url)
@@ -137,7 +137,16 @@ test('🔴 la session couvre la fenêtre ENTIÈRE de production', () => {
   //
   // Un garde qui se déclenche sur un réglage mal accordé accuse le
   // partenaire à tort. La session doit couvrir la fenêtre, marge comprise.
-  const env = readFileSync(new URL('../../../.env', import.meta.url), 'utf8')
+  // `.env` n'est pas versionné : sur toute machine neuve — l'intégration
+  // continue comprise — ce test échouait en ENOENT, un rouge permanent qui
+  // n'apprend rien. On lit le réglage RÉEL quand il est là, et sinon celui de
+  // `.env.example`, qui est versionné et fait foi pour tout nouveau
+  // déploiement. Dans les deux cas l'invariant reste vérifié.
+  const chemins = ['../../../.env', '../../../.env.example']
+    .map(c => new URL(c, import.meta.url))
+  const source = chemins.find(u => existsSync(u))
+  assert.ok(source, 'ni .env ni .env.example : le réglage de session est introuvable')
+  const env = readFileSync(source, 'utf8')
   const minutes = Number(/^CHATTERBOX_SESSION_MINUTES=(\d+)/m.exec(env)?.[1] ?? '0')
   const nuit = readFileSync(new URL('../../../scripts/nuit-locale.sh', import.meta.url), 'utf8')
   const debut = Number(/heure" -ge (\d+)/.exec(nuit)?.[1] ?? '0')
