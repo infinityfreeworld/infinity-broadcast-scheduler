@@ -15,7 +15,11 @@
     "test": "tsx --test src/lib/__tests__/*.test.ts",
     "setup:piper": "tsx src/scripts/setup-piper.ts",
     "upload:tracks": "tsx src/scripts/upload-tracks.ts",
-    "fetch:broadcast": "tsx src/scripts/fetch-broadcast.ts"
+    "fetch:broadcast": "tsx src/scripts/fetch-broadcast.ts",
+    "generate:tv:all": "tsx src/scripts/generate-tv-all.ts",
+    "preview:voice": "tsx src/scripts/tv-voice-preview.ts",
+    "test:tv": "tsx src/scripts/tv-voice-test.ts && tsx src/scripts/tv-contrat-test.ts",
+    "test:contrat": "tsx src/scripts/tv-contrat-test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.93.0",

@@ -30,12 +30,72 @@ infinity-broadcast-scheduler/
 │   │   ├── news.ts              ← fetch RSS via fast-xml-parser
 │   │   ├── pinata.ts            ← upload IPFS via API HTTP
 │   │   └── nostr.ts             ← publish kind:30093 via nostr-tools
+│   │   ├── tv-conductor.ts      ← TV : actu → conducteur (rubriques) via LLM
+│   │   ├── tv-voice.ts          ← TV : narration → voix-off Piper + minutage
+│   │   ├── tv-assemble.ts       ← TV : conducteur → plans, EPG, programme (pur)
+│   │   ├── waf.ts               ← TV : forge (images, dépôt, montage → CID)
+│   │   └── tv-nostr.ts          ← TV : publish kind:30184
 │   └── scripts/
 │       ├── generate-broadcast.ts ← 1 station (testable localement)
-│       └── generate-all.ts       ← toutes les stations (CI)
+│       ├── generate-all.ts       ← toutes les stations (CI)
+│       ├── generate-tv-program.ts← 1 chaîne TV (--plan = hors ligne)
+│       ├── generate-tv-all.ts    ← toutes les chaînes TV (CI)
+│       ├── tv-voice-preview.ts   ← écouter une voix avant de diffuser
+│       └── tv-voice-test.ts      ← test hors ligne : voix ↔ image ne dérivent pas
 └── .github/workflows/
-    └── daily-broadcast.yml       ← cron 22h UTC daily
+    ├── daily-broadcast.yml       ← radio : cron 22h UTC daily
+    └── daily-tv.yml              ← TV : cron 20h UTC daily
 ```
+
+## TV (Infinity TV)
+
+Même principe que la radio, en vidéo : chaque jour, par chaîne, l'actu devient un
+**conducteur** (le LLM écrit les rubriques, la voix-off et les prompts d'images),
+la forge [We are forger](https://weareforger.data-space.world) génère les visuels
+puis **monte** le tout en un `.mp4` épinglé sur IPFS, et le programme est publié
+sur NOSTR (kind `30184`). Le module TV d'Infinity le diffuse en horloge virtuelle,
+comme une vraie chaîne.
+
+```bash
+npm run test:tv                    # hors ligne : voix ↔ image + contrat de publication
+npx tsx src/scripts/generate-tv-program.ts --plan     # hors ligne, montre tout
+npm run preview:voice              # écouter la voix (écrit un .wav)
+npm run generate:tv -- tv-jt-fr --fixture   # un JT COMPLET, sans clé ni publication
+npm run generate:tv:all -- --fixture        # toutes les chaînes, sans publication
+npm run generate:tv -- tv-jt-fr    # une chaîne, pour de vrai
+npm run generate:tv:all            # toutes les chaînes (ce que fait le cron)
+```
+
+**Regarder un JT avant de diffuser** — `--fixture` produit la vidéo entière (voix,
+images, montage) à partir d'un conducteur d'exemple, **sans clé de langage, sans relais,
+sans rien publier**. Il faut la forge en face ; en local :
+
+```bash
+# dans ~/forge3d, sur une branche qui contient /api/v1/upload
+WAF_API_KEYS=wafk_essai_local SESSION_SECRET=essai PORT=5400 npm run dev
+# puis ici
+WAF_API_URL=http://127.0.0.1:5400 WAF_API_KEY=wafk_essai_local npm run generate:tv:all -- --fixture
+```
+
+Mesuré le 09/09/2026 : **2 chaînes produites en 62 s**, JT de 19,33 s en H.264 720p 30 i/s
+avec piste AAC.
+
+**La voix commande l'image.** Le LLM propose une durée de plan sans savoir combien
+de temps sa phrase prend à dire. Après synthèse, on **mesure** chaque phrase et on
+réécrit les durées : sans cela le montage cale la vidéo sur la durée de l'audio et
+tous les plans suivants glissent (mesuré : un plan annoncé à 8 s ne dure que 4,9 s
+de parole — près de 3 s de décalage dès le deuxième sujet, cumulatif).
+
+La synthèse est faite par **Piper, sur le processeur** de l'exécuteur : un JT
+quotidien ne réveille aucune station GPU et n'entre pas en concurrence avec la
+radio pour la même machine. `--muet` reste un repli si la synthèse échoue.
+
+| Variable | Rôle |
+|---|---|
+| `WAF_API_URL` | Base de la forge (défaut `https://weareforger.data-space.world`) |
+| `WAF_API_KEY` | Clé API v1 de la forge (`wafk_…`) — images, dépôt, montage |
+| `ANTHROPIC_API_KEY` | Écriture du conducteur |
+| `NOSTR_PRIVATE_KEY` | Identité qui signe les programmes |
 
 ## Setup (15 min)
 
@@ -101,7 +161,7 @@ Output attendu :
 
 📦 Setup Piper…
    Téléchargement binaire piper_linux_x86_64.tar.gz…
-   Téléchargement voix fr_FR-tom-medium…
+   Téléchargement voix fr_FR-siwis-medium…
 
 📰 Fetch actu…
    0 item(s) récupérés

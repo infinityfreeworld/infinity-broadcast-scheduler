@@ -1,0 +1,109 @@
+name: Daily TV Program Generation
+
+# Cron : tous les jours à 20h UTC — DEUX HEURES AVANT la radio (22h UTC).
+#
+# Pourquoi avant, et pas après : la TV appelle la forge (WAF) pour générer ses
+# images puis monter la vidéo. La radio, elle, synthétise sa voix sur l'exécuteur
+# et n'a besoin de personne. En passant en premier, la TV laisse la fenêtre
+# libre à la radio même si un montage traîne — l'inverse ferait attendre la TV
+# derrière 9 stations de radio, avec le risque de déborder sur l'heure de
+# diffusion du lendemain.
+#
+# Déclenchement manuel possible (« Run workflow ») pour rejouer un jour donné.
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Chaîne unique (vide = toutes les chaînes seed)'
+        required: false
+        default: ''
+      muet:
+        description: 'Générer SANS voix-off (repli de secours)'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # espeak-ng : Piper en dépend pour la phonétisation.
+      - name: Install espeak-ng
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng
+
+      - name: Install deps
+        run: npm ci
+
+      # Même cache que la radio : le binaire Piper et les voix ONNX pèsent
+      # ~50 Mo qu'il serait absurde de retélécharger chaque nuit.
+      - name: Cache Piper binary + voices
+        uses: actions/cache@v4
+        with:
+          path: |
+            piper/
+            voices/
+          key: piper-${{ hashFiles('src/lib/piper.ts') }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Deux garde-fous avant de produire :
+      #  · les durées de plans se calent sur la voix — si ça casse, l'image et
+      #    le son dérivent à l'antenne ;
+      #  · l'event publié doit rester lisible par le module TV d'Infinity, qui
+      #    vit dans un AUTRE dépôt. La comparaison inter-dépôts s'ignore ici
+      #    (Infinity absent de l'exécuteur) et ne s'exerce qu'en local.
+      - name: Tests hors ligne (voix/image + contrat de publication)
+        run: npm run test:tv
+
+      # Un cron qui échoue chaque soir sans dire pourquoi est pire qu'un cron
+      # absent : on finit par ignorer ses alertes. Si la clé de la forge manque,
+      # on le DIT, en toutes lettres et avec le geste à faire.
+      - name: Vérifier la clé de la forge
+        env:
+          WAF_API_KEY: ${{ secrets.WAF_API_KEY }}
+        run: |
+          if [ -z "$WAF_API_KEY" ]; then
+            echo "::error title=Secret WAF_API_KEY manquant::La TV ne peut ni générer d'images ni monter la vidéo sans clé de la forge."
+            echo ""
+            echo "  Pour la créer, deux gestes :"
+            echo "   1. https://weareforger.data-space.world/compte → section clés API → créer (elle commence par wafk_)"
+            echo "   2. Réglages du dépôt → Secrets and variables → Actions → New repository secret"
+            echo "      nom : WAF_API_KEY   valeur : la clé copiée"
+            echo ""
+            echo "  Tant qu'elle manque, la TV ne produit rien. La radio, elle, n'est pas concernée."
+            exit 1
+          fi
+          echo "✓ clé de la forge présente"
+
+      - name: Generate TV programs
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
+          ANTHROPIC_MODEL:   ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}
+          NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
+          # La forge (We are forger) : génération des images + montage + pin IPFS.
+          WAF_API_URL:       ${{ vars.WAF_API_URL || 'https://weareforger.data-space.world' }}
+          WAF_API_KEY:       ${{ secrets.WAF_API_KEY }}
+        run: |
+          MUET=""
+          if [ "${{ github.event.inputs.muet }}" = "true" ]; then MUET="--muet"; fi
+          if [ -n "${{ github.event.inputs.channel }}" ]; then
+            echo "Génération chaîne unique : ${{ github.event.inputs.channel }}"
+            npm run generate:tv -- "${{ github.event.inputs.channel }}" $MUET
+          else
+            npm run generate:tv:all -- $MUET
+          fi

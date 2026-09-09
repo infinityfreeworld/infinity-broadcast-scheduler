@@ -22,6 +22,9 @@ export interface TvChannelConfig {
   sources?: NewsSource[]
   /** Nombre de segments visés (défaut 4). */
   segments?: number
+  /** Voix de la narration (id Piper du `VOICE_REGISTRY`, donc AUDITÉE côté
+   *  licences : une voix hors registre est refusée). Défaut : DEFAULT_TV_VOICE. */
+  voice?: string
   /** Résolution/fps de rendu (défauts 1280×720 @ 30). */
   width?: number
   height?: number
