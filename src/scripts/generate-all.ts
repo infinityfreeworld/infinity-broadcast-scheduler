@@ -19,7 +19,6 @@ import { getChatterboxVoiceForHost } from '../lib/chatterbox'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { SEED_STATIONS } from '../data/seed-stations'
-import { purgeOldBroadcasts } from '../lib/pinata'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
@@ -31,21 +30,6 @@ const exec = promisify(execFile)
 function tomorrowLocalISO(): string {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
-}
-function todayLocalISO(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
-}
-function yesterdayLocalISO(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
@@ -69,21 +53,10 @@ async function main() {
   // pour rester sous le quota free tier (1 GB). On garde [hier, aujourd'hui,
   // demain] = 3 jours de retention, suffit pour overlap entre J et J+1
   // + grace period si l'utilisateur reste plusieurs heures sur une page.
-  const pinataJwt = process.env.PINATA_JWT
-  if (pinataJwt) {
-    const keepDates = new Set([yesterdayLocalISO(), todayLocalISO(), targetDate])
-    console.log(`\n🧹 Auto-purge Pinata : keep [${[...keepDates].join(', ')}]`)
-    try {
-      const { pruned, freedBytes, errors } = await purgeOldBroadcasts(pinataJwt, keepDates)
-      console.log(`   ✓ ${pruned} pin(s) supprimé(s), ${(freedBytes / 1024 / 1024).toFixed(1)} MB libéré(s)`)
-      if (errors.length > 0) {
-        console.warn(`   ⚠️  ${errors.length} erreur(s) de unpin :`)
-        for (const e of errors.slice(0, 5)) console.warn(`      - ${e}`)
-      }
-    } catch (err) {
-      console.warn(`   ⚠️  Auto-purge échec (continue quand même) :`, err instanceof Error ? err.message : err)
-    }
-  }
+  // La purge Pinata a été retirée le 09/09/2026 : nous ne déposons plus
+  // que chez data-space. La rétention à 10 jours y est faite par
+  // `purger-emissions.ts`, appelé par la nuit — et qui ne supprime QUE ce
+  // qu'il reconnaît comme émission, jamais les voix ni les modèles.
 
   // ── Fetch mappings animateur → voix Chatterbox (Phase C.3) ───────────
   // Publiés sur NOSTR kind:30095 par l'IHL Infinity. On les fetch UNE FOIS

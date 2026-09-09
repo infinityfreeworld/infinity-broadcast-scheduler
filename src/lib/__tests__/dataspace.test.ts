@@ -63,3 +63,29 @@ test('un CID injoignable est un ÉCHEC, pas un succès silencieux', () => {
   const src = readFileSync(new URL('../dataspace.ts', import.meta.url), 'utf8')
   assert.match(src, /rendu mais INJOIGNABLE/)
 })
+
+test('🔴 la production ne dépose QUE chez data-space', () => {
+  // Décision du Bâtisseur (09/09/2026) : « on ne travaille plus avec
+  // Pinata, uniquement avec data-space ». J'avais gardé Pinata en second
+  // dépôt de ma propre initiative, contre une consigne déjà donnée.
+  //
+  // Conséquence assumée : plus de second épinglage. Si data-space refuse,
+  // l'émission n'est pas publiée — au lieu d'être publiée avec un CID que
+  // data-space ne sert pas. Échouer franchement vaut mieux que publier
+  // une émission muette.
+  const gb = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
+  const ga = readFileSync(new URL('../../scripts/generate-all.ts', import.meta.url), 'utf8')
+  for (const [nom, src] of [['generate-broadcast', gb], ['generate-all', ga]] as const) {
+    assert.ok(!/pinataPinFile|purgeOldBroadcasts|PINATA_JWT/.test(src),
+      `${nom} ne doit plus appeler Pinata`)
+  }
+  // TÉMOIN POSITIF : sans lui, un fichier vidé passerait ce test.
+  assert.match(gb, /dataspacePinFile\(opusBlob/, 'le dépôt data-space doit rester')
+})
+
+test("un dépôt data-space impossible ARRÊTE l'émission", () => {
+  // Sans second dépôt, publier malgré un échec donnerait un événement
+  // d'apparence normale, muet pour toujours.
+  const gb = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
+  assert.match(gb, /Aucun jeton data-space[\s\S]{0,200}throw|throw new Error\([\s\S]{0,80}Aucun jeton data-space/)
+})

@@ -11,7 +11,6 @@
  *
  *   Variables d'env requises :
  *     ANTHROPIC_API_KEY
- *     PINATA_JWT
  *     NOSTR_PRIVATE_KEY (hex 64 chars)
  *
  *   Variables optionnelles :
@@ -53,7 +52,6 @@ import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encodeWavToOpus } from '../lib/opus'
-import { pinataPinFile } from '../lib/pinata'
 import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast } from '../lib/nostr'
@@ -500,13 +498,6 @@ async function main() {
   // Ni l'un ni l'autre n'est obligatoire SEUL, mais il en faut un : Pinata
   // n'est plus le dépôt principal, et exiger sa clé interdirait de tourner
   // en souverain. En répétition, aucun des deux n'est nécessaire.
-  const pinataJwt = process.env.PINATA_JWT ?? ''
-  if (!repetition && !pinataJwt
-      && !process.env.DATASPACE_API_KEY && !process.env.DATASPACE_NOSTR_KEY) {
-    console.error('❌ Aucun dépôt IPFS : définir DATASPACE_NOSTR_KEY (préférée, ne périme '
-      + 'pas) ou DATASPACE_API_KEY, ou à défaut PINATA_JWT.')
-    process.exit(1)
-  }
   // En répétition on ne publie pas : exiger la clé de publication
   // interdirait de répéter sur une machine qui ne doit pas publier — ce qui
   // est exactement la machine sur laquelle on veut répéter.
@@ -706,58 +697,30 @@ async function main() {
   // chaque passerelle sert les deux encodages (`Qm…` v0 comme `bafy…` v1)
   // en 206. Basculer ne change donc rien côté application.
   const nomFichier = `broadcast-${stationId}-${targetDate}.opus`
-  // Le jeton donné, sinon dérivé de la clé NOSTR. 🔴 Le jeton EXPIRE ; la
-  // clé, non. Sans dérivation, le jour de l'expiration la nuit se déroule
-  // « normalement » — dépôt principal refusé, Pinata prend le relais — et
-  // personne ne voit qu'on a cessé d'être souverain.
-  let cleDataspace = ''
-  try {
-    cleDataspace = await jetonDataspace()
-  } catch (err) {
-    console.warn(`  ⚠ jeton data-space indérivable : ${(err as Error).message.slice(0, 140)}`)
-  }
-  let pin: { cid: string; size: number } | null = null
-
-  if (cleDataspace) {
-    console.log('\n📡 Dépôt data-space (principal)…')
-    try {
-      const r = await dataspacePinFile(opusBlob, nomFichier, 'audio/ogg', cleDataspace)
-      pin = { cid: r.cid, size: r.size }
-      console.log(`    ✓ CID ${r.cid} (${(r.size / 1024 / 1024).toFixed(1)} MB)`)
-    } catch (err) {
-      // Un dépôt principal en panne ne doit pas faire perdre la nuit :
-      // Pinata prend le relais juste en dessous. Mais on le DIT — sans
-      // cette ligne, on croirait être souverain en payant un tiers.
-      console.warn(`    ⚠ data-space a refusé : ${(err as Error).message.slice(0, 140)}`)
-      console.warn(`      → repli sur Pinata pour CETTE émission.`)
+  const cleDataspace = await (async () => {
+    try { return await jetonDataspace() } catch (err) {
+      console.warn(`  ⚠ jeton data-space indérivable : ${(err as Error).message.slice(0, 140)}`)
+      return ''
     }
-  } else {
-    console.log('\n· Ni DATASPACE_API_KEY ni DATASPACE_NOSTR_KEY — dépôt principal sauté, Pinata seul.')
+  })()
+  if (!cleDataspace) {
+    throw new Error(
+      'Aucun jeton data-space : impossible de déposer l\'émission. '
+      + 'Définir DATASPACE_NOSTR_KEY (préférée, ne périme pas) ou DATASPACE_API_KEY.',
+    )
   }
 
-  // Pinata : second dépôt quand data-space a réussi (redondance), ou
-  // dépôt de secours quand il a échoué.
+  // 🔴 DÉPÔT UNIQUE, décision du Bâtisseur (09/09/2026) : « on ne travaille
+  // plus avec Pinata, uniquement avec data-space ».
   //
-  // 🔴 Le double épinglage n'est pas un luxe : nos 14 premiers CID de voix
-  // ne répondaient plus sur AUCUNE passerelle parce qu'ils avaient été
-  // publiés sans jamais être épinglés. Sur IPFS, publier n'est pas
-  // conserver — et un seul dépôt reste un point unique de défaillance.
-  if (pinataJwt) {
-    const role = pin ? 'second' : 'secours'
-    console.log(`\n📡 Dépôt Pinata (${role})…`)
-    try {
-      const p = await pinataPinFile(opusBlob, nomFichier, 'audio/ogg', pinataJwt,
-        { station: stationId, date: targetDate })
-      console.log(`    ✓ CID ${p.cid} (${(p.size / 1024 / 1024).toFixed(1)} MB)`)
-      if (!pin) pin = { cid: p.cid, size: p.size }
-    } catch (err) {
-      const m = (err as Error).message.slice(0, 140)
-      if (!pin) throw new Error(`Les DEUX dépôts ont échoué. Pinata : ${m}`)
-      console.warn(`    ⚠ Pinata a refusé : ${m} — l'émission n'a qu'UN épinglage.`)
-    }
-  }
-
-  if (!pin) throw new Error('Aucun dépôt IPFS configuré : ni DATASPACE_API_KEY ni PINATA_JWT.')
+  // Conséquence assumée : plus de second épinglage. Si data-space refuse,
+  // l'émission n'est pas publiée du tout — au lieu d'être publiée avec un
+  // CID que data-space ne sert pas. Échouer franchement vaut mieux que
+  // publier une émission muette.
+  console.log('\n📡 Dépôt data-space…')
+  const dep = await dataspacePinFile(opusBlob, nomFichier, 'audio/ogg', cleDataspace)
+  const pin = { cid: dep.cid, size: dep.size }
+  console.log(`    ✓ CID ${dep.cid} (${(dep.size / 1024 / 1024).toFixed(1)} MB) — relu et vérifié`)
 
   // 5. Publish NOSTR
   console.log('\n📨 Publish NOSTR kind:30093…')
