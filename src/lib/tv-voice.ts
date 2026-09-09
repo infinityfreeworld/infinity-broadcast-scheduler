@@ -26,8 +26,19 @@ import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice, isVoice
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry, type DecodedWav } from './audio'
 import type { TvConductor } from './tv-types'
 
-/** Voix par défaut du JT (registre posé, testée pour la radio). */
-export const DEFAULT_TV_VOICE = 'fr_FR-tom-medium'
+/**
+ * Voix par défaut du JT.
+ *
+ * ⚠️ PAS `fr_FR-tom-medium` : elle est sous **AGPLv3** et a été écartée du
+ * registre par l'audit de licences du 04/08/2026 (cf. `voix-licences.ts`). Elle
+ * était pourtant le défaut de ce module jusqu'au 09/09/2026 — le JT aurait donc
+ * été mis à l'antenne avec une voix non commercialisable, sous la règle même du
+ * fondateur. C'est le rebasage sur la radio souveraine qui l'a fait apparaître.
+ *
+ * `siwis` est **CC BY 4.0, commercialement autorisée**, et demande une
+ * attribution (portée par `voix-licences.ts`).
+ */
+export const DEFAULT_TV_VOICE = 'fr_FR-siwis-medium'
 
 /** Temps laissé à l'image après la dernière syllabe, avant de couper le plan. */
 const RESPIRATION_S = 0.6

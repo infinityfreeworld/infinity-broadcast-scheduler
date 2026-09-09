@@ -17,6 +17,7 @@
 import { timingsFromEntries, silence, withTail, DEFAULT_TV_VOICE } from '../lib/tv-voice'
 import { applyTimings, buildEpg, buildShots, totalDuration, buildProgram } from '../lib/tv-assemble'
 import { isVoiceSupported } from '../lib/piper'
+import { voixCommercialisable, licenceDe } from '../lib/voix-licences'
 import { readFileSync } from 'node:fs'
 import type { TvConductor, TvChannelConfig } from '../lib/tv-types'
 
@@ -88,6 +89,13 @@ console.log('\n— Les briques audio —')
     avec.samples.length === 22050 + 13230 && avec.samples[0] === 0.5 && avec.samples[30000] === 0)
   chk('une respiration nulle ne copie rien', withTail(parle, 0).samples.length === 22050)
   chk(`la voix par défaut (${DEFAULT_TV_VOICE}) existe dans le registre Piper`, isVoiceSupported(DEFAULT_TV_VOICE))
+  // ⭐ Être PRÉSENTE ne suffit pas : la voix du JT part à l'antenne d'un service
+  // commercial. Le défaut de ce module a été `fr_FR-tom-medium` jusqu'au
+  // 09/09/2026 — AGPLv3, écartée par l'audit du 04/08. Elle passait le test
+  // ci-dessus tant qu'elle était au registre ; celui-ci l'aurait arrêtée.
+  const lic = licenceDe(DEFAULT_TV_VOICE)
+  chk(`⭐ la voix du JT est COMMERCIALISABLE (${lic?.licence ?? 'licence inconnue'})`,
+    voixCommercialisable(DEFAULT_TV_VOICE))
 }
 
 console.log('\n— Un segment MUET tient quand même sa place —')
