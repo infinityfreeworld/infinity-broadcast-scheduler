@@ -79,7 +79,12 @@ export function buildProgram(
     channelId: channel.id,
     title: conductor.title,
     videoCid: render?.ipfs,
+    // L'URL de la forge reste un SECOURS, jamais l'unique adresse : elle sert
+    // à jouer tout de suite, le CID à survivre au domaine.
     blossomUrl: render && !render.ipfs ? render.url : undefined,
+    // La vignette évite le rectangle noir sur la grille des chaînes. On
+    // préfère son CID à son URL, pour la même raison que la vidéo.
+    poster: render?.poster?.ipfs ?? render?.poster?.url,
     durationSec: render?.durationSec ?? totalDuration(conductor),
     airDateMs,
     segments: buildEpg(conductor),

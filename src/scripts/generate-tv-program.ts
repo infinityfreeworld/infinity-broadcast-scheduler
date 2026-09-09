@@ -25,7 +25,7 @@ import 'dotenv/config'
 import { findChannel } from '../data/seed-tv-channels'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { generateConductor } from '../lib/tv-conductor'
-import { generateImage, renderTimeline, uploadMedia } from '../lib/waf'
+import { generateImage, renderTimeline, uploadMedia, attendreCid } from '../lib/waf'
 import { buildShots, buildProgram, totalDuration, applyTimings } from '../lib/tv-assemble'
 import { synthesizeConductor, DEFAULT_TV_VOICE } from '../lib/tv-voice'
 import { tvProgramEventTemplate, publishTvProgram } from '../lib/tv-nostr'
@@ -127,6 +127,25 @@ async function main() {
       prompt: conductor.title,
     })
     console.log(`      → ${render.durationSec}s · ${render.ipfs ? `CID ${render.ipfs}` : `url ${render.url}`}`)
+    if (render.poster) console.log(`      vignette → asset ${render.poster.id}`)
+
+    // ── 4 bis) Attendre l'adresse PERMANENTE ────────────────────────────────
+    //    La forge épingle après avoir répondu : le CID n'existe pas encore
+    //    ci-dessus. Sans cette attente, le programme part avec la seule URL de
+    //    la forge et devient injouable le jour où cette adresse change.
+    if (!render.ipfs && !plan) {
+      process.stdout.write('   📌 épinglage IPFS…')
+      // En mode fixture, on éprouve le CHEMIN sans faire attendre : une
+      // démonstration locale n'a pas d'épinglage à attendre, et 90 s de
+      // silence donnent l'impression que le programme a planté.
+      const cid = await attendreCid(render.id, fixture ? { timeoutMs: 10_000 } : {})
+      if (cid) { render = { ...render, ipfs: cid }; console.log(` CID ${cid}`) }
+      else console.log(' pas encore épinglé — on publie avec l’URL de la forge (secours)')
+      if (render.poster && !render.poster.ipfs) {
+        const pc = await attendreCid(render.poster.id, { timeoutMs: 20_000 })
+        if (pc) render = { ...render, poster: { ...render.poster, ipfs: pc } }
+      }
+    }
   }
 
   // ── 5) Programme + event ──────────────────────────────────────────────────
