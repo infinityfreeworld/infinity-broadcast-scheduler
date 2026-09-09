@@ -82,6 +82,28 @@ let jetonResolu: string | null = null
  */
 let echeanceClone = 0
 
+/**
+ * Échéance ABSOLUE de la nuit entière, transmise aux sous-processus.
+ *
+ * 🔴 POURQUOI UNE ÉCHÉANCE GLOBALE EN PLUS DE CELLE PAR STATION
+ * `ouvrirEcheanceClone()` est appelée DANS chaque `generate-broadcast`,
+ * donc chaque station repart avec ses 55 minutes. Quatre stations à voix
+ * clonée = 220 minutes rien qu'en attente, plus les onze autres : une
+ * nuit peut durer 5 h 30 et déborder sur le matin.
+ *
+ * Une échéance par station borne UNE station. Elle ne borne pas la NUIT.
+ *
+ * `generate-all` pose donc un instant absolu que tous les enfants
+ * respectent : passé cet instant, plus personne n'attend le GPU, tout
+ * part en synthèse locale et la nuit se termine.
+ */
+export function echeanceNuitPassee(): boolean {
+  const brut = process.env.CHATTERBOX_FIN_NUIT
+  if (!brut) return false
+  const t = Number.parseInt(brut, 10)
+  return Number.isFinite(t) && Date.now() > t
+}
+
 export function ouvrirEcheanceClone(secondes = Number.parseInt(
   process.env.CHATTERBOX_ECHEANCE_S ?? '1200', 10,
 )): void {
@@ -417,6 +439,11 @@ export async function pingUntilReady(
  * plutôt que de nous acharner.
  */
 export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Promise<Buffer> {
+  if (echeanceNuitPassee()) {
+    throw new ChatterboxError(
+      'échéance de la NUIT dépassée — plus de voix clonée ce soir, repli Piper', 408,
+    )
+  }
   if (echeanceClonePassee()) {
     throw new ChatterboxError(
       'échéance de synthèse clonée dépassée pour cette émission — repli Piper', 408,

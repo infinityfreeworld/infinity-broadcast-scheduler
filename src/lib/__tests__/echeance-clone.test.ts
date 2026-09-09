@@ -177,3 +177,40 @@ test("🔴 le plafond court depuis l'OUVERTURE — ouvrir tôt raccourcit la cou
   const iOuvre = src.indexOf('await ouvrirSessionDiffusion(minutes)')
   assert.ok(iRefus > 0 && iRefus < iOuvre, "le refus doit précéder l'ouverture")
 })
+
+test("🔴 une échéance PAR STATION ne borne pas la NUIT", () => {
+  // `ouvrirEcheanceClone()` est appelée DANS chaque generate-broadcast :
+  // chaque station repart avec ses 55 minutes. Quatre stations à voix
+  // clonée = 220 min d'attente possible, plus les onze autres — une nuit
+  // de 5 h 30 qui déborde sur le matin.
+  //
+  // Borner une station n'est pas borner la nuit. `generate-all` pose donc
+  // un INSTANT ABSOLU que tous les enfants respectent.
+  const src = readFileSync(SRC, 'utf8')
+  assert.match(src, /export function echeanceNuitPassee/)
+  // Et elle doit être consultée AVANT l'échéance de station : la nuit
+  // l'emporte sur l'émission.
+  const corps = /export async function synthesizeWithChatterbox[\s\S]*?\n}/.exec(src)?.[0] ?? ''
+  const iNuit = corps.indexOf('echeanceNuitPassee')
+  const iStation = corps.indexOf('echeanceClonePassee')
+  assert.ok(iNuit > 0, 'la synthèse doit consulter l\'échéance de nuit')
+  assert.ok(iNuit < iStation, 'la nuit doit primer sur la station')
+})
+
+test('les stations à voix clonée passent EN TÊTE de la nuit', () => {
+  // Dispersées, chacune repaie un réveil de 35 min. Le tri existait pour
+  // la matrice GitHub et n'était pas appliqué à la production locale —
+  // un outil écrit puis oublié à l'endroit qui compte.
+  const ga = readFileSync(new URL('../../scripts/generate-all.ts', import.meta.url), 'utf8')
+  assert.match(ga, /const ordreNuit = \[/)
+  assert.match(ga, /avecGpu\.has\(s\.id\)/)
+  assert.ok(!/for \(const station of SEED_STATIONS\) \{/.test(ga),
+    'la boucle ne doit plus parcourir la seed dans son ordre brut')
+})
+
+test("generate-all pose l'instant de fin AVANT de lancer les stations", () => {
+  const ga = readFileSync(new URL('../../scripts/generate-all.ts', import.meta.url), 'utf8')
+  const iFin = ga.indexOf('CHATTERBOX_FIN_NUIT')
+  const iBoucle = ga.indexOf('for (const station of ordreNuit)')
+  assert.ok(iFin > 0 && iFin < iBoucle, "l'instant de fin doit précéder la boucle")
+})

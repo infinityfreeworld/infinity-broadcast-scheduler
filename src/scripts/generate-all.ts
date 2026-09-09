@@ -15,6 +15,7 @@
  */
 
 import 'dotenv/config'
+import { getChatterboxVoiceForHost } from '../lib/chatterbox'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { SEED_STATIONS } from '../data/seed-stations'
@@ -170,7 +171,36 @@ async function main() {
   const startedAt = Date.now()
   const results: Array<{ stationId: string; ok: boolean; error?: string }> = []
 
-  for (const station of SEED_STATIONS) {
+  // 🔴 Les stations à voix clonée passent EN TÊTE. Sans ce tri, elles sont
+  // dispersées dans l'ordre de la seed et CHACUNE repaie un réveil complet
+  // de 35 minutes. Groupées, elles se partagent une seule station chaude.
+  // Le tri existait pour la matrice GitHub (`lister-stations.ts`) et n'était
+  // pas appliqué ici — un outil écrit puis oublié à l'endroit qui compte.
+  const avecGpu = new Set<string>()
+  for (const st of SEED_STATIONS) {
+    const lg = st.language ?? 'fr'
+    const parAnimateur = st.hosts
+      .map(h => getChatterboxVoiceForHost(st.id, h.id, lg))
+      .find((v): v is string => !!v)
+    if (parAnimateur) avecGpu.add(st.id)
+  }
+  const ordreNuit = [
+    ...SEED_STATIONS.filter(s => avecGpu.has(s.id)),
+    ...SEED_STATIONS.filter(s => !avecGpu.has(s.id)),
+  ]
+  if (avecGpu.size > 0) {
+    console.log(`\n🎭 ${avecGpu.size} station(s) à voix clonée passent en tête : `
+      + `${[...avecGpu].join(', ')}`)
+  }
+
+  // Instant absolu au-delà duquel PLUS AUCUNE station n'attend le GPU.
+  // Une échéance par station borne une station, pas la nuit.
+  const budgetNuitMin = Number.parseInt(process.env.CHATTERBOX_NUIT_MINUTES ?? '150', 10)
+  process.env.CHATTERBOX_FIN_NUIT = String(Date.now() + budgetNuitMin * 60_000)
+  console.log(`⏳ voix clonées jusqu'à ${new Date(Number(process.env.CHATTERBOX_FIN_NUIT))
+    .toLocaleTimeString('fr-FR')} — ensuite, tout en synthèse locale.`)
+
+  for (const station of ordreNuit) {
     console.log(`\n────────────────────────────────────────────────────────────`)
     console.log(`▶ ${station.name} (${station.id})`)
     console.log(`────────────────────────────────────────────────────────────`)
