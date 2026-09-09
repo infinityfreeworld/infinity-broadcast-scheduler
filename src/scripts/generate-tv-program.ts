@@ -14,6 +14,10 @@
  *                  programme + l'EVENT TV_PROGRAM qui SERAIT publié. Zéro réseau.
  *     --muet       saute la synthèse vocale (repli de secours : le programme
  *                  part sans voix, comme avant le 08/09/2026).
+ *     --fixture    chaîne COMPLÈTE (voix + images + montage) sur un conducteur
+ *                  d'exemple, SANS clé de langage et SANS publication. Sert à
+ *                  éprouver le montage de bout en bout, et à regarder le
+ *                  résultat avant de mettre une chaîne à l'antenne.
  *
  *   Usage : tsx src/scripts/generate-tv-program.ts [channelId] [--dry-run|--plan|--muet]
  */
@@ -35,9 +39,12 @@ function fixtureConductor(channel: TvChannelConfig): TvConductor {
   return {
     title: `${channel.name} — épisode de démonstration`,
     segments: [
-      { title: 'Ouverture', subtitle: 'Le tour des solutions', imagePrompt: 'wide cinematic sunrise over a green city, solar panels, calm', durationSec: 6 },
-      { title: 'Initiative locale', subtitle: 'Un jardin partagé', imagePrompt: 'community garden, people planting vegetables, warm light', narration: 'À deux pas, un terrain vague est devenu jardin nourricier.', durationSec: 8 },
-      { title: 'Technologie libre', imagePrompt: 'open-source hardware workshop, hands soldering, focused', durationSec: 7 },
+      { title: 'Ouverture', subtitle: 'Le tour des solutions', imagePrompt: 'wide cinematic sunrise over a green city, solar panels, calm',
+        narration: "Bonsoir à toutes et à tous, bienvenue dans le journal des solutions.", durationSec: 6 },
+      { title: 'Initiative locale', subtitle: 'Un jardin partagé', imagePrompt: 'community garden, people planting vegetables, warm light',
+        narration: "À deux pas d'ici, un terrain vague est devenu un jardin nourricier ; les habitants y récoltent aujourd'hui leurs premiers légumes.", durationSec: 8 },
+      { title: 'Technologie libre', subtitle: 'Réparer plutôt que jeter', imagePrompt: 'open-source hardware workshop, hands soldering, focused',
+        narration: "Dans cet atelier, on répare ce que l'industrie destinait à la benne, et les plans circulent librement.", durationSec: 7 },
     ],
   }
 }
@@ -48,14 +55,18 @@ async function main() {
   const plan = arg('--plan')
   const dry = arg('--dry-run')
   const muet = arg('--muet')
+  // Chaîne COMPLÈTE (voix, images, montage) mais sur un conducteur d'exemple et
+  // sans publication : la seule façon d'éprouver le montage de bout en bout sans
+  // clé de langage, sans relais, et sans mettre une démonstration à l'antenne.
+  const fixture = arg('--fixture')
   const airDateMs = Number(process.env.TV_AIR_MS) || Date.parse(new Date().toISOString().slice(0, 10))
 
   console.log(`\n📺 Génération TV — chaîne « ${channel.name} » (${channel.id})`)
-  console.log(`   mode : ${plan ? 'PLAN (hors-ligne)' : dry ? 'DRY-RUN (LLM seul)' : muet ? 'COMPLET (sans voix)' : 'COMPLET'}\n`)
+  console.log(`   mode : ${plan ? 'PLAN (hors-ligne)' : dry ? 'DRY-RUN (LLM seul)' : fixture ? 'FIXTURE (chaîne complète, sans publication)' : muet ? 'COMPLET (sans voix)' : 'COMPLET'}\n`)
 
   // ── 1) Conducteur ─────────────────────────────────────────────────────────
   let conductor: TvConductor
-  if (plan) {
+  if (plan || fixture) {
     conductor = fixtureConductor(channel)
   } else {
     const apiKey = process.env.ANTHROPIC_API_KEY
@@ -130,6 +141,14 @@ async function main() {
     console.log('\n   📡 Event NOSTR qui SERAIT publié (kind 30184) :')
     console.log('   ' + JSON.stringify(evt, null, 2).replace(/\n/g, '\n   '))
     console.log('\n✅ PLAN terminé (hors-ligne). Aucune publication.')
+    return
+  }
+
+  if (fixture) {
+    console.log('\n   📦 Programme produit :')
+    console.log('   ' + JSON.stringify(program, null, 2).replace(/\n/g, '\n   '))
+    console.log(`\n✅ FIXTURE terminé — la vidéo est là, RIEN n'a été publié.`)
+    if (render) console.log(`   ▶ ${render.url}${render.ipfs ? `\n   ▶ ipfs ${render.ipfs}` : ''}`)
     return
   }
 
