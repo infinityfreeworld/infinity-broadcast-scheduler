@@ -23,7 +23,7 @@ import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/hos
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { fetchPulse, exportPulseToEnv } from '../lib/pulse'
-import { fetchRadioPersonas, exportRadioPersonasToEnv } from '../lib/radio-personas'
+import { fetchRadioPersonas, exportRadioPersonasToEnv, unifiedGuestsForStation, resolvePersonaForStation } from '../lib/radio-personas'
 
 const exec = promisify(execFile)
 
@@ -149,13 +149,30 @@ async function main() {
   // de 35 minutes. Groupées, elles se partagent une seule station chaude.
   // Le tri existait pour la matrice GitHub (`lister-stations.ts`) et n'était
   // pas appliqué ici — un outil écrit puis oublié à l'endroit qui compte.
+  // 🔴 Il faut regarder les INVITÉS autant que les animateurs.
+  //
+  // La première version de ce tri ne consultait que les animateurs. Or les
+  // voix de personnage viennent surtout des personas d'invités — et depuis
+  // que le durcissement par auteur a écarté la seule association
+  // d'animateur contestée (`pirate-radio:pi-hex` → « alain »), PLUS AUCUNE
+  // station n'avait de voix d'animateur.
+  //
+  // Résultat : le tri rendait ZÉRO station en tête. Il ne triait rien, sans
+  // jamais échouer — les quatre stations à voix clonée restaient dispersées
+  // et repayaient chacune un réveil de 35 minutes.
+  //
+  // Même logique que `lister-stations.ts`, qui la tenait juste depuis le
+  // début. Deux endroits doivent s'accorder ; un test le vérifie.
   const avecGpu = new Set<string>()
   for (const st of SEED_STATIONS) {
     const lg = st.language ?? 'fr'
+    const invites = unifiedGuestsForStation(st.id, lg)
+    const parInvite = invites.length
+      ? resolvePersonaForStation(invites[0], st.id).voiceName : undefined
     const parAnimateur = st.hosts
       .map(h => getChatterboxVoiceForHost(st.id, h.id, lg))
       .find((v): v is string => !!v)
-    if (parAnimateur) avecGpu.add(st.id)
+    if (parInvite || parAnimateur) avecGpu.add(st.id)
   }
   const ordreNuit = [
     ...SEED_STATIONS.filter(s => avecGpu.has(s.id)),

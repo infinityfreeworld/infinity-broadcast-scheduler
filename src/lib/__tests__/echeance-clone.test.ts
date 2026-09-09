@@ -214,3 +214,27 @@ test("generate-all pose l'instant de fin AVANT de lancer les stations", () => {
   const iBoucle = ga.indexOf('for (const station of ordreNuit)')
   assert.ok(iFin > 0 && iFin < iBoucle, "l'instant de fin doit précéder la boucle")
 })
+
+test("🔴 le tri de nuit et celui de la matrice CONSULTENT LA MÊME CHOSE", () => {
+  // Mon tri ne regardait que les animateurs. Les voix de personnage
+  // viennent surtout des personas d'INVITÉS — et depuis que le
+  // durcissement par auteur a écarté la seule association d'animateur
+  // contestée, plus aucune station n'en avait.
+  //
+  // Le tri rendait donc ZÉRO station en tête. Il ne triait rien, sans
+  // jamais échouer : les stations à voix clonée restaient dispersées et
+  // repayaient chacune 35 minutes de réveil.
+  //
+  // `lister-stations.ts` tenait le critère juste depuis le début. Deux
+  // endroits doivent s'accorder — un accord tacite finit par diverger.
+  const ga = readFileSync(new URL('../../scripts/generate-all.ts', import.meta.url), 'utf8')
+  const ls = readFileSync(new URL('../../scripts/lister-stations.ts', import.meta.url), 'utf8')
+  for (const [nom, src] of [['generate-all', ga], ['lister-stations', ls]] as const) {
+    assert.match(src, /unifiedGuestsForStation\(st\.id, lg\)/,
+      `${nom} doit consulter les invités`)
+    assert.match(src, /getChatterboxVoiceForHost\(st\.id, h\.id, lg\)/,
+      `${nom} doit consulter les animateurs`)
+    assert.match(src, /parInvite \|\| parAnimateur/,
+      `${nom} doit retenir une station si l'un OU l'autre a une voix`)
+  }
+})
