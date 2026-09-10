@@ -17,7 +17,7 @@ texte autour, de la forme :
   "segments": [
     { "title": "titre court du plan (lower-third)", "subtitle": "accroche courte",
       "imagePrompt": "prompt visuel en anglais, cinématique, 16:9, sans texte incrusté",
-      "narration": "1 à 2 phrases de voix-off", "durationSec": 8 }
+      "narration": "1 à 2 phrases de voix-off", "role": "plateau" ou "terrain", "durationSec": 8 }
   ]
 }
 Règles : segments concis, imagePrompt DESCRIPTIF et visuel (pas de mots dans l'image),
@@ -32,6 +32,13 @@ Emploie leur vocabulaire tel quel — une Manifestaction est une Manifestaction,
 « manifestation » ni un « événement ». Nomme le lieu et la date quand ils sont donnés.
 Une proposition soumise au vote se rapporte comme un débat EN COURS : jamais comme une
 décision acquise, jamais en prenant parti.
+
+⚠️ DEUX VOIX SE RÉPONDENT, ELLES NE SE RELAIENT PAS. Le champ "role" dit qui parle : « plateau »
+présente et relance, « terrain » rapporte ce qu'il a vu. Le PREMIER segment est toujours
+« plateau » (un journal s'ouvre en studio). Écris un vrai passage de parole : le plateau
+termine sur une relance (« … et sur place, qu'est-ce qu'on observe ? »), le terrain répond en
+enchaînant. Quatre paragraphes lus l'un après l'autre par deux timbres différents, ce n'est
+pas un dialogue — c'est deux monologues.
 
 ⚠️ TU N'INVENTES AUCUN CHIFFRE, aucun nom de participant, aucun résultat. Si une
 actualité ne dit pas combien ils étaient, le JT ne le dit pas non plus.`
@@ -55,6 +62,7 @@ function sanitizeSegments(raw: unknown, want: number): TvSegment[] {
       subtitle:    s.subtitle ? String(s.subtitle).slice(0, 120) : undefined,
       imagePrompt: String(s.imagePrompt ?? s.title ?? '').slice(0, 400),
       narration:   s.narration ? String(s.narration).slice(0, 400) : undefined,
+      role: s.role === 'terrain' ? ('terrain' as const) : s.role === 'plateau' ? ('plateau' as const) : undefined,
       durationSec: Math.min(12, Math.max(5, Number(s.durationSec) || 8)),
     }))
     .filter(s => s.title && s.imagePrompt)

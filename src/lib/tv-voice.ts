@@ -40,6 +40,32 @@ import type { TvConductor } from './tv-types'
  */
 export const DEFAULT_TV_VOICE = 'fr_FR-siwis-medium'
 
+/**
+ * Voix du TERRAIN — le second timbre, celui qui fait qu'on entend un ÉCHANGE.
+ *
+ * 🚨 Retour du Bâtisseur : « pas une vidéo construite avec des dialogues ». Une seule voix qui
+ * récite quatre sujets s'entend comme une lecture. Deux rôles suffisent : le plateau présente
+ * et relance, le terrain rapporte.
+ *
+ * `gilles` est **CC0**, donc commercialisable sans même une attribution — la règle du fondateur
+ * est respectée sans dette. Elle échantillonne à 16 kHz quand `siwis` est à 22,05 : ce n'est PAS
+ * un problème, `concatWavs` rééchantillonne vers la cadence de la PREMIÈRE entrée. Mais cela
+ * veut dire que l'ordre compte, et qu'un JT qui commencerait par le terrain serait assemblé en
+ * 16 kHz. Le plateau ouvre donc toujours (cf. `roleDuPlan`).
+ */
+export const VOIX_TERRAIN = 'fr_FR-gilles-low'
+
+/**
+ * Qui parle le plan `index` : le rôle demandé, sinon une ALTERNANCE plateau → terrain.
+ *
+ * ⚠️ LE PREMIER PLAN EST TOUJOURS AU PLATEAU. Deux raisons, et les deux comptent : un journal
+ * s'ouvre en studio, et la première entrée fixe la cadence d'échantillonnage de toute la bande.
+ */
+export function roleDuPlan(role: 'plateau' | 'terrain' | undefined, index: number): 'plateau' | 'terrain' {
+  if (index === 0) return 'plateau'
+  return role ?? (index % 2 === 1 ? 'terrain' : 'plateau')
+}
+
 /** Temps laissé à l'image après la dernière syllabe, avant de couper le plan. */
 const RESPIRATION_S = 0.6
 
@@ -120,26 +146,38 @@ function round2(n: number): number {
  */
 export async function synthesizeConductor(
   conductor: TvConductor,
-  opts: { voiceId?: string } = {},
+  opts: { voiceId?: string; dialogue?: boolean } = {},
 ): Promise<TvVoiceTrack> {
   const voiceId = opts.voiceId ?? DEFAULT_TV_VOICE
   if (!isVoiceSupported(voiceId)) {
     throw new Error(`Voix TV non supportée : ${voiceId} (voir VOICE_REGISTRY de piper.ts)`)
   }
+  // ⚠️ LE DIALOGUE EST UN CONFORT, JAMAIS UNE CONDITION. Si la seconde voix n'est pas
+  // disponible (registre, licence, téléchargement impossible sur l'exécuteur), on n'échoue
+  // PAS : on fait le JT à une voix. Un journal monocorde vaut mieux qu'un journal muet — et
+  // c'est exactement l'erreur qu'on a déjà faite en laissant un repli masquer une panne, donc
+  // on le DIT dans le journal d'exécution au lieu de le taire.
+  const dialogue = opts.dialogue !== false && isVoiceSupported(VOIX_TERRAIN)
+  if (opts.dialogue !== false && !dialogue) {
+    console.log(`   ⚠️  voix du terrain (${VOIX_TERRAIN}) indisponible — JT à UNE voix`)
+  }
   await ensurePiperBinary()
   await ensureVoice(voiceId)
+  if (dialogue) await ensureVoice(VOIX_TERRAIN)
   const rate = getVoiceSampleRate(voiceId)
 
   const entries: ConcatEntry[] = []
   let spokenCount = 0
-  for (const seg of conductor.segments) {
+  for (const [index, seg] of conductor.segments.entries()) {
+    const role = roleDuPlan(seg.role, index)
+    const voixDuPlan = dialogue && role === 'terrain' ? VOIX_TERRAIN : voiceId
     const texte = (seg.narration ?? '').trim()
     if (!texte) {
       // Plan muet (illustration, ouverture) : il tient sa durée prévue.
       entries.push({ wav: silence(Math.max(PLAN_MIN_S, seg.durationSec || PLAN_MIN_S), rate) })
       continue
     }
-    const wavPath = await synthesize(texte, voiceId)
+    const wavPath = await synthesize(texte, voixDuPlan)
     const dit = readWav(wavPath)
     // Le plan ne peut pas être plus court que sa phrase : on part de la voix,
     // on ajoute la respiration, et on ne descend jamais sous le plancher de

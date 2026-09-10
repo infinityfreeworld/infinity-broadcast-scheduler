@@ -39,8 +39,18 @@ export interface TvSegment {
   subtitle?: string
   /** Prompt d'image (envoyé à WAF pour générer le visuel du plan). */
   imagePrompt: string
-  /** Voix-off (narration) — utilisée plus tard pour le TTS (optionnel en v0). */
+  /** Voix-off (narration) — synthétisée par `tv-voice`. */
   narration?: string
+  /**
+   * QUI parle ce plan.
+   *
+   * 🚨 Retour du Bâtisseur (09/09/2026) : « pas une vidéo construite avec des dialogues ». Une
+   * seule voix qui récite quatre sujets d'affilée s'entend comme une lecture, pas comme un
+   * journal. Deux rôles suffisent à créer l'échange : le PLATEAU présente et relance, le
+   * TERRAIN rapporte. Le rôle est éditorial — c'est `tv-voice` qui décide de la voix, et
+   * `voix-licences.ts` qui décide si elle est utilisable.
+   */
+  role?: 'plateau' | 'terrain'
   /** Durée du plan, en secondes. */
   durationSec: number
 }
