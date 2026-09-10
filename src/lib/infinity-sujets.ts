@@ -33,6 +33,28 @@ export const KIND_PROPOSITION_DAV = 31600
 
 /** Au-delà, un sujet n'est plus une actualité. */
 const FENETRE_JOURS = 45
+
+/**
+ * 🚨 LA FORME NE SUFFIT PAS — mesuré le 10/09/2026 au soir.
+ *
+ * Sur 28 events récents des trois kinds, 27 venaient d'AUTRES applications (contenus
+ * `{spec, version, type…}`, `{protocol, payload…}`, `{Heartbeat}`…) : le filtre de forme les a
+ * bien écartés. Le 28e était une Manifestaction Infinity bien formée — titre « jdfdosij »,
+ * AUCUNE description, statut ANNULÉ, datée du 2 août. Elle est passée. Le JT du soir en a
+ * tiré « Les Gardiens du Vivant — Samedi 2 août, Valais », d'une voix posée.
+ *
+ * Trois règles de plus, chacune tirée de ce cas réel :
+ *   • on ne raconte pas ce qu'on ne peut pas raconter : une description d'au moins
+ *     DESCRIPTION_MIN caractères est exigée ;
+ *   • une action annulée ou en brouillon n'est pas une nouvelle ;
+ *   • un événement terminé depuis plus de PASSE_TOLERANCE_J jours n'est plus une actualité,
+ *     et un événement récent est présenté AU BON TEMPS (à venir, en cours, terminé).
+ */
+export const DESCRIPTION_MIN = 40
+const STATUTS_ECARTES = new Set(['cancelled', 'canceled', 'annulee', 'annulée', 'draft', 'brouillon'])
+const PASSE_TOLERANCE_J = 2
+const JOUR_MS = 24 * 3600 * 1000
+const dateFr = (ms: number) => new Date(ms).toLocaleDateString('fr-FR')
 /** Borne de requête : de quoi couvrir la fenêtre sans inonder les relais. */
 const LIMITE = 300
 
@@ -52,17 +74,24 @@ const texte = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
  * Manifestactions fantômes qui polluaient le moniteur. On applique la MÊME règle : un JT qui
  * annonce « Pas de description » est pire qu'un JT qui n'en parle pas.
  */
-export function lireManifestaction(e: NostrEvent): NewsItem | null {
+export function lireManifestaction(e: NostrEvent, maintenant = Date.now()): NewsItem | null {
   const c = contenu(e)
   if (!c) return null
   const titre = texte(c.title)
   const desc = texte(c.description)
-  if (!titre && !desc) return null
+  if (desc.length < DESCRIPTION_MIN) return null
+  if (STATUTS_ECARTES.has(texte(c.status).toLowerCase())) return null
+  const debut = Number(c.startDate) > 0 ? Number(c.startDate) : undefined
+  const fin = Number(c.endDate) > 0 ? Number(c.endDate) : debut
+  if (fin && fin < maintenant - PASSE_TOLERANCE_J * JOUR_MS) return null
   const lieu = texte(c.location) || (e.tags.find((t) => t[0] === 'g')?.[1] ?? '')
-  const quand = typeof c.startDate === 'number' ? c.startDate : undefined
   const parts = [desc.slice(0, 200)]
   if (lieu) parts.push(`Lieu : ${lieu}`)
-  if (quand) parts.push(`Date : ${new Date(quand).toLocaleDateString('fr-FR')}`)
+  // Le TEMPS est dit, pas laissé à deviner : un conducteur à qui l'on donne une date nue
+  // l'annonce au présent — c'est exactement ce qui est arrivé au « 2 août ».
+  if (debut && debut > maintenant) parts.push(`Date : ${dateFr(debut)} (à venir)`)
+  else if (fin && fin >= maintenant) parts.push(`Date : depuis le ${dateFr(debut ?? fin)} (en cours)`)
+  else if (fin) parts.push(`Date : ${dateFr(fin)} (terminée — à rapporter au passé)`)
   return {
     title: titre || desc.slice(0, 80),
     summary: parts.filter(Boolean).join(' · '),
@@ -80,6 +109,7 @@ export function lireProjetAbondance(e: NostrEvent): NewsItem | null {
   const objectif = Number(c.goal)
   if (!Number.isFinite(objectif) || objectif <= 0) return null
   const desc = texte(c.description)
+  if (desc.length < DESCRIPTION_MIN) return null
   const categorie = e.tags.find((t) => t[0] === 'category')?.[1] ?? ''
   const parts = [desc.slice(0, 200)]
   if (categorie) parts.push(`Catégorie : ${categorie}`)
@@ -99,7 +129,7 @@ export function lireProjetAbondance(e: NostrEvent): NewsItem | null {
  * son auteur peut encore la réécrire entièrement. L'annoncer, ce serait rapporter une décision
  * que personne n'a prise.
  */
-export function lirePropositionDav(e: NostrEvent): NewsItem | null {
+export function lirePropositionDav(e: NostrEvent, maintenant = Date.now()): NewsItem | null {
   const c = contenu(e)
   if (!c) return null
   const titre = texte(c.title)
@@ -107,7 +137,10 @@ export function lirePropositionDav(e: NostrEvent): NewsItem | null {
   const statut = texte(c.status) || (e.tags.find((t) => t[0] === 'status')?.[1] ?? '')
   if (statut && statut !== 'open') return null
   const desc = texte(c.description)
+  if (desc.length < DESCRIPTION_MIN) return null
   const echeance = Number(c.expiresAt)
+  // Un vote dont l'échéance est passée est CLOS, même si son statut n'a pas été mis à jour.
+  if (Number.isFinite(echeance) && echeance > 0 && echeance < maintenant) return null
   const parts = [desc.slice(0, 200)]
   if (Number.isFinite(echeance) && echeance > 0) {
     parts.push(`Vote ouvert jusqu'au ${new Date(echeance).toLocaleDateString('fr-FR')}`)
@@ -122,7 +155,7 @@ export function lirePropositionDav(e: NostrEvent): NewsItem | null {
   }
 }
 
-const LECTEURS: Record<number, (e: NostrEvent) => NewsItem | null> = {
+const LECTEURS: Record<number, (e: NostrEvent, maintenant: number) => NewsItem | null> = {
   [KIND_MANIFESTACTION]: lireManifestaction,
   [KIND_PROJET_ABONDANCE]: lireProjetAbondance,
   [KIND_PROPOSITION_DAV]: lirePropositionDav,
@@ -142,7 +175,7 @@ export function retenirSujets(events: NostrEvent[], combien: number, maintenant 
     if (e.created_at * 1000 < debut) continue
     const lire = LECTEURS[e.kind]
     if (!lire) continue
-    const item = lire(e)
+    const item = lire(e, maintenant)
     if (!item) continue
     const l = parFamille.get(e.kind) ?? []
     l.push(item)

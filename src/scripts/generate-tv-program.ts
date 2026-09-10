@@ -25,6 +25,7 @@ import 'dotenv/config'
 import { findChannel } from '../data/seed-tv-channels'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { fetchSujetsInfinity } from '../lib/infinity-sujets'
+import { choisirSujetsEcosysteme } from '../data/sujets-ecosysteme'
 import { generateConductor } from '../lib/tv-conductor'
 import { generateImage, renderTimeline, uploadMedia, attendreCid } from '../lib/waf'
 import { buildShots, buildProgram, totalDuration, applyTimings } from '../lib/tv-assemble'
@@ -79,21 +80,26 @@ async function main() {
     // Les Manifestactions, les projets Abondance et les propositions soumises au
     // vote passent donc AVANT le fil extérieur.
     const sujets = await fetchSujetsInfinity(6)
-    console.log(`   🌍 ${sujets.length} sujet(s) d'Infinity (Manifestactions, Abondance, DAV)`)
-    // ⚠️ LE RSS RESTE, EN COMPLÉMENT ET EN FILET. Un jour sans activité dans
-    // l'application ne doit pas donner un écran noir ; mais quand l'application vit,
-    // c'est elle qu'on raconte. On ne complète que ce qui manque.
-    const manque = Math.max(0, 8 - sujets.length)
-    const news = manque > 0 && channel.sources
-      ? await fetchNewsForStation({ sources: channel.sources } as RadioStation, manque)
-      : []
-    if (news.length) console.log(`   📰 + ${news.length} actualité(s) extérieure(s) en complément`)
-    if (!sujets.length && !news.length) {
-      console.log('   ⚠️  aucun sujet trouvé — épisode intemporel sur le thème de la chaîne')
+    console.log(`   🌍 ${sujets.length} sujet(s) RÉEL(S) d'Infinity (Manifestactions, Abondance, DAV)`)
+    // ── QUAND L'APPLICATION N'A PAS ASSEZ À RACONTER, ELLE SE PRÉSENTE ─────
+    // Le 10/09 au soir, faute d'activité réelle, le JT a été rempli avec Reporterre
+    // et Mr Mondialisation — précisément ce que le Bâtisseur refusait (« les thèmes
+    // doivent ABSOLUMENT concerner les sujets de l'application »). Avant l'ouverture
+    // publique, c'est l'état normal : on explique alors comment Infinity fonctionne,
+    // à partir de ses propres fiches.
+    const presentation = choisirSujetsEcosysteme(Math.max(0, 3 - sujets.length))
+    if (presentation.length) {
+      console.log(`   🧭 + ${presentation.length} présentation(s) de l'application (activité réelle insuffisante)`)
     }
+    // ⚠️ L'EXTÉRIEUR N'EST PLUS QU'UN COMPLÉMENT, BORNÉ À DEUX. Il ne comble plus le vide :
+    // c'est l'application qui le comble.
+    const news = channel.sources
+      ? await fetchNewsForStation({ sources: channel.sources } as RadioStation, 2)
+      : []
+    if (news.length) console.log(`   📰 + ${news.length} actualité(s) extérieure(s), en complément`)
     conductor = await generateConductor(
       channel,
-      formatNewsForPrompt([...sujets, ...news]),
+      formatNewsForPrompt([...sujets, ...presentation, ...news]),
       apiKey,
       process.env.ANTHROPIC_MODEL,
     )
