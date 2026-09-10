@@ -25,7 +25,18 @@ export interface DecodedWav {
 
 /** Parse un fichier WAV PCM 16-bit mono → Float32Array normalisé. */
 export function readWav(path: string): DecodedWav {
-  const buf = readFileSync(path)
+  return decodeWav(readFileSync(path), path)
+}
+
+/**
+ * Décode un WAV PCM 16-bit mono DÉJÀ EN MÉMOIRE.
+ *
+ * Existe pour recoller les morceaux d'une synthèse découpée sans passer par le disque. C'est
+ * le corps inchangé de `readWav` : un seul décodeur, donc une seule façon d'être strict.
+ * `nom` ne sert qu'aux messages d'erreur.
+ */
+export function decodeWav(buf: Buffer, nom = 'tampon'): DecodedWav {
+  const path = nom
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
 
   // Header RIFF / WAVE

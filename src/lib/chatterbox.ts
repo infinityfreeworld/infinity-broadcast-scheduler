@@ -29,6 +29,7 @@
  *     }
  */
 
+import { decodeWav, concatWavs, encodeWav, type ConcatEntry } from './audio'
 import { getNostrVoiceForHost } from './host-voice-mappings'
 import { jetonDataspace } from './dataspace-jeton'
 
@@ -458,6 +459,68 @@ export async function pingUntilReady(
   return false
 }
 
+/** Longueur maximale d'une requête de synthèse, en caractères (réglable). */
+export function maxCaracteres(): number {
+  const n = Number.parseInt(process.env.CHATTERBOX_MAX_CARACTERES ?? '350', 10)
+  return Number.isFinite(n) && n >= 80 ? n : 350
+}
+
+/**
+ * Découpe un texte en morceaux d'au plus `max` caractères, aux frontières les plus naturelles.
+ *
+ * 🔴 POURQUOI. data-space, 10/09/2026 : leur ouvrier envoie tout le texte d'un bloc au modèle,
+ * qui a un plafond de génération. Un texte trop long est COUPÉ, l'audio sort « trop court pour
+ * son texte » (> 25 caractères/s), et leur garde-fou contre les fausses synthèses le refuse
+ * (HTTP 422) — à chaque nouvel essai. C'est cohérent avec deux travaux refusés six fois de
+ * suite le 09/09. Leur consigne : rester sous ~400 caractères (leur plus long texte vérifié
+ * complet en fait 401). Nous visons 350 pour garder de la marge.
+ *
+ * ⚠️ LE TEXTE N'EST JAMAIS MODIFIÉ, seulement tranché. On coupe dans le texte d'origine, entre
+ * deux positions, sans rien réassembler : recoller « 1. » et « 5 km » avec une espace ferait
+ * lire « un, cinq kilomètres » au lieu de « un virgule cinq ». On ne coupe donc qu'après une
+ * fin de phrase SUIVIE D'UN BLANC (« 1.5 » n'en est pas une) ; à défaut, après une ponctuation
+ * faible ; à défaut, à une espace. Jamais au milieu d'un mot.
+ */
+export function decouperTexte(texte: string, max = maxCaracteres()): string[] {
+  const t = texte.trim()
+  if (!t) return []
+  if (t.length <= max) return [t]
+  const finsDePhrase: number[] = []
+  const re = /[.!?…]+[»"”’)]*(?=\s)/g
+  for (let m = re.exec(t); m; m = re.exec(t)) finsDePhrase.push(m.index + m[0].length)
+
+  const morceaux: string[] = []
+  let debut = 0
+  while (t.length - debut > max) {
+    // La fin de phrase la plus lointaine qui tient dans la fenêtre.
+    let coupe = -1
+    for (const f of finsDePhrase) {
+      if (f <= debut) continue
+      if (f - debut > max) break
+      coupe = f
+    }
+    if (coupe < 0) {
+      // Une seule phrase dépasse : ponctuation faible, puis espace, dans la fenêtre.
+      const fenetre = t.slice(debut, debut + max + 1)
+      const faible = Math.max(
+        fenetre.lastIndexOf('; '), fenetre.lastIndexOf(': '),
+        fenetre.lastIndexOf(', '), fenetre.lastIndexOf(' — '),
+      )
+      if (faible > max * 0.4) coupe = debut + faible + 1
+      else {
+        const espace = fenetre.lastIndexOf(' ')
+        coupe = debut + (espace > 0 ? espace : max)
+      }
+    }
+    morceaux.push(t.slice(debut, coupe).trim())
+    debut = coupe
+    while (debut < t.length && /\s/.test(t[debut])) debut++
+  }
+  const reste = t.slice(debut).trim()
+  if (reste) morceaux.push(reste)
+  return morceaux
+}
+
 /**
  * Synthèse texte → audio. Retourne un Buffer (WAV/MP3/etc selon format).
  */
@@ -495,7 +558,44 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
   const restant = echeanceClone > 0
     ? Math.max(1_000, echeanceClone - Date.now())
     : Number.parseInt(process.env.CHATTERBOX_ECHEANCE_S ?? '1800', 10) * 1000
-  return avecEcheance(synthetiserSansMur(opts), restant, `synthèse « ${opts.voice} »`)
+  // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
+  // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons
+  // finales) sont courts et partent d'un bloc.
+  const morceaux = (opts.format ?? 'wav') === 'wav' ? decouperTexte(opts.text) : [opts.text]
+  if (morceaux.length <= 1) {
+    return avecEcheance(synthetiserSansMur(opts), restant, `synthèse « ${opts.voice} »`)
+  }
+  return avecEcheance(
+    synthetiserEnMorceaux(opts, morceaux), restant,
+    `synthèse « ${opts.voice} » en ${morceaux.length} morceaux`,
+  )
+}
+
+/**
+ * Synthétise chaque morceau puis les recolle en UN WAV.
+ *
+ * ⚠️ UN MORCEAU QUI ÉCHOUE FAIT ÉCHOUER LE TOUR ENTIER, délibérément. L'appelant retombe alors
+ * sur Piper pour toute la réplique. Garder les morceaux réussis donnerait un personnage qui
+ * change de voix au milieu d'une phrase — pire, à l'oreille, qu'un repli complet.
+ * La pause insérée entre deux morceaux est celle du montage (0,10 s) : une respiration.
+ */
+async function synthetiserEnMorceaux(opts: ChatterboxSpeakOptions, morceaux: string[]): Promise<Buffer> {
+  const entrees: ConcatEntry[] = []
+  for (const [i, texte] of morceaux.entries()) {
+    const buf = await synthetiserSansMur({ ...opts, text: texte })
+    try {
+      entrees.push({ wav: decodeWav(buf, `morceau ${i + 1}/${morceaux.length}`) })
+    } catch (e) {
+      // Même règle que l'appelant : un audio illisible est un défaut CHEZ NOUS, pas une panne
+      // du service — le message porte la même marque pour ne pas être avalé par le repli.
+      throw new Error(
+        `Chatterbox a répondu ${buf.length} octets pour le morceau ${i + 1}/${morceaux.length} `
+        + `de « ${opts.voice} », mais ce n'est pas du WAV décodable : ${(e as Error).message}. `
+        + `Ce n'est pas une panne du service — vérifier response_format.`,
+      )
+    }
+  }
+  return encodeWav(concatWavs(entrees))
 }
 
 async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer> {
