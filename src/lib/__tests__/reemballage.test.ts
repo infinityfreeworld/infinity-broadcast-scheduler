@@ -5,7 +5,12 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { choisirDernieres, pourquoiNonReconstructible, aReemballer, type EvenementNostr } from '../reemballage'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import {
+  choisirDernieres, pourquoiNonReconstructible, aReemballer, aRehorodater, horodatageDeRepublication,
+  type EvenementNostr,
+} from '../reemballage'
 
 const NOUS = 'a'.repeat(64)
 const EUX = 'b'.repeat(64)
@@ -69,4 +74,34 @@ test('seul le format publié est épargné', () => {
   assert.equal(aReemballer({ audioMime: 'audio/ogg' }), true)
   assert.equal(aReemballer({ audioMime: 'audio/wav' }), true)
   assert.equal(aReemballer({ audioMime: 'audio/webm' }), false)
+})
+
+// ── 🔴 L'application départage sur generatedAt, et garde la PREMIÈRE reçue à
+//    valeur égale. Une republication qui garde l'horodatage d'origine laisse
+//    l'émission Ogg — muette — gagner selon l'ordre d'arrivée des relais.
+
+test('🔴 une republication est STRICTEMENT plus récente que l’ancienne version', () => {
+  assert.equal(horodatageDeRepublication(1000, 2000), 2000)
+  assert.equal(horodatageDeRepublication(5000, 2000), 5001, 'jamais égal, jamais plus ancien : l’app garderait l’ancienne')
+  assert.equal(horodatageDeRepublication('illisible', 2000), 2000)
+})
+
+test('une émission déjà en WebM mais à l’horodatage d’origine est à rehorodater', () => {
+  const webm = { stationId: 'p', date: '2026-09-11', language: 'fr', durationSec: 1200, audioCid: 'Qm',
+    audioMime: 'audio/webm', turns: [], newsRefs: [], model: 'm', generatedAt: 1_789_000_000 }
+  assert.equal(aRehorodater(ev('p', '2026-09-11', { contenu: webm, created_at: 1_789_000_000 + 5 * 86400 })), true)
+  assert.equal(aRehorodater(ev('p', '2026-09-11', { contenu: webm, created_at: 1_789_000_030 })), false,
+    'une émission de la nuit (generatedAt ≈ created_at) ne se rehorodate pas')
+  assert.equal(aRehorodater(ev('p', '2026-09-11', { contenu: { ...webm, audioMime: 'audio/ogg' }, created_at: 1_789_900_000 })), false,
+    'une émission Ogg se RÉEMBALLE, elle ne se contente pas d’un nouvel horodatage')
+})
+
+const script = readFileSync(resolve(process.cwd(), 'src/scripts/reemballer-webm.ts'), 'utf8')
+
+test('🔴 le script avance generatedAt dans ses DEUX chemins de publication', () => {
+  assert.match(script, /const generatedAt = horodatageDeRepublication\(c\.generatedAt, /)
+  assert.match(script, /\{ \.\.\.c, audioCid: dep\.cid, audioMime: FORMAT_EMISSION\.mime, generatedAt, generatedBy: '' \}/,
+    'le réemballage doit publier le nouvel horodatage')
+  assert.match(script, /publishBroadcast\(\{ \.\.\.c, generatedAt, generatedBy: '' \}/,
+    'le rehorodatage doit publier le nouvel horodatage')
 })

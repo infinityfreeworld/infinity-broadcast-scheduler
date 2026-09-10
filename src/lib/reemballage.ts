@@ -93,3 +93,35 @@ export function pourquoiNonReconstructible(e: EvenementNostr): string | null {
 export function aReemballer(contenu: Record<string, unknown>): boolean {
   return contenu.audioMime !== FORMAT_EMISSION.mime
 }
+
+/**
+ * `generatedAt` d'une republication : STRICTEMENT plus récent que l'ancien.
+ *
+ * 🔴 L'application départage deux versions d'une émission sur `generatedAt`
+ * — le contenu — et non sur `created_at` :
+ *
+ *   if (existing && existing.generatedAt >= parsed.generatedAt) return
+ *   (infinity, src/modules/radio/broadcast/broadcast-store-nostr.ts)
+ *
+ * À valeur ÉGALE, la première version reçue gagne. Or les relais que la
+ * republication n'a pas atteints servent encore l'ancienne, en Ogg : garder
+ * l'horodatage d'origine laissait l'application choisir l'émission muette
+ * selon l'ordre d'arrivée des relais.
+ */
+export function horodatageDeRepublication(ancien: unknown, maintenant: number): number {
+  const a = Number(ancien)
+  return Number.isFinite(a) ? Math.max(maintenant, a + 1) : maintenant
+}
+
+/**
+ * Déjà en WebM, mais republiée avec son horodatage d'origine — avant que ce
+ * défaut ne soit vu. Une émission produite par la nuit a `generatedAt` et
+ * `created_at` à quelques secondes l'un de l'autre ; un écart de plus d'une
+ * heure trahit une republication à rehorodater.
+ */
+export function aRehorodater(e: EvenementNostr): boolean {
+  let c: Record<string, unknown>
+  try { c = JSON.parse(e.content) } catch { return false }
+  const g = Number(c.generatedAt)
+  return c.audioMime === FORMAT_EMISSION.mime && Number.isFinite(g) && e.created_at - g > 3600
+}

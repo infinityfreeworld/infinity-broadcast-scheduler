@@ -11,7 +11,7 @@
  *   Pour chaque station : télécharge l'Ogg, change l'emballage sans
  *   réencoder, dépose le WebM sur data-space (relu et vérifié), puis
  *   republie l'événement kind:30093 — même d-tag, même contenu, seuls
- *   `audioCid` et `audioMime` changent. Un événement qui ne se
+ *   `audioCid`, `audioMime` et `generatedAt` changent. Un événement qui ne se
  *   reconstruirait pas à l'identique est laissé tel quel, et signalé.
  *
  *   Lecture : data-space d'abord ; Pinata et ipfs.io seulement en repli,
@@ -25,6 +25,13 @@
  *
  *   --essai   télécharge et réemballe, mais ne dépose et ne publie RIEN
  *   --garder  écrit les WebM produits dans ce dossier (pour les écouter)
+ *   --sauf    stations à laisser de côté, séparées par des virgules
+ *
+ *   `generatedAt` est TOUJOURS avancé : l'application départage deux
+ *   versions d'une émission sur ce champ, et à valeur égale garde la
+ *   première reçue — souvent l'ancienne, en Ogg. Une émission déjà
+ *   republiée avec son horodatage d'origine est rehorodatée sans rien
+ *   redéposer (voir horodatageDeRepublication, lib/reemballage).
  *
  *   Code de sortie : 1 si au moins une station a échoué.
  */
@@ -39,7 +46,10 @@ import { getRelays, RADIO_BROADCAST_KIND, publishBroadcast } from '../lib/nostr'
 import { oggOpusVersWebm, estWebm, FORMAT_EMISSION } from '../lib/opus'
 import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
-import { choisirDernieres, pourquoiNonReconstructible, aReemballer, type EvenementNostr } from '../lib/reemballage'
+import {
+  choisirDernieres, pourquoiNonReconstructible, aReemballer, aRehorodater, horodatageDeRepublication,
+  type EvenementNostr,
+} from '../lib/reemballage'
 import type { RadioBroadcast } from '../lib/types'
 
 const SOURCES = [
@@ -55,6 +65,7 @@ function option(nom: string): string | undefined {
 const ESSAI = process.argv.includes('--essai')
 const SEULE = option('--station')
 const GARDER = option('--garder')
+const SAUF = new Set((option('--sauf') ?? '').split(',').map(s => s.trim()).filter(Boolean))
 
 async function telecharger(cid: string): Promise<{ octets: Buffer; source: string }> {
   const causes: string[] = []
@@ -102,12 +113,29 @@ async function main(): Promise<number> {
   let echecs = 0
   for (const [station, e] of dernieres) {
     if (SEULE && station !== SEULE) continue
+    if (SAUF.has(station)) { console.log(`  · ${station.padEnd(18)} laissée de côté (--sauf)`); continue }
     const c = JSON.parse(e.content) as Record<string, unknown> & { date: string; audioCid: string }
     const etiquette = `${station.padEnd(18)} ${c.date}`
 
-    if (!aReemballer(c)) { console.log(`  = ${etiquette}  déjà en ${FORMAT_EMISSION.mime}`); continue }
+    const rehorodater = !aReemballer(c) && aRehorodater(e)
+    if (!aReemballer(c) && !rehorodater) { console.log(`  = ${etiquette}  déjà en ${FORMAT_EMISSION.mime}`); continue }
     const raison = pourquoiNonReconstructible(e)
     if (raison) { console.log(`  ⚠ ${etiquette}  LAISSÉE telle quelle : ${raison}`); echecs++; continue }
+    const generatedAt = horodatageDeRepublication(c.generatedAt, Math.floor(Date.now() / 1000))
+
+    if (rehorodater) {
+      if (ESSAI) { console.log(`  ✓ ${etiquette}  à rehorodater : generatedAt ${c.generatedAt} → ${generatedAt}`); continue }
+      try {
+        const pub = await publishBroadcast({ ...c, generatedAt, generatedBy: '' } as unknown as RadioBroadcast, priv)
+        const notreRelais = pub.relays.find(r => r.url.includes('infinity-radio-relay'))
+        if (!notreRelais?.ok) throw new Error(`notre relais a refusé : ${notreRelais?.reason ?? 'absent'}`)
+        console.log(`  ⏱ ${etiquette}  rehorodatée (${c.generatedAt} → ${generatedAt}) · ${pub.relays.filter(r => r.ok).length}/${pub.relays.length} relais`)
+      } catch (err) {
+        echecs++
+        console.log(`  🔴 ${etiquette}  ${(err as Error).message.slice(0, 220)}`)
+      }
+      continue
+    }
 
     try {
       const { octets, source } = await telecharger(c.audioCid)
@@ -119,7 +147,7 @@ async function main(): Promise<number> {
       if (ESSAI) { console.log(`  ✓ ${etiquette}  ${tailles}`); continue }
 
       const dep = await dataspacePinFile(webm, nom, FORMAT_EMISSION.mime, jeton)
-      const emission = { ...c, audioCid: dep.cid, audioMime: FORMAT_EMISSION.mime, generatedBy: '' } as unknown as RadioBroadcast
+      const emission = { ...c, audioCid: dep.cid, audioMime: FORMAT_EMISSION.mime, generatedAt, generatedBy: '' } as unknown as RadioBroadcast
       const pub = await publishBroadcast(emission, priv)
       const ok = pub.relays.filter(r => r.ok).length
       const notreRelais = pub.relays.find(r => r.url.includes('infinity-radio-relay'))
