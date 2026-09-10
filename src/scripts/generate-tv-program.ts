@@ -24,6 +24,7 @@
 import 'dotenv/config'
 import { findChannel } from '../data/seed-tv-channels'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
+import { fetchSujetsInfinity } from '../lib/infinity-sujets'
 import { generateConductor } from '../lib/tv-conductor'
 import { generateImage, renderTimeline, uploadMedia, attendreCid } from '../lib/waf'
 import { buildShots, buildProgram, totalDuration, applyTimings } from '../lib/tv-assemble'
@@ -71,11 +72,31 @@ async function main() {
   } else {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY manquant')
-    const news = channel.sources
-      ? await fetchNewsForStation({ sources: channel.sources } as RadioStation, 8)
+    // ── LES SUJETS VIENNENT D'ABORD D'INFINITY ────────────────────────────
+    // Retour du Bâtisseur (09/09/2026) : « les thèmes doivent absolument concerner
+    // les sujets de l'application ». Le JT lisait Reporterre et Mr Mondialisation :
+    // de bonnes sources, qui ne parlent jamais de ce que les gens FONT ici.
+    // Les Manifestactions, les projets Abondance et les propositions soumises au
+    // vote passent donc AVANT le fil extérieur.
+    const sujets = await fetchSujetsInfinity(6)
+    console.log(`   🌍 ${sujets.length} sujet(s) d'Infinity (Manifestactions, Abondance, DAV)`)
+    // ⚠️ LE RSS RESTE, EN COMPLÉMENT ET EN FILET. Un jour sans activité dans
+    // l'application ne doit pas donner un écran noir ; mais quand l'application vit,
+    // c'est elle qu'on raconte. On ne complète que ce qui manque.
+    const manque = Math.max(0, 8 - sujets.length)
+    const news = manque > 0 && channel.sources
+      ? await fetchNewsForStation({ sources: channel.sources } as RadioStation, manque)
       : []
-    console.log(`   📰 ${news.length} actualité(s) récupérée(s)`)
-    conductor = await generateConductor(channel, formatNewsForPrompt(news), apiKey, process.env.ANTHROPIC_MODEL)
+    if (news.length) console.log(`   📰 + ${news.length} actualité(s) extérieure(s) en complément`)
+    if (!sujets.length && !news.length) {
+      console.log('   ⚠️  aucun sujet trouvé — épisode intemporel sur le thème de la chaîne')
+    }
+    conductor = await generateConductor(
+      channel,
+      formatNewsForPrompt([...sujets, ...news]),
+      apiKey,
+      process.env.ANTHROPIC_MODEL,
+    )
   }
   console.log(`   🎬 Conducteur « ${conductor.title} » — ${conductor.segments.length} segments, ~${totalDuration(conductor)}s`)
   conductor.segments.forEach((s, i) => console.log(`      ${i + 1}. ${s.title} (${s.durationSec}s) — ${s.imagePrompt.slice(0, 60)}…`))

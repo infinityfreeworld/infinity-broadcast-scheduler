@@ -22,7 +22,19 @@ texte autour, de la forme :
 }
 Règles : segments concis, imagePrompt DESCRIPTIF et visuel (pas de mots dans l'image),
 narration factuelle et posée, durationSec entre 5 et 12. Pas de contenu haineux,
-racoleur ni faux. Langue de title/subtitle/narration = la langue demandée.`
+racoleur ni faux. Langue de title/subtitle/narration = la langue demandée.
+
+⚠️ LES SUJETS DE L'ÉCOSYSTÈME PASSENT AVANT TOUT LE RESTE. Quand une actualité vient
+d'Infinity (marquée « Manifestaction », « Projet Abondance », « Proposition soumise au
+vote (DAV) »), elle est PRIORITAIRE sur les sources extérieures, et tu la traites pour ce
+qu'elle est : ce que des gens réels font ou décident dans l'application, pas une dépêche.
+Emploie leur vocabulaire tel quel — une Manifestaction est une Manifestaction, pas une
+« manifestation » ni un « événement ». Nomme le lieu et la date quand ils sont donnés.
+Une proposition soumise au vote se rapporte comme un débat EN COURS : jamais comme une
+décision acquise, jamais en prenant parti.
+
+⚠️ TU N'INVENTES AUCUN CHIFFRE, aucun nom de participant, aucun résultat. Si une
+actualité ne dit pas combien ils étaient, le JT ne le dit pas non plus.`
 
 function extractJson(text: string): unknown {
   // Le modèle peut entourer le JSON de ``` ou de texte : on isole { … }.

@@ -1,0 +1,181 @@
+/**
+ * @module InfinityScheduler/TV/SujetsInfinity
+ * @description Les sujets de la TÉLÉVISION viennent d'INFINITY — pas d'un fil RSS extérieur.
+ *
+ *   🚨 POURQUOI CE MODULE EXISTE. Retour du Bâtisseur, 09/09/2026 : « les thèmes doivent
+ *   absolument concerner les sujets de l'application, comme les DAV, les Manifestactions, les
+ *   projets proposés dans Abondance ». Le JT lisait Reporterre et Mr Mondialisation : de bonnes
+ *   sources, mais qui ne parlent jamais de ce que les gens FONT dans l'application. Une
+ *   télévision d'écosystème qui ignore son écosystème n'en est pas une.
+ *
+ *   Trois sujets, trois kinds :
+ *     • 30500 `MHE_EVENT`          — les Manifestactions (actions écologiques humaines)
+ *     • 31200 `ABONDANCE_PROJECT`  — les projets qui cherchent du soutien
+ *     • 31600 `ASSEMBLEE_PROPOSAL` — les propositions soumises au vote (DAV / Palatine)
+ *
+ *   ── ⚠️ UN KIND EST UN ESPACE PARTAGÉ ─────────────────────────────────────────────────────
+ *   Leçon déjà payée par `pulse.ts` : mesuré le 01/09/2026 sur nos.lol, le kind 30101 portait
+ *   326 events de 306 pubkeys, dont AUCUNE n'était Infinity (des parties de « MatchHello », des
+ *   questionnaires…). N'importe qui peut publier sur 30500. On ne lit donc pas « un event du bon
+ *   kind » : on exige la FORME exacte du contenu Infinity, et on jette le reste sans bruit.
+ *
+ *   Ici le risque n'est pas la prise de contrôle — c'est pire à sa manière : un JT qui
+ *   annoncerait sérieusement, d'une voix posée, le contenu d'un event étranger.
+ */
+import { SimplePool } from 'nostr-tools/pool'
+import type { Event as NostrEvent } from 'nostr-tools'
+import { getRelays } from './nostr'
+import type { NewsItem } from './types'
+
+export const KIND_MANIFESTACTION = 30500
+export const KIND_PROJET_ABONDANCE = 31200
+export const KIND_PROPOSITION_DAV = 31600
+
+/** Au-delà, un sujet n'est plus une actualité. */
+const FENETRE_JOURS = 45
+/** Borne de requête : de quoi couvrir la fenêtre sans inonder les relais. */
+const LIMITE = 300
+
+function contenu(e: NostrEvent): Record<string, unknown> | null {
+  try {
+    const c = JSON.parse(e.content) as unknown
+    return c && typeof c === 'object' && !Array.isArray(c) ? (c as Record<string, unknown>) : null
+  } catch { return null }
+}
+
+const texte = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+/**
+ * Une Manifestaction Infinity, ou rien.
+ *
+ * ⚠️ Le codec de l'application rejette déjà les events « ni titre ni description » — les
+ * Manifestactions fantômes qui polluaient le moniteur. On applique la MÊME règle : un JT qui
+ * annonce « Pas de description » est pire qu'un JT qui n'en parle pas.
+ */
+export function lireManifestaction(e: NostrEvent): NewsItem | null {
+  const c = contenu(e)
+  if (!c) return null
+  const titre = texte(c.title)
+  const desc = texte(c.description)
+  if (!titre && !desc) return null
+  const lieu = texte(c.location) || (e.tags.find((t) => t[0] === 'g')?.[1] ?? '')
+  const quand = typeof c.startDate === 'number' ? c.startDate : undefined
+  const parts = [desc.slice(0, 200)]
+  if (lieu) parts.push(`Lieu : ${lieu}`)
+  if (quand) parts.push(`Date : ${new Date(quand).toLocaleDateString('fr-FR')}`)
+  return {
+    title: titre || desc.slice(0, 80),
+    summary: parts.filter(Boolean).join(' · '),
+    publishedAt: e.created_at * 1000,
+    sourceTitle: 'Manifestaction (Infinity)',
+  }
+}
+
+/** Un projet Abondance, ou rien. Le titre seul ne suffit pas : il faut un objectif chiffré. */
+export function lireProjetAbondance(e: NostrEvent): NewsItem | null {
+  const c = contenu(e)
+  if (!c) return null
+  const titre = texte(c.title)
+  if (!titre) return null
+  const objectif = Number(c.goal)
+  if (!Number.isFinite(objectif) || objectif <= 0) return null
+  const desc = texte(c.description)
+  const categorie = e.tags.find((t) => t[0] === 'category')?.[1] ?? ''
+  const parts = [desc.slice(0, 200)]
+  if (categorie) parts.push(`Catégorie : ${categorie}`)
+  parts.push(`Objectif : ${objectif}`)
+  return {
+    title: titre,
+    summary: parts.filter(Boolean).join(' · '),
+    publishedAt: e.created_at * 1000,
+    sourceTitle: 'Projet Abondance (Infinity)',
+  }
+}
+
+/**
+ * Une proposition soumise au vote, ou rien.
+ *
+ * ⚠️ ON N'ANNONCE QUE CE QUI EST OUVERT. Une proposition en brouillon n'est pas une nouvelle :
+ * son auteur peut encore la réécrire entièrement. L'annoncer, ce serait rapporter une décision
+ * que personne n'a prise.
+ */
+export function lirePropositionDav(e: NostrEvent): NewsItem | null {
+  const c = contenu(e)
+  if (!c) return null
+  const titre = texte(c.title)
+  if (!titre) return null
+  const statut = texte(c.status) || (e.tags.find((t) => t[0] === 'status')?.[1] ?? '')
+  if (statut && statut !== 'open') return null
+  const desc = texte(c.description)
+  const echeance = Number(c.expiresAt)
+  const parts = [desc.slice(0, 200)]
+  if (Number.isFinite(echeance) && echeance > 0) {
+    parts.push(`Vote ouvert jusqu'au ${new Date(echeance).toLocaleDateString('fr-FR')}`)
+  }
+  const quorum = Number(c.quorum)
+  if (Number.isFinite(quorum) && quorum > 0) parts.push(`Quorum : ${quorum}`)
+  return {
+    title: titre,
+    summary: parts.filter(Boolean).join(' · '),
+    publishedAt: e.created_at * 1000,
+    sourceTitle: 'Proposition soumise au vote (DAV)',
+  }
+}
+
+const LECTEURS: Record<number, (e: NostrEvent) => NewsItem | null> = {
+  [KIND_MANIFESTACTION]: lireManifestaction,
+  [KIND_PROJET_ABONDANCE]: lireProjetAbondance,
+  [KIND_PROPOSITION_DAV]: lirePropositionDav,
+}
+
+/**
+ * Trie et retient les sujets d'un lot d'events bruts.
+ *
+ * ⚠️ ON MÉLANGE LES TROIS FAMILLES DÉLIBÉRÉMENT, mais on garantit au moins un sujet de chaque
+ * famille présente : trier par date seule donnerait, un jour de forte activité, un JT
+ * entièrement consacré aux Manifestactions — et l'Assemblée n'existerait jamais à l'antenne.
+ */
+export function retenirSujets(events: NostrEvent[], combien: number, maintenant = Date.now()): NewsItem[] {
+  const debut = maintenant - FENETRE_JOURS * 24 * 3600 * 1000
+  const parFamille = new Map<number, NewsItem[]>()
+  for (const e of events) {
+    if (e.created_at * 1000 < debut) continue
+    const lire = LECTEURS[e.kind]
+    if (!lire) continue
+    const item = lire(e)
+    if (!item) continue
+    const l = parFamille.get(e.kind) ?? []
+    l.push(item)
+    parFamille.set(e.kind, l)
+  }
+  for (const l of parFamille.values()) l.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
+
+  // Un tour de table d'abord (un sujet par famille), puis on complète par date.
+  const retenus: NewsItem[] = []
+  const restes: NewsItem[] = []
+  for (const l of parFamille.values()) {
+    if (l.length) retenus.push(l[0])
+    restes.push(...l.slice(1))
+  }
+  retenus.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
+  restes.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
+  return [...retenus, ...restes].slice(0, Math.max(1, combien))
+}
+
+/** Va chercher les sujets sur les relais. Ne lève pas : un relais muet n'arrête pas l'antenne. */
+export async function fetchSujetsInfinity(combien = 6, timeoutMs = 10000): Promise<NewsItem[]> {
+  const relays = getRelays()
+  const pool = new SimplePool()
+  try {
+    const events = await pool.querySync(
+      relays,
+      { kinds: [KIND_MANIFESTACTION, KIND_PROJET_ABONDANCE, KIND_PROPOSITION_DAV], limit: LIMITE },
+      { maxWait: timeoutMs },
+    )
+    return retenirSujets(events as NostrEvent[], combien)
+  } catch {
+    return []
+  } finally {
+    try { pool.close(relays) } catch { /* rien à fermer */ }
+  }
+}
