@@ -23,28 +23,30 @@ import type { NewsItem } from '../lib/types'
 
 export const SOURCE_PRESENTATION = "Présentation d'Infinity"
 
+/**
+ * ⚠️ CHAQUE RÉSUMÉ TIENT EN 180 CARACTÈRES : `formatNewsForPrompt` coupe au-delà, et la première
+ * version perdait ainsi sa dernière phrase — celle qui dit À QUOI sert le module.
+ */
 export const SUJETS_ECOSYSTEME: ReadonlyArray<NewsItem> = [
   {
     title: "Les Manifestactions Hors de l'Enclos (MHE)",
     summary:
-      "Des actions d'entraide communautaire concrètes. On crée une Manifestaction, on la suit dans le "
-      + "Moniteur et on l'explore sur la carte, du local au national. Pour passer de l'écran à l'action : "
-      + "organiser et rejoindre des initiatives réelles près de chez soi.",
+      "Des actions d'entraide communautaire concrètes : on les crée, on les suit dans le Moniteur, "
+      + "on les explore sur la carte. Pour passer de l'écran à l'action, près de chez soi.",
     sourceTitle: SOURCE_PRESENTATION,
   },
   {
     title: 'Abondance',
     summary:
-      "L'économie d'entraide et le financement participatif du collectif : projets à financer, concours, "
-      + "marché et contributions, avec un karma par catégorie. Pour faire circuler les ressources et "
-      + 'financer ensemble les projets qui servent le vivant.',
+      "L'économie d'entraide et le financement participatif du collectif : projets, concours, "
+      + 'marché, contributions. Pour financer ensemble ce qui sert le vivant.',
     sourceTitle: SOURCE_PRESENTATION,
   },
   {
     title: 'Palatine et la DAV',
     summary:
-      "L'espace de gouvernance biocratique : motions (la DAV), propositions et votes de l'Assemblée, "
-      + 'constitution. Pour décider ensemble des règles communes, de façon transparente et vérifiable.',
+      "L'espace de gouvernance biocratique : motions de la DAV, propositions et votes de "
+      + "l'Assemblée, constitution. Pour décider ensemble, de façon transparente.",
     sourceTitle: SOURCE_PRESENTATION,
   },
 ]

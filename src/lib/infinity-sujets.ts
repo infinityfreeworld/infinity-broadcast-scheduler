@@ -85,16 +85,18 @@ export function lireManifestaction(e: NostrEvent, maintenant = Date.now()): News
   const fin = Number(c.endDate) > 0 ? Number(c.endDate) : debut
   if (fin && fin < maintenant - PASSE_TOLERANCE_J * JOUR_MS) return null
   const lieu = texte(c.location) || (e.tags.find((t) => t[0] === 'g')?.[1] ?? '')
-  const parts = [desc.slice(0, 200)]
-  if (lieu) parts.push(`Lieu : ${lieu}`)
   // Le TEMPS est dit, pas laissé à deviner : un conducteur à qui l'on donne une date nue
   // l'annonce au présent — c'est exactement ce qui est arrivé au « 2 août ».
-  if (debut && debut > maintenant) parts.push(`Date : ${dateFr(debut)} (à venir)`)
-  else if (fin && fin >= maintenant) parts.push(`Date : depuis le ${dateFr(debut ?? fin)} (en cours)`)
-  else if (fin) parts.push(`Date : ${dateFr(fin)} (terminée — à rapporter au passé)`)
+  // ⚠️ ET IL PASSE EN TÊTE. `formatNewsForPrompt` coupe le résumé à 180 caractères : placé
+  // après une longue description, ce repère était précisément la partie tranchée.
+  const reperes: string[] = []
+  if (debut && debut > maintenant) reperes.push(`Date : ${dateFr(debut)} (à venir)`)
+  else if (fin && fin >= maintenant) reperes.push(`Date : depuis le ${dateFr(debut ?? fin)} (en cours)`)
+  else if (fin) reperes.push(`Date : ${dateFr(fin)} (terminée — à rapporter au passé)`)
+  if (lieu) reperes.push(`Lieu : ${lieu}`)
   return {
     title: titre || desc.slice(0, 80),
-    summary: parts.filter(Boolean).join(' · '),
+    summary: [...reperes, desc.slice(0, 200)].filter(Boolean).join(' · '),
     publishedAt: e.created_at * 1000,
     sourceTitle: 'Manifestaction (Infinity)',
   }
@@ -111,12 +113,12 @@ export function lireProjetAbondance(e: NostrEvent): NewsItem | null {
   const desc = texte(c.description)
   if (desc.length < DESCRIPTION_MIN) return null
   const categorie = e.tags.find((t) => t[0] === 'category')?.[1] ?? ''
-  const parts = [desc.slice(0, 200)]
-  if (categorie) parts.push(`Catégorie : ${categorie}`)
-  parts.push(`Objectif : ${objectif}`)
+  // Repères d'abord, description ensuite : la coupe à 180 caractères n'emporte que la fin.
+  const reperes = [`Objectif : ${objectif}`]
+  if (categorie) reperes.push(`Catégorie : ${categorie}`)
   return {
     title: titre,
-    summary: parts.filter(Boolean).join(' · '),
+    summary: [...reperes, desc.slice(0, 200)].filter(Boolean).join(' · '),
     publishedAt: e.created_at * 1000,
     sourceTitle: 'Projet Abondance (Infinity)',
   }
@@ -141,15 +143,16 @@ export function lirePropositionDav(e: NostrEvent, maintenant = Date.now()): News
   const echeance = Number(c.expiresAt)
   // Un vote dont l'échéance est passée est CLOS, même si son statut n'a pas été mis à jour.
   if (Number.isFinite(echeance) && echeance > 0 && echeance < maintenant) return null
-  const parts = [desc.slice(0, 200)]
+  // Repères d'abord (l'échéance dit qu'un débat est EN COURS), description ensuite.
+  const reperes: string[] = []
   if (Number.isFinite(echeance) && echeance > 0) {
-    parts.push(`Vote ouvert jusqu'au ${new Date(echeance).toLocaleDateString('fr-FR')}`)
+    reperes.push(`Vote ouvert jusqu'au ${new Date(echeance).toLocaleDateString('fr-FR')}`)
   }
   const quorum = Number(c.quorum)
-  if (Number.isFinite(quorum) && quorum > 0) parts.push(`Quorum : ${quorum}`)
+  if (Number.isFinite(quorum) && quorum > 0) reperes.push(`Quorum : ${quorum}`)
   return {
     title: titre,
-    summary: parts.filter(Boolean).join(' · '),
+    summary: [...reperes, desc.slice(0, 200)].filter(Boolean).join(' · '),
     publishedAt: e.created_at * 1000,
     sourceTitle: 'Proposition soumise au vote (DAV)',
   }

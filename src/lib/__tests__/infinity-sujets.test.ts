@@ -16,6 +16,7 @@ import {
   lireManifestaction, lireProjetAbondance, lirePropositionDav, retenirSujets, DESCRIPTION_MIN,
   KIND_MANIFESTACTION, KIND_PROJET_ABONDANCE, KIND_PROPOSITION_DAV,
 } from '../infinity-sujets'
+import { formatNewsForPrompt } from '../news'
 
 const MAINTENANT = Date.UTC(2026, 8, 10)
 const J = 86400_000
@@ -116,4 +117,26 @@ test('⭐ le tri ne laisse aucune famille hors antenne', () => {
 test('ce qui a été publié il y a longtemps sort de l’antenne', () => {
   const vieux = ev(KIND_MANIFESTACTION, { title: 'Ancien', description: D, startDate: MAINTENANT + J }, [], 200)
   assert.equal(retenirSujets([vieux], 5, MAINTENANT).length, 0)
+})
+
+test('⭐ le TEMPS d’un événement survit à la coupe du conducteur, même avec une longue description', () => {
+  // `formatNewsForPrompt` coupe chaque résumé à 180 caractères. Placé après la description, le
+  // repère « terminée — à rapporter au passé » était précisément la partie tranchée — et la
+  // correction du « 2 août » n'aurait servi à rien dès la première description un peu longue.
+  const longue = `${D} `.repeat(5).trim()
+  const futur = lireManifestaction(ev(KIND_MANIFESTACTION, { title: 'A', description: longue, location: 'Sion', startDate: MAINTENANT + 3 * J }), MAINTENANT)
+  const hier = lireManifestaction(ev(KIND_MANIFESTACTION, { title: 'B', description: longue, startDate: MAINTENANT - J }), MAINTENANT)
+  const ligne = formatNewsForPrompt([futur!, hier!])
+  assert.match(ligne, /\(à venir\)/)
+  assert.match(ligne, /terminée — à rapporter au passé/)
+  assert.match(ligne, /Lieu : Sion/)
+})
+
+test('l’objectif d’un projet et l’échéance d’un vote survivent aussi à la coupe', () => {
+  const longue = `${D} `.repeat(5).trim()
+  const p = lireProjetAbondance(ev(KIND_PROJET_ABONDANCE, { title: 'P', description: longue, goal: 1500 }))
+  const v = lirePropositionDav(ev(KIND_PROPOSITION_DAV, { title: 'V', description: longue, status: 'open', expiresAt: MAINTENANT + 20 * J }), MAINTENANT)
+  const ligne = formatNewsForPrompt([p!, v!])
+  assert.match(ligne, /Objectif : 1500/)
+  assert.match(ligne, /Vote ouvert jusqu'au 30\/09\/2026/)
 })

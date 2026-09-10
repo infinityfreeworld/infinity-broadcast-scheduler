@@ -44,17 +44,35 @@ test('⭐ le générateur présente l’application AVANT de puiser à l’exté
   assert.match(gen, /\[\.\.\.sujets, \.\.\.presentation, \.\.\.news\]/, 'ordre : réel, présentation, extérieur')
 })
 
-test('⭐ contrat : chaque présentation reprend la fiche d’aide de l’application (une seule vérité)', (t) => {
+const CLES = [
+  "Manifestactions Hors de l'Enclos", "actions d'entraide communautaire concrètes",
+  "L'économie d'entraide et le financement participatif du collectif",
+  "L'espace de gouvernance biocratique",
+]
+
+test('⭐ aucune présentation n’est tronquée par le conducteur (180 caractères au plus)', () => {
+  // `formatNewsForPrompt` coupe le résumé à 180 : la 1re version y perdait la phrase qui dit
+  // À QUOI sert le module.
+  for (const s of SUJETS_ECOSYSTEME) {
+    assert.ok((s.summary ?? '').length <= 180, `${s.title} : ${(s.summary ?? '').length} caractères`)
+  }
+})
+
+test('⭐ contrat, NOTRE côté : les formules-clés sont bien dans nos présentations', () => {
+  // Sans ce contrôle, le contrat ne vérifiait que l'application : nos textes pouvaient dériver
+  // librement sans que rien ne le signale.
+  const nous = SUJETS_ECOSYSTEME.map(s => `${s.title} ${s.summary}`).join(' ')
+  for (const cle of CLES) assert.ok(nous.includes(cle), `« ${cle} » manque à nos présentations`)
+})
+
+test('⭐ contrat, CÔTÉ APPLICATION : les mêmes formules sont dans ses fiches d’aide', (t) => {
   const fiche = new URL('../../../../infinity/src/components/module-help/module-help-content.ts', import.meta.url)
   if (!existsSync(fiche)) {
     t.skip('dépôt infinity absent de cette machine — contrat NON vérifié (sauté, pas réussi)')
     return
   }
   const app = readFileSync(fiche, 'utf8')
-  // Les formules-clés de chaque fiche doivent se retrouver mot pour mot côté application.
-  for (const cle of [
-    "Manifestactions Hors de l'Enclos", "actions d'entraide communautaire concrètes",
-    "L'économie d'entraide et le financement participatif du collectif",
-    "L'espace de gouvernance biocratique",
-  ]) assert.ok(app.includes(cle), `« ${cle} » a disparu des fiches de l'application — mettre à jour sujets-ecosysteme.ts`)
+  for (const cle of CLES) {
+    assert.ok(app.includes(cle), `« ${cle} » a disparu des fiches de l'application — mettre à jour sujets-ecosysteme.ts`)
+  }
 })
