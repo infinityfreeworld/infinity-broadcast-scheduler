@@ -100,6 +100,28 @@ case "$VERDICT" in
   RATTRAPAGE) echo "  ⚠️ RATTRAPAGE : ${ECOULE} h sans émission (dernière : $DERNIERE)." ;;
 esac
 
+# ── LE MAC NE DOIT PAS S'ENDORMIR ────────────────────────────────────
+# La nuit du 09/09 a mis 11 h 51 à produire ~3 h 15 de travail réel : le
+# Mac a dormi de 22 h 15 à 6 h 53 (`pmset -g log`, Deep Idle en boucle) et
+# le processus avec lui. Quatre émissions ont donc été publiées à 7 h du
+# matin, pour une journée commencée à minuit.
+#
+# Ce poste est réglé sur `sleep 1` SUR BATTERIE : une minute d'inactivité
+# suffit à l'endormir. `caffeinate -w $$` tient le système éveillé
+# exactement le temps de CE script et lâche tout seul s'il meurt — rien à
+# nettoyer, aucun risque de laisser la machine allumée pour toujours.
+#
+# Placé APRÈS le `case` : une exécution qui décide « hors fenêtre » ou
+# « déjà fait » est déjà sortie, et ne retient jamais la machine. Le
+# launchd nous réveille toutes les 15 min, ce serait une veille permanente.
+#
+# -i : pas de veille d'inactivité (marche sur batterie)
+# -m : pas de veille disque
+# -s : pas de veille système (secteur uniquement)
+# L'ÉCRAN, lui, peut s'éteindre : pas de -d, c'est de la batterie gaspillée.
+caffeinate -ims -w $$ &
+echo "  veille bloquée pour la durée de la nuit (caffeinate PID $!)"
+
 
 
 
