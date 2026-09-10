@@ -387,7 +387,12 @@ async function generateBroadcastBytes(opts: {
         if (!(err instanceof ChatterboxError) && msg.includes('pas du WAV décodable')) {
           throw err
         }
-        console.warn(`\n  ⚠ chatterbox fail [${plan.voixPersonnage}]: ${msg.slice(0, 120)}`)
+        // data-space demande, pour tout travail bloqué, « son job_id et l'heure » : les
+        // deux figurent donc sur la ligne, datée en ISO (une heure sans date nous a déjà
+        // fait prendre un travail de la veille pour un travail postérieur).
+        const jobId = err instanceof ChatterboxError ? err.jobId : undefined
+        const quand = jobId ? ` job_id=${jobId} ${new Date().toISOString()}` : ''
+        console.warn(`\n  ⚠ chatterbox fail [${plan.voixPersonnage}]${quand}: ${msg.slice(0, 120)}`)
         if (!isFallbackPiperEnabled()) throw err
         process.stdout.write('  (repli piper)\n')
       }

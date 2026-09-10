@@ -44,11 +44,36 @@ export interface ChatterboxSpeakOptions {
 }
 
 export class ChatterboxError extends Error {
-  constructor(message: string, public readonly status?: number) {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    /** Identifiant du travail côté data-space, quand il le donne (429, 503). C'est ce qu'ils
+     *  nous demandent de leur citer, AVEC L'HEURE, pour retrouver un travail bloqué — sans lui
+     *  un signalement « ça reste en attente » ne leur donne rien à chercher. */
+    public readonly jobId?: string,
+    /** Code applicatif renvoyé (`not_ready`, `queue_error`, `synthesis_failed`…). */
+    public readonly code?: string,
+  ) {
     super(message)
     this.name = 'ChatterboxError'
   }
 }
+
+/** Lit `job_id` et `error.code` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
+export function lireCorpsErreur(detail: string): { jobId?: string; code?: string } {
+  try {
+    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown } }
+    return {
+      jobId: typeof j.job_id === 'string' ? j.job_id : undefined,
+      code: typeof j.error?.code === 'string' ? j.error.code : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+/** Une mise en file refusée plus de N fois d'affilée n'est plus un accident : on la signale. */
+export const MAX_FILES_RATEES = 3
 
 /**
  * Jeton résolu une fois par exécution.
@@ -104,8 +129,23 @@ export function echeanceNuitPassee(): boolean {
   return Number.isFinite(t) && Date.now() > t
 }
 
+/**
+ * Fenêtre de voix clonée d'une émission : **30 minutes** par défaut (1 800 s).
+ *
+ * 🔴 20 MINUTES FAISAIENT PERDRE DES AUDIOS DÉJÀ FABRIQUÉS. data-space, 10/09/2026 : notre
+ * travail `vx14e385558a…` a été soumis à 09:23:31 et terminé à 09:44:12 — 20 min 41 s. Nous
+ * avions cessé de le redemander 41 secondes avant qu'il soit prêt. Le fichier existait. Les
+ * attentes de 16 à 21 minutes viennent des machines louées défaillantes qu'ils remplacent.
+ *
+ * Et deux budgets se contredisaient : la file s'accordait 1 800 s (`CHATTERBOX_QUEUE_BUDGET_S`)
+ * pendant que cette course externe coupait tout à 1 200 — les dix dernières minutes du budget
+ * de file n'ont donc JAMAIS pu servir. Les deux valent désormais 1 800.
+ *
+ * La nuit reste bornée par `CHATTERBOX_FIN_NUIT` : allonger la fenêtre d'une émission ne peut
+ * pas faire déborder la nuit.
+ */
 export function ouvrirEcheanceClone(secondes = Number.parseInt(
-  process.env.CHATTERBOX_ECHEANCE_S ?? '1200', 10,
+  process.env.CHATTERBOX_ECHEANCE_S ?? '1800', 10,
 )): void {
   echeanceClone = Date.now() + secondes * 1000
 }
@@ -454,28 +494,43 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
   // garantie — le temps restant borne l'appel, quoi qu'il arrive.
   const restant = echeanceClone > 0
     ? Math.max(1_000, echeanceClone - Date.now())
-    : Number.parseInt(process.env.CHATTERBOX_ECHEANCE_S ?? '1200', 10) * 1000
+    : Number.parseInt(process.env.CHATTERBOX_ECHEANCE_S ?? '1800', 10) * 1000
   return avecEcheance(synthetiserSansMur(opts), restant, `synthèse « ${opts.voice} »`)
 }
 
 async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_QUEUE_BUDGET_S ?? '1800', 10) * 1000
   const debut = Date.now()
+  let filesRatees = 0
   for (let tentative = 1; ; tentative++) {
     try {
       return await synthetiserUneFois(opts)
     } catch (err) {
       const e = err as ChatterboxError
-      if (e.status !== 429) throw err
+      // ⚠️ DEUX ATTENTES QUI N'APPELLENT PAS LE MÊME REMÈDE (data-space, 10/09/2026) :
+      //   • 429 `not_ready` : le travail EXISTE et avance → on redemande, c'est le contrat ;
+      //   • 503 `queue_error` : le travail n'a PAS été enregistré → leur consigne est
+      //     « Réessaie ; si ça persiste, signale-nous cet identifiant ».
+      // Avant, un 503 partait droit en repli Piper : un accident passager coûtait la voix du
+      // personnage pour tout le tour, et personne n'apprenait qu'il fallait le leur signaler.
+      const fileRatee = e.status === 503 && e.code === 'queue_error'
+      if (e.status !== 429 && !fileRatee) throw err
+      const ref = e.jobId ? `[job_id ${e.jobId}] ` : ''
+      if (fileRatee && ++filesRatees > MAX_FILES_RATEES) {
+        throw new ChatterboxError(
+          `${ref}mise en file refusée ${filesRatees} fois de suite — à signaler à data-space avec cet identifiant et l'heure (${new Date().toISOString()})`,
+          503, e.jobId, 'queue_error',
+        )
+      }
       const attenteS = Number.parseInt(/Retry-After (\d+)s/.exec(e.message)?.[1] ?? '15', 10)
       const restant = budgetMs - (Date.now() - debut)
       if (restant <= attenteS * 1000) {
         throw new ChatterboxError(
-          `file d'attente saturée au-delà de notre budget (${budgetMs / 1000}s) — repli`,
-          429,
+          `${ref}file d'attente saturée au-delà de notre budget (${budgetMs / 1000}s) — repli`,
+          429, e.jobId, e.code,
         )
       }
-      console.log(`  [chatterbox] file pleine, on patiente ${attenteS}s (tentative ${tentative})`)
+      console.log(`  [chatterbox] ${fileRatee ? 'mise en file ratée' : 'file pleine'}${e.jobId ? ` (job_id ${e.jobId})` : ''}, on patiente ${attenteS}s (tentative ${tentative})`)
       await new Promise(r => setTimeout(r, attenteS * 1000))
     }
   }
@@ -532,18 +587,31 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
   if (!res.ok) {
     let detail = ''
     try { detail = await res.text() } catch { /* */ }
+    const { jobId, code } = lireCorpsErreur(detail)
+    // ⚠️ LE job_id EN TÊTE : l'appelant tronque le message à 120 caractères. En fin de
+    // message, l'identifiant qu'on doit citer à data-space tombait précisément dans la
+    // partie coupée.
+    const ref = jobId ? `[job_id ${jobId}] ` : ''
+    const entete = res.headers.get('retry-after')
     // 429 — le service nous demande de ralentir. Obéir vaut mieux que
     // réessayer aveuglément : c'est LUI qui sait combien de requêtes son
     // GPU absorbe. On respecte `Retry-After` quand il est donné.
     if (res.status === 429) {
-      const entete = res.headers.get('retry-after')
       const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 15
       throw new ChatterboxError(
-        `speech HTTP 429 — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
-        429,
+        `${ref}speech HTTP 429 — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
+        429, jobId, code,
       )
     }
-    throw new ChatterboxError(`speech HTTP ${res.status}${detail ? ' : ' + detail.slice(0, 200) : ''}`, res.status)
+    // 503 queue_error — la mise en file n'a rien enregistré. Réessayable (cf. la boucle).
+    if (res.status === 503 && code === 'queue_error') {
+      const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 20
+      throw new ChatterboxError(
+        `${ref}speech HTTP 503 queue_error — travail non mis en file, Retry-After ${attente}s`,
+        503, jobId, code,
+      )
+    }
+    throw new ChatterboxError(`${ref}speech HTTP ${res.status}${detail ? ' : ' + detail.slice(0, 200) : ''}`, res.status, jobId, code)
   }
   const arrayBuf = await res.arrayBuffer()
   return Buffer.from(arrayBuf)
