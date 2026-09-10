@@ -28,18 +28,33 @@ import { finalizeEvent, getPublicKey } from 'nostr-tools/pure'
 
 const URL_PROVISION = 'https://data-space.world/api/pinning/provision'
 
-/** Heure du serveur en secondes — la seule référence qui compte. */
-async function horlogeServeur(): Promise<{ t: number; source: 'serveur' | 'locale' }> {
-  try {
-    const r = await fetch('https://data-space.world/', {
-      method: 'HEAD', signal: AbortSignal.timeout(15_000),
-    })
-    const d = r.headers.get('date')
-    if (d) {
-      const t = Math.floor(new Date(d).getTime() / 1000)
-      if (Number.isFinite(t) && t > 0) return { t, source: 'serveur' }
-    }
-  } catch { /* on retombe sur l'horloge locale */ }
+/**
+ * Heure du serveur en secondes — la seule référence qui compte.
+ *
+ * 🔴 Réessayée, parce qu'un seul raté coûtait une station entière. Nuit du
+ * 10/09/2026 : pour svoboda-fm, la lecture de l'heure a échoué une fois,
+ * le repli sur l'horloge locale (en retard de ~127 s, hors de la fenêtre
+ * NIP-98 de ± 60 s) a rendu un 401 CERTAIN, et l'émission n'a pas été
+ * déposée. Le statut HTTP n'importe pas : un 429 porte aussi un en-tête
+ * `Date`. Seul un échec réseau justifie de recommencer.
+ */
+export async function horlogeServeur(
+  essais = 3,
+  attendre: (ms: number) => Promise<void> = ms => new Promise(r => setTimeout(r, ms)),
+): Promise<{ t: number; source: 'serveur' | 'locale' }> {
+  for (let essai = 1; essai <= essais; essai++) {
+    try {
+      const r = await fetch('https://data-space.world/', {
+        method: 'HEAD', signal: AbortSignal.timeout(15_000),
+      })
+      const d = r.headers.get('date')
+      if (d) {
+        const t = Math.floor(new Date(d).getTime() / 1000)
+        if (Number.isFinite(t) && t > 0) return { t, source: 'serveur' }
+      }
+    } catch { /* échec réseau : on recommence */ }
+    if (essai < essais) await attendre(5_000 * essai)
+  }
   return { t: Math.floor(Date.now() / 1000), source: 'locale' }
 }
 
