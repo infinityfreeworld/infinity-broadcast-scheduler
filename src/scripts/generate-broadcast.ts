@@ -393,6 +393,10 @@ async function generateBroadcastBytes(opts: {
         const jobId = err instanceof ChatterboxError ? err.jobId : undefined
         const quand = jobId ? ` job_id=${jobId} ${new Date().toISOString()}` : ''
         console.warn(`\n  ⚠ chatterbox fail [${plan.voixPersonnage}]${quand}: ${msg.slice(0, 120)}`)
+        // La raison chiffrée d'un refus s'écrit EN ENTIER, sur sa propre ligne : la ligne
+        // ci-dessus tronque, et c'est ce chiffre qui tranche l'hypothèse de la longueur.
+        const refus = err instanceof ChatterboxError ? err.dernierRefus : undefined
+        if (refus) console.warn(`    ↳ dernier refus data-space : ${refus}`)
         if (!isFallbackPiperEnabled()) throw err
         process.stdout.write('  (repli piper)\n')
       }

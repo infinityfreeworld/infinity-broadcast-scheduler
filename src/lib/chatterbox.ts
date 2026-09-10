@@ -54,19 +54,39 @@ export class ChatterboxError extends Error {
     public readonly jobId?: string,
     /** Code applicatif renvoyé (`not_ready`, `queue_error`, `synthesis_failed`…). */
     public readonly code?: string,
+    /** Raison CHIFFRÉE du dernier refus côté data-space (`last_refusal`, depuis le 10/09 22:40) :
+     *  durée audio mesurée, caractères, durée minimale attendue. C'est ce qui confirmera — ou
+     *  non — l'hypothèse « texte trop long, coupé, refusé » sans avoir à les attendre. */
+    public readonly dernierRefus?: string,
   ) {
     super(message)
     this.name = 'ChatterboxError'
   }
 }
 
-/** Lit `job_id` et `error.code` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
-export function lireCorpsErreur(detail: string): { jobId?: string; code?: string } {
+/** Met `last_refusal` en une ligne lisible et citable : « raison — audio 3,1 s pour 401 car. (min 16 s), 6 refus à … ». */
+export function formaterRefus(r: unknown): string | undefined {
+  if (!r || typeof r !== 'object') return undefined
+  const x = r as Record<string, unknown>
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+  const morceaux: string[] = [typeof x.reason === 'string' && x.reason ? x.reason : 'refus']
+  const audio = num(x.audio_seconds), chars = num(x.chars), min = num(x.min_seconds), n = num(x.count)
+  if (audio !== undefined || chars !== undefined) {
+    morceaux.push(`audio ${audio ?? '?'} s pour ${chars ?? '?'} car.${min !== undefined ? ` (min ${min} s)` : ''}`)
+  }
+  if (n !== undefined) morceaux.push(`${n} refus`)
+  if (typeof x.at === 'string') morceaux.push(`à ${x.at}`)
+  return morceaux.join(' — ')
+}
+
+/** Lit `job_id`, `error.code` et `last_refusal` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
+export function lireCorpsErreur(detail: string): { jobId?: string; code?: string; refus?: string } {
   try {
-    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown } }
+    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown }; last_refusal?: unknown }
     return {
       jobId: typeof j.job_id === 'string' ? j.job_id : undefined,
       code: typeof j.error?.code === 'string' ? j.error.code : undefined,
+      refus: formaterRefus(j.last_refusal),
     }
   } catch {
     return {}
@@ -619,7 +639,7 @@ async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer>
       if (fileRatee && ++filesRatees > MAX_FILES_RATEES) {
         throw new ChatterboxError(
           `${ref}mise en file refusée ${filesRatees} fois de suite — à signaler à data-space avec cet identifiant et l'heure (${new Date().toISOString()})`,
-          503, e.jobId, 'queue_error',
+          503, e.jobId, 'queue_error', e.dernierRefus,
         )
       }
       const attenteS = Number.parseInt(/Retry-After (\d+)s/.exec(e.message)?.[1] ?? '15', 10)
@@ -627,10 +647,10 @@ async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer>
       if (restant <= attenteS * 1000) {
         throw new ChatterboxError(
           `${ref}file d'attente saturée au-delà de notre budget (${budgetMs / 1000}s) — repli`,
-          429, e.jobId, e.code,
+          429, e.jobId, e.code, e.dernierRefus,
         )
       }
-      console.log(`  [chatterbox] ${fileRatee ? 'mise en file ratée' : 'file pleine'}${e.jobId ? ` (job_id ${e.jobId})` : ''}, on patiente ${attenteS}s (tentative ${tentative})`)
+      console.log(`  [chatterbox] ${fileRatee ? 'mise en file ratée' : 'file pleine'}${e.jobId ? ` (job_id ${e.jobId})` : ''}, on patiente ${attenteS}s (tentative ${tentative})${e.dernierRefus ? ` — dernier refus : ${e.dernierRefus}` : ''}`)
       await new Promise(r => setTimeout(r, attenteS * 1000))
     }
   }
@@ -687,7 +707,7 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
   if (!res.ok) {
     let detail = ''
     try { detail = await res.text() } catch { /* */ }
-    const { jobId, code } = lireCorpsErreur(detail)
+    const { jobId, code, refus } = lireCorpsErreur(detail)
     // ⚠️ LE job_id EN TÊTE : l'appelant tronque le message à 120 caractères. En fin de
     // message, l'identifiant qu'on doit citer à data-space tombait précisément dans la
     // partie coupée.
@@ -700,7 +720,7 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
       const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 15
       throw new ChatterboxError(
         `${ref}speech HTTP 429 — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
-        429, jobId, code,
+        429, jobId, code, refus,
       )
     }
     // 503 queue_error — la mise en file n'a rien enregistré. Réessayable (cf. la boucle).
@@ -708,10 +728,15 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
       const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 20
       throw new ChatterboxError(
         `${ref}speech HTTP 503 queue_error — travail non mis en file, Retry-After ${attente}s`,
-        503, jobId, code,
+        503, jobId, code, refus,
       )
     }
-    throw new ChatterboxError(`${ref}speech HTTP ${res.status}${detail ? ' : ' + detail.slice(0, 200) : ''}`, res.status, jobId, code)
+    // Un refus chiffré passe AVANT le corps brut : c'est lui qu'on veut lire, et la ligne d'échec
+    // de l'appelant tronque.
+    throw new ChatterboxError(
+      `${ref}speech HTTP ${res.status}${refus ? ` — dernier refus : ${refus}` : detail ? ' : ' + detail.slice(0, 200) : ''}`,
+      res.status, jobId, code, refus,
+    )
   }
   const arrayBuf = await res.arrayBuffer()
   return Buffer.from(arrayBuf)

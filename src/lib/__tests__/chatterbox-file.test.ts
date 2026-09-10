@@ -17,7 +17,7 @@ import { test, mock, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  synthesizeWithChatterbox, lireCorpsErreur, ChatterboxError, MAX_FILES_RATEES,
+  synthesizeWithChatterbox, lireCorpsErreur, formaterRefus, ChatterboxError, MAX_FILES_RATEES,
 } from '../chatterbox'
 
 process.env.CHATTERBOX_TTS_URL = 'https://station.exemple.test'
@@ -44,7 +44,8 @@ const NOT_READY = { error: { code: 'not_ready' }, status: 'pending', retry_after
 const QUEUE_ERR = { error: { code: 'queue_error', message: 'Le travail n’a pas pu être mis en file.' }, job_id: 'vxFILE0002' }
 
 test('le corps d’erreur livre job_id et code ; un corps illisible ne fait pas lever', () => {
-  assert.deepEqual(lireCorpsErreur(JSON.stringify(QUEUE_ERR)), { jobId: 'vxFILE0002', code: 'queue_error' })
+  // `refus` fait partie du contrat depuis last_refusal (10/09 22:40) : absent du corps → non défini.
+  assert.deepEqual(lireCorpsErreur(JSON.stringify(QUEUE_ERR)), { jobId: 'vxFILE0002', code: 'queue_error', refus: undefined })
   assert.deepEqual(lireCorpsErreur('<html>502 Bad Gateway</html>'), {})
   assert.deepEqual(lireCorpsErreur(''), {})
 })
@@ -119,4 +120,38 @@ test('⭐ la course externe ne coupe plus AVANT le budget de la file', () => {
 test('l’appelant écrit le job_id ET l’heure datée sur la ligne d’échec', () => {
   const src = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
   assert.match(src, /job_id=\$\{jobId\} \$\{new Date\(\)\.toISOString\(\)\}/)
+})
+
+// ── last_refusal : la raison chiffrée d'un refus (data-space, en ligne depuis le 10/09 22:40) ──
+const REFUS = { reason: 'audio trop court pour son texte', at: '2026-09-10T20:31:00.000Z', audio_seconds: 3.1, chars: 401, min_seconds: 16, count: 6 }
+
+test('⭐ la raison chiffrée d’un refus est lue et mise en une ligne citable', () => {
+  const r = formaterRefus(REFUS)
+  assert.match(r ?? '', /audio trop court pour son texte/)
+  assert.match(r ?? '', /audio 3\.1 s pour 401 car\. \(min 16 s\)/)
+  assert.match(r ?? '', /6 refus/)
+  assert.equal(formaterRefus(undefined), undefined)
+  assert.equal(formaterRefus('pas un objet'), undefined)
+  assert.equal(lireCorpsErreur(JSON.stringify({ job_id: 'vxR', last_refusal: REFUS })).refus, r)
+})
+
+test('⭐ un 502 porte son dernier refus jusqu’à l’appelant, AVANT le corps brut', async () => {
+  serveur(() => reponse(502, { error: { code: 'synthesis_failed' }, job_id: 'vxREFUS01', last_refusal: REFUS }))
+  await assert.rejects(synthesizeWithChatterbox(OPTS), (err: unknown) => {
+    assert.ok(err instanceof ChatterboxError)
+    assert.match(err.dernierRefus ?? '', /401 car\./)
+    assert.match(err.message, /dernier refus : audio trop court/)
+    return true
+  })
+})
+
+test('un 429 qui porte un refus antérieur n’empêche pas d’obtenir l’audio ensuite', async () => {
+  const s = serveur(() => reponse(429, { ...NOT_READY, last_refusal: REFUS }), () => reponse(200))
+  assert.deepEqual(await synthesizeWithChatterbox(OPTS), AUDIO)
+  assert.equal(s.appels(), 2)
+})
+
+test('l’appelant écrit le refus EN ENTIER, sur sa propre ligne', () => {
+  const src = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
+  assert.match(src, /dernier refus data-space : \$\{refus\}/)
 })

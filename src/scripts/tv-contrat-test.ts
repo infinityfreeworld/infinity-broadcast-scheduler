@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { TV_PROGRAM_KIND, tvProgramEventTemplate } from '../lib/tv-nostr'
 import type { TvProgram } from '../lib/tv-types'
+import { TV_CHANNELS } from '../data/seed-tv-channels'
 
 let pass = true
 const chk = (label: string, cond: boolean) => {
@@ -99,6 +100,16 @@ console.log('\n— Les deux dépôts doivent parler de la MÊME chose —')
       new RegExp(`getTag\\(event,\\s*'${tag}'\\)`).test(codec) || codec.includes(`['${tag}',`))
   }
   chk('le codec d’Infinity sait ignorer un programme retiré (tombstone)', /deleted\s*===\s*true/.test(codec))
+
+  // ⭐ CHAQUE CANAL DU GÉNÉRATEUR DOIT EXISTER CÔTÉ INFINITY. Un programme publié sur un
+  // identifiant que l'application ne connaît pas n'apparaît NULLE PART, sans aucune erreur.
+  // C'est arrivé deux fois : `tv-jt-fr` le 09/09/2026, `tv-nature` le 10/09 — produit, publié,
+  // avec le son, invisible. Tous les autres contrôles de ce fichier étaient verts les deux fois.
+  const socle = readFileSync(join(repo, 'src/modules/tv/tv-channels.ts'), 'utf8')
+  const idsSocle = new Set([...socle.matchAll(/id:\s*'([^']+)'/g)].map(m => m[1]))
+  for (const ch of TV_CHANNELS) {
+    chk(`⭐ le canal « ${ch.id} » (${ch.name}) existe dans le socle d’Infinity`, idsSocle.has(ch.id))
+  }
 }
 
 console.log(pass ? '\n🎉 contrat TV : tout est vert' : '\n💥 contrat TV : échec')
