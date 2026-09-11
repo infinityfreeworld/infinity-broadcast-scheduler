@@ -146,7 +146,7 @@ async function main() {
       // quoi qu'il ait écrit (cf. tv-direction-artistique : une consigne suivie « la plupart
       // du temps » laisse passer l'image ratée à l'antenne).
       const indices = indicesConventionnels(s.imagePrompt)
-      if (indices.length) console.log(`      ⚠️  plan ${i + 1} : scène conventionnelle dans la consigne (${indices.join(', ')})`)
+      if (indices.length) console.log(`      ⚠️  plan ${i + 1} : scène conventionnelle RECADRÉE (${indices.join(', ')})`)
       const img = await generateImage(habillerPrompt(s.imagePrompt), { ratio: '16:9', seed: 1000 + i })
       imageAssetIds.push(img.id)
       console.log(`      plan ${i + 1} → asset ${img.id}`)

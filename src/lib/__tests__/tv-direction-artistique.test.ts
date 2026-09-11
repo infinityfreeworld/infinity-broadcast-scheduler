@@ -10,7 +10,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  habillerPrompt, indicesConventionnels, STYLE_INFINITY, LONGUEUR_MAX_CONSIGNE, CHARTE_VISUELLE,
+  habillerPrompt, indicesConventionnels, recadrerScene, STYLE_INFINITY, LONGUEUR_MAX_CONSIGNE, CHARTE_VISUELLE,
 } from '../tv-direction-artistique'
 
 test('⭐ chaque consigne part habillée du style d’Infinity, la scène en tête', () => {
@@ -32,6 +32,7 @@ test('la longueur est bornée en rognant la scène, jamais le style', () => {
 
 test('⭐ les consignes relevées le 10/09 sont signalées comme conventionnelles', () => {
   assert.deepEqual(indicesConventionnels('Modern newsroom studio, green and warm lighting'), ['newsroom'])
+  assert.deepEqual(indicesConventionnels('Diverse group of people in democratic assembly, hands raised'), ['assembly'])
   assert.ok(indicesConventionnels('A protest with placards and police').length >= 3)
   assert.deepEqual(indicesConventionnels('people gathered in a wide circle in a forest clearing'), [])
 })
@@ -57,4 +58,29 @@ test('⭐ la charte est bien donnée au conducteur, et le style bien ajouté à 
 
 test('la charte ne contient aucun accent grave (elle est injectée dans un gabarit de chaîne)', () => {
   assert.ok(!CHARTE_VISUELLE.includes('`'))
+})
+
+test('⭐ l’assemblée du 10/09 est RECADRÉE en cercle dans une clairière — le style seul ne la déplaçait pas', () => {
+  const p = habillerPrompt('Diverse group of people in democratic assembly, hands raised')
+  assert.doesNotMatch(p, /assembly/i)
+  assert.match(p, /wide circle in a sunlit forest clearing/)
+  assert.match(p, /hands raised/, 'le reste de la scène est conservé')
+})
+
+test('⭐ la salle de presse du 10/09 devient un plateau dans un jardin', () => {
+  const p = habillerPrompt('Modern newsroom studio, green and warm lighting, minimalist')
+  assert.doesNotMatch(p, /newsroom/i)
+  assert.match(p, /^open-air broadcast set in a lush garden/)
+})
+
+test('⭐ une manifestation de rue devient une action collective pour le vivant, sans police', () => {
+  const p = recadrerScene('Protesters marching with placards, riot police watching')
+  assert.doesNotMatch(p, /protest|placard|police|riot/i)
+  assert.match(p, /joyful crowd acting together for the living/)
+  assert.doesNotMatch(p, /,\s*,|^,|,$/, 'ponctuation propre après retrait')
+})
+
+test('une scène déjà juste n’est pas touchée', () => {
+  const juste = 'hundreds of people planting trees together, aerial wide shot'
+  assert.equal(recadrerScene(juste), juste)
 })

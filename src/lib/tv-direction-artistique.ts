@@ -67,11 +67,49 @@ Selon le sujet :
 hémicycle, parlement, salle de conférence, bureau, costume-cravate, tribune, pupitre, béton,
 circulation automobile, écrans géants, foule en colère, pancartes, police.`
 
+/**
+ * Scènes conventionnelles → leur équivalent Infinity. Appliqué AVANT le style.
+ *
+ * 🚨 POURQUOI UNE TABLE, ET PAS SEULEMENT LE STYLE. La 1re version n'ajoutait que le style en fin
+ * de consigne. Rejouée sur les consignes réelles du 10/09, elle envoyait encore « Diverse group of
+ * people in democratic assembly, hands raised, biophilic… » : la SCÈNE restait en tête, et le
+ * modèle dessine la scène d'abord — une assemblée classique, simplement plus verte. Le style colore
+ * une image, il ne la déplace pas. Seul un recadrage de la scène elle-même le fait.
+ *
+ * Chaque motif est cherché sans tenir compte de la casse ; l'ordre compte (le plus précis d'abord).
+ */
+const RECADRAGES: ReadonlyArray<[RegExp, string]> = [
+  [/\b(?:modern\s+)?(?:newsroom|news studio|tv studio|television studio|broadcast studio)\b/gi,
+    'open-air broadcast set in a lush garden'],
+  [/\b(?:democratic|political|public|general|citizens'?|national)?\s*(?:assembly|assemblies|parliament|hemicycle|congress|senate|town hall meeting|council chamber)\b/gi,
+    'people gathered in a wide circle in a sunlit forest clearing'],
+  [/\b(?:conference room|meeting room|boardroom|offices?)\b/gi,
+    'open biophilic timber hall with living green walls'],
+  [/\b(?:protesters?|protests?|demonstrators?|demonstrations?|rally|rallies|marching|placards?|picket lines?)\b/gi,
+    'joyful crowd acting together for the living'],
+  [/\b(?:ballot box(?:es)?|voting booths?)\b/gi, 'hands raised together in the circle'],
+  [/\b(?:skyscrapers?|highways?|traffic)\b/gi, 'green eco-futurist architecture with living roofs'],
+  [/\b(?:business suits?|suits and ties|suit and tie)\b/gi, 'simple natural clothing'],
+  [/\b(?:riot police|police|riots?|podiums?|lecterns?)\b/gi, ''],
+]
+
 /** Mots qui trahissent une scène conventionnelle ; les écrire suffit à la faire dessiner. */
 const INDICES_CONVENTIONNELS = [
-  'parliament', 'hemicycle', 'conference room', 'office', 'boardroom', 'newsroom', 'suit and tie',
-  'podium', 'lectern', 'protest', 'placard', 'riot', 'police', 'traffic', 'skyscraper',
+  'parliament', 'hemicycle', 'assembly', 'conference room', 'office', 'boardroom', 'newsroom',
+  'suit and tie', 'podium', 'lectern', 'protest', 'demonstration', 'placard', 'riot', 'police',
+  'traffic', 'skyscraper',
 ]
+
+/** Remplace les scènes conventionnelles par leur équivalent Infinity, puis nettoie la ponctuation. */
+export function recadrerScene(consigne: string): string {
+  let c = consigne
+  for (const [motif, remplacement] of RECADRAGES) c = c.replace(motif, remplacement)
+  return c
+    .replace(/\s+,/g, ',')
+    .replace(/,(\s*,)+/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+}
 
 /** Les indices conventionnels présents dans une consigne (pour le journal d'exécution). */
 export function indicesConventionnels(consigne: string): string[] {
@@ -87,7 +125,7 @@ export function indicesConventionnels(consigne: string): string[] {
  * vient après ; la longueur est bornée en retirant de la consigne, jamais du style.
  */
 export function habillerPrompt(consigne: string): string {
-  const base = consigne.trim().replace(/[\s,.;]+$/, '')
+  const base = recadrerScene(consigne.trim()).replace(/[\s,.;]+$/, '')
   if (base.includes(STYLE_INFINITY)) return base.slice(0, LONGUEUR_MAX_CONSIGNE)
   const place = LONGUEUR_MAX_CONSIGNE - STYLE_INFINITY.length - 2
   return `${base.slice(0, Math.max(0, place))}, ${STYLE_INFINITY}`
