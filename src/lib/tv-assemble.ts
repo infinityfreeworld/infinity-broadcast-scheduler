@@ -81,7 +81,16 @@ export function buildProgram(
     videoCid: render?.ipfs,
     // L'URL de la forge reste un SECOURS, jamais l'unique adresse : elle sert
     // à jouer tout de suite, le CID à survivre au domaine.
-    blossomUrl: render && !render.ipfs ? render.url : undefined,
+    // ⚠️ L'URL DE LA FORGE PART TOUJOURS, CID OU PAS. Jusqu'au 11/09/2026 elle n'était publiée
+    // qu'en l'ABSENCE de CID ; depuis qu'on attend le CID (attendreCid), elle ne partait plus du
+    // tout — et la télé est restée NOIRE. La passerelle IPFS de data-space devine le type de
+    // CHAQUE plage d'octets : une plage prise au milieu part en `application/octet-stream` +
+    // `nosniff`, Chrome la bloque (ERR_BLOCKED_BY_ORB) et la vidéo reste figée SANS erreur. Le
+    // JT du 09/09 (2,6 Mo) arrivait en entier du premier coup ; celui du 10/09 (5,6 Mo) exigeait
+    // une plage au milieu pour l'horloge virtuelle. La forge, elle, sert `video/mp4`, et le
+    // lecteur la met en tête des sources. Les deux adresses sont complémentaires : l'URL pour
+    // jouer, le CID pour survivre au domaine.
+    blossomUrl: render?.url,
     // La vignette évite le rectangle noir sur la grille des chaînes. On
     // préfère son CID à son URL, pour la même raison que la vidéo.
     poster: render?.poster?.ipfs ?? render?.poster?.url,
