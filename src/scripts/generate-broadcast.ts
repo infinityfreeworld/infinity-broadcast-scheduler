@@ -51,7 +51,7 @@ import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/hos
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
-import { encodeWavToOpus } from '../lib/opus'
+import { encoderEmission, FORMAT_EMISSION } from '../lib/opus'
 import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast } from '../lib/nostr'
@@ -662,14 +662,14 @@ async function main() {
   console.log(`    WAV local : ${localWavPath} (${(result.audioBlob.byteLength / 1024 / 1024).toFixed(1)} MB)`)
 
   // 3.5. Encode Opus (Spring 2026) — gain ~16× vs WAV brut, sans perte audible
-  // pour de la voix Piper. Fichier .opus (container OGG) joué nativement par
-  // tous les navigateurs modernes via AudioContext.decodeAudioData().
-  console.log('\n🎵 Encodage Opus…')
-  const opusBlob = await encodeWavToOpus(result.audioBlob, 32)
+  // pour de la voix Piper. Emballé en WebM, PAS en Ogg : Safari et l'app
+  // macOS (WebKit) refusent l'Ogg/Opus — voir FORMAT_EMISSION (lib/opus).
+  console.log('\n🎵 Encodage Opus (WebM)…')
+  const opusBlob = await encoderEmission(result.audioBlob, 32)
   const ratio = (opusBlob.byteLength / result.audioBlob.byteLength * 100).toFixed(1)
-  console.log(`    ✓ ${(opusBlob.byteLength / 1024 / 1024).toFixed(1)} MB Opus (${ratio}% du WAV)`)
-  // Sauve aussi l'Opus en debug
-  const localOpusPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.opus`)
+  console.log(`    ✓ ${(opusBlob.byteLength / 1024 / 1024).toFixed(1)} MB Opus/WebM (${ratio}% du WAV)`)
+  // Sauve aussi l'émission encodée en debug
+  const localOpusPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.${FORMAT_EMISSION.extension}`)
   writeFileSync(localOpusPath, opusBlob)
 
   if (repetition) {
@@ -681,7 +681,7 @@ async function main() {
     mkdirSync(dossier, { recursive: true })
     const wavPath = join(dossier, `repetition-${stationId}-${targetDate}.wav`)
     writeFileSync(wavPath, Buffer.from(result.audioBlob))
-    const opusCopie = join(dossier, `repetition-${stationId}-${targetDate}.opus`)
+    const opusCopie = join(dossier, `repetition-${stationId}-${targetDate}.${FORMAT_EMISSION.extension}`)
     writeFileSync(opusCopie, opusBlob)
     console.log('\n🎧 RÉPÉTITION — rien n\'a été épinglé ni publié.')
     console.log(`    WAV  : ${wavPath}`)
@@ -705,7 +705,7 @@ async function main() {
   // Vérifié le 02/09/2026 : mêmes octets → MÊME CID chez les deux, et
   // chaque passerelle sert les deux encodages (`Qm…` v0 comme `bafy…` v1)
   // en 206. Basculer ne change donc rien côté application.
-  const nomFichier = `broadcast-${stationId}-${targetDate}.opus`
+  const nomFichier = `broadcast-${stationId}-${targetDate}.${FORMAT_EMISSION.extension}`
   const cleDataspace = await (async () => {
     try { return await jetonDataspace() } catch (err) {
       console.warn(`  ⚠ jeton data-space indérivable : ${(err as Error).message.slice(0, 140)}`)
@@ -727,7 +727,7 @@ async function main() {
   // CID que data-space ne sert pas. Échouer franchement vaut mieux que
   // publier une émission muette.
   console.log('\n📡 Dépôt data-space…')
-  const dep = await dataspacePinFile(opusBlob, nomFichier, 'audio/ogg', cleDataspace)
+  const dep = await dataspacePinFile(opusBlob, nomFichier, FORMAT_EMISSION.mime, cleDataspace)
   const pin = { cid: dep.cid, size: dep.size }
   console.log(`    ✓ CID ${dep.cid} (${(dep.size / 1024 / 1024).toFixed(1)} MB) — relu et vérifié`)
 
@@ -739,7 +739,7 @@ async function main() {
     language:    station.language ?? 'fr',
     durationSec: result.durationSec,
     audioCid:    pin.cid,
-    audioMime:   'audio/ogg',     // Opus depuis Spring 2026 (plus de WAV)
+    audioMime:   FORMAT_EMISSION.mime,   // Opus en WebM : l'Ogg est muet sous WebKit
     turns:       result.turns,
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,

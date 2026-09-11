@@ -130,6 +130,12 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/bin:/bin:/us
 export NODE_OPTIONS="--max-old-space-size=4096"
 
 command -v node >/dev/null || { echo "🔴 node introuvable dans le PATH"; exit 1; }
+# opusenc et ffmpeg encodent CHAQUE émission. Sans eux, toutes les stations
+# échoueraient à la toute fin, après avoir écrit et synthétisé leur heure
+# de programme. Autant le dire avant d'avoir rien dépensé.
+for outil in opusenc ffmpeg; do
+  command -v "$outil" >/dev/null || { echo "🔴 $outil introuvable dans le PATH — aucune émission ne pourrait être encodée"; exit 1; }
+done
 echo "  node $(node --version) · $(sw_vers -productVersion 2>/dev/null)"
 
 # ── 1. Contrôle de couture : les voix demandées existent-elles ? ──

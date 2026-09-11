@@ -28,10 +28,11 @@ export interface FichierDepot {
 }
 
 /**
- * Une émission, et rien d'autre : `broadcast-<station>-<AAAA-MM-JJ>.opus`.
+ * Une émission, et rien d'autre : `broadcast-<station>-<AAAA-MM-JJ>.webm`
+ * (`.opus` avant le 11/09/2026 — ces fichiers-là doivent encore être purgés).
  * C'est le nom que `generate-broadcast.ts` donne à ce qu'il dépose.
  */
-export const MOTIF_EMISSION = /^broadcast-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.(opus|wav|mp3)$/
+export const MOTIF_EMISSION = /^broadcast-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.(webm|opus|wav|mp3)$/
 
 export function estUneEmission(nom: string): boolean {
   return MOTIF_EMISSION.test(nom)
