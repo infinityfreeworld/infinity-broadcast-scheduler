@@ -56,6 +56,7 @@ import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast } from '../lib/nostr'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
+import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
 
 // ── Helpers date ─────────────────────────────────────────────────────
@@ -802,7 +803,11 @@ function required(name: string): string {
   return v
 }
 
-main().catch(err => {
-  console.error('\n❌ Échec :', err)
-  process.exit(1)
-})
+main()
+  // Le travail est fini : on SORT, même si une connexion orpheline traîne
+  // (lib/sortie.ts — nostr.mom retenait Free Press FM le 11/09/2026).
+  .then(() => terminer(0))
+  .catch(err => {
+    console.error('\n❌ Échec :', err)
+    process.exit(1)
+  })
