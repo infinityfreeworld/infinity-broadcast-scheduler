@@ -74,6 +74,20 @@ export const LICENCES_PIPER: Record<string, LicenceVoix> = {
   },
 
   // ── REFUSÉES — ne pas rebrancher ───────────────────────────────────
+  // Kokoro-82M v1.1-zh : poids Apache-2.0 (fiche du modèle lue le
+  // 11/09/2026). Apache-2.0 exige de conserver la mention : le crédit est
+  // donc OBLIGATOIRE. Les données chinoises viennent de LongMaoData, qui les
+  // a cédées ; des données anglaises synthétiques entrent aussi dans
+  // l'entraînement — elles ne concernent pas ces voix chinoises.
+  'kokoro-zh:zf_001': {
+    licence: 'Apache-2.0', commercial: true,
+    attribution: 'Voix chinoises « Kokoro-82M v1.1-zh » — hexgrad, Apache-2.0 ; données chinoises cédées par LongMaoData (龙猫数据)',
+  },
+  'kokoro-zh:zm_009': {
+    licence: 'Apache-2.0', commercial: true,
+    attribution: 'Voix chinoises « Kokoro-82M v1.1-zh » — hexgrad, Apache-2.0 ; données chinoises cédées par LongMaoData (龙猫数据)',
+  },
+
   'fr_FR-tom-medium': {
     licence: 'AGPLv3', commercial: false,
     motifRefus: 'Copyleft fort : contamine un produit propriétaire. Écartée '
@@ -100,9 +114,9 @@ export const LICENCES_PIPER: Record<string, LicenceVoix> = {
   },
   'zh_CN-huayan-medium': {
     licence: 'inconnue', commercial: false,
-    motifRefus: 'Aucune licence déclarée, et c\'est la SEULE voix chinoise. '
-      + 'Le chinois n\'a donc AUCUNE voix : on le refuse franchement plutôt '
-      + 'que de le servir avec une voix étrangère sur des sinogrammes.',
+    motifRefus: 'Aucune licence déclarée. Le chinois passe par Kokoro '
+      + '(kokoro-zh:*, Apache-2.0) depuis le 11/09/2026 — ne pas rebrancher '
+      + 'celle-ci pour « avoir une voix de plus ».',
   },
 }
 

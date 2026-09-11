@@ -12,3 +12,9 @@ voices/
 out/
 *.wav
 *.mp3
+
+# Environnement Python de Kokoro (voix chinoises) — séparé de celui de Piper
+.venv-kokoro/
+
+# Caches Python (ponts Piper et Kokoro)
+__pycache__/

@@ -15,7 +15,9 @@ const LANG_INSTRUCTIONS: Record<StationLanguage, string> = {
   pt: 'Você fala em português, em voz alta, para ouvintes invisíveis.',
   hi: 'आप अदृश्य श्रोताओं से हिन्दी में, मौखिक रूप से बात करते हैं।',
   ja: 'あなたは日本語で、目に見えない聴衆に向けて話します。',
-  zh: '你用中文，对着看不见的听众说话。',
+  // Les sigles étrangers en caractères chinois : la voix chinoise ne sait pas lire
+  // les lettres latines et les supprime (relevé le 11/09/2026 : « AI », « CNN »).
+  zh: '你用中文，对着看不见的听众说话。外国缩写和外文名称一律用汉字写出，例如“人工智能”而不是“AI”，“联合国”而不是“UN”。',
   ru: 'Вы говорите по-русски, вслух, для невидимых слушателей.',
 }
 

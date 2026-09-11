@@ -11,6 +11,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { voixPourLangue, languesDiffusables, type Genre } from '../voix'
+import { estVoixKokoro } from '../kokoro'
 import { voixCommercialisable, licenceDe, LICENCES_PIPER } from '../voix-licences'
 import { voixDuRegistre, isVoiceSupported } from '../piper'
 import { SEED_STATIONS } from '../../data/seed-stations'
@@ -64,31 +65,40 @@ test('toute voix du registre technique déclare sa licence', () => {
 test('toute voix atteignable est téléchargeable par le scheduler', () => {
   // Une voix nommée mais absente du registre technique planterait à
   // l'exécution, après la dépense LLM.
+  // Kokoro (chinois) tient son propre registre, épinglé par empreinte : lib/kokoro.ts.
   const manquantes: string[] = []
   for (const langue of LANGUES) {
     for (const genre of GENRES) {
       const v = voixPourLangue(langue, genre)
-      if (v && !isVoiceSupported(v)) manquantes.push(`${langue}/${genre} → ${v}`)
+      if (v && !isVoiceSupported(v) && !estVoixKokoro(v)) manquantes.push(`${langue}/${genre} → ${v}`)
     }
   }
   for (const st of SEED_STATIONS) {
     for (const h of st.hosts) {
       const v = voixPourLangue(st.language ?? 'fr', h.gender, h.id)
-      if (v && !isVoiceSupported(v)) manquantes.push(`${st.id}/${h.id} → ${v}`)
+      if (v && !isVoiceSupported(v) && !estVoixKokoro(v)) manquantes.push(`${st.id}/${h.id} → ${v}`)
     }
   }
   assert.deepEqual(manquantes, [], 'voix atteignables absentes du registre technique')
 })
 
-test('le chinois est refusé FRANCHEMENT, pas servi par une voix étrangère', () => {
+test('le chinois est servi par des voix chinoises NATIVES, jamais par une voix étrangère', () => {
+  // Jusqu'au 11/09/2026, refusé franchement faute de voix sous licence.
+  // Désormais Kokoro-82M v1.1-zh (Apache-2.0) — cf. lib/kokoro.ts.
   for (const genre of GENRES) {
-    assert.equal(voixPourLangue('zh', genre), null, `zh/${genre} doit être refusé`)
+    const v = voixPourLangue('zh', genre)
+    assert.ok(v && estVoixKokoro(v), `zh/${genre} → ${v} : une voix étrangère épellerait les sinogrammes`)
   }
-  assert.ok(!languesDiffusables().includes('zh'))
-  // Témoin : une langue servie l'est bien, sinon ce test passerait pour
-  // une mauvaise raison (toutes les langues refusées).
+  assert.ok(languesDiffusables().includes('zh'))
   assert.ok(languesDiffusables().includes('fr'))
   assert.ok(languesDiffusables().includes('ru'))
+})
+
+test('une langue SANS voix reste refusée franchement', () => {
+  // Le refus franc demeure la règle : le chinois en sort parce qu'il a
+  // trouvé des voix, pas parce que la règle s'est relâchée.
+  for (const genre of GENRES) assert.equal(voixPourLangue('ja', genre), null, `ja/${genre} doit être refusé`)
+  assert.ok(!languesDiffusables().includes('ja'))
 })
 
 test('les attributions obligatoires ne sont pas perdues', () => {
