@@ -21,7 +21,7 @@
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -300,6 +300,71 @@ async function resoudreMoteur(): Promise<Moteur> {
   return moteurResolu
 }
 
+/** Nombre de tentatives par synthèse.
+ *  onnxruntime plante par intermittence à la DESTRUCTION du processus
+ *  (`libc++abi: recursive_mutex lock failed: Invalid argument`), sous
+ *  pression mémoire — mesuré 14 fois dans la nuit du 09/09, ce qui a
+ *  coûté 8 stations sur 13. Le WAV d'un processus mort est jeté : il
+ *  peut être tronqué, on ne le récupère jamais. */
+const TENTATIVES_SYNTHESE = 3
+
+/** Un seul appel au moteur. Rejette si le moteur sort non nul ou n'écrit rien. */
+function unEssaiDeSynthese(
+  moteur: Moteur, voicePath: string, outPath: string, text: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // piper accepte le texte sur stdin et écrit le WAV via --output_file.
+    // --sentence_silence=0.05 réduit le silence en fin de phrase de 0.2s
+    // (défaut Piper) à 0.05s. Combiné avec INTER_TURN_SILENCE_S=0.10 dans
+    // audio.ts, le pacing est naturel sans "trous" perceptibles.
+    const child = execFile(moteur.cmd, [
+      ...moteur.args,
+      '--model',            voicePath,
+      '--output_file',      outPath,
+      '--sentence_silence', '0.05',
+    ], { encoding: 'buffer' }, (err, _stdout, stderr) => {
+      if (err) {
+        reject(new Error(`${err.message}\n${stderr.toString()}`))
+        return
+      }
+      if (!existsSync(outPath)) {
+        reject(new Error(`piper a produit aucun fichier ${outPath}`))
+        return
+      }
+      resolve()
+    })
+    child.stdin?.write(text)
+    child.stdin?.end()
+  })
+}
+
+/** Rejoue `faire` jusqu'à `tentatives` fois. Rend le premier succès ;
+ *  si tout échoue, lève la DERNIÈRE cause, jamais un message inventé.
+ *  Les traces vont sur stderr : stdout porte des données (jetons, CID). */
+export async function avecReprises<T>(
+  quoi: string,
+  tentatives: number,
+  faire: (essai: number) => Promise<T>,
+  attendre: (ms: number) => Promise<void> = ms => new Promise(r => setTimeout(r, ms)),
+): Promise<T> {
+  let derniere: Error | undefined
+  for (let essai = 1; essai <= tentatives; essai++) {
+    try {
+      const r = await faire(essai)
+      if (essai > 1) console.error(`[piper] ${quoi} : réussi au ${essai}e essai`)
+      return r
+    } catch (e) {
+      derniere = e as Error
+      if (essai < tentatives) {
+        const cause = String(derniere?.message ?? derniere).split('\n')[0]
+        console.error(`[piper] ${quoi} : essai ${essai}/${tentatives} échoué, reprise — ${cause}`)
+        await attendre(500 * essai)
+      }
+    }
+  }
+  throw new Error(`piper failed (${quoi}) après ${tentatives} essais: ${derniere?.message}`)
+}
+
 export async function synthesize(text: string, voiceId: string): Promise<string> {
   if (!isVoiceSupported(voiceId)) {
     throw new Error(`Voix non supportée : ${voiceId}`)
@@ -308,32 +373,22 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
   await ensureVoice(voiceId)
 
   const voicePath = join(VOICES_DIR, `${voiceId}.onnx`)
-  const outPath = join(tmpdir(), `piper-${voiceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
-
-  // piper accepte le texte sur stdin et écrit le WAV via --output_file.
-  // --sentence_silence=0.05 réduit le silence en fin de phrase de 0.2s
-  // (défaut Piper) à 0.05s. Combiné avec INTER_TURN_SILENCE_S=0.10 dans
-  // audio.ts, le pacing est naturel sans "trous" perceptibles.
   const moteur = await resoudreMoteur()
-  return new Promise((resolve, reject) => {
-    const child = execFile(moteur.cmd, [
-      ...moteur.args,
-      '--model',            voicePath,
-      '--output_file',      outPath,
-      '--sentence_silence', '0.05',
-    ], { encoding: 'buffer' }, (err, _stdout, stderr) => {
-      if (err) {
-        reject(new Error(`piper failed (${voiceId}): ${err.message}\n${stderr.toString()}`))
-        return
-      }
-      if (!existsSync(outPath)) {
-        reject(new Error(`piper a produit aucun fichier ${outPath}`))
-        return
-      }
-      resolve(outPath)
-    })
-    child.stdin?.write(text)
-    child.stdin?.end()
+
+  return avecReprises(voiceId, TENTATIVES_SYNTHESE, async () => {
+    // Un chemin NEUF à chaque essai : jamais réutiliser la sortie d'un
+    // processus qui vient de mourir, elle peut être tronquée.
+    const outPath = join(
+      tmpdir(),
+      `piper-${voiceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`,
+    )
+    try {
+      await unEssaiDeSynthese(moteur, voicePath, outPath, text)
+      return outPath
+    } catch (e) {
+      try { if (existsSync(outPath)) unlinkSync(outPath) } catch { /* déjà parti */ }
+      throw e
+    }
   })
 }
 
