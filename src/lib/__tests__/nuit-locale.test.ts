@@ -77,3 +77,71 @@ test('un premier lancement n\'est PAS un retard', () => {
 test('une nuit déjà produite ne se refait pas', () => {
   assert.equal(decision(21, '2026-09-09', 0).sortie, 'DEJA_FAIT')
 })
+
+// ─────────────────────────────────────────────────────────────────────
+// 🔴 LE MAC DORMAIT PENDANT LA NUIT RADIO
+//
+//   Nuit du 09/09 : 11 h 51 du début à la fin, pour ~3 h 15 de travail
+//   réel. `pmset -g log` montre un Deep Idle en boucle de 22 h 15 à
+//   6 h 53 — le Mac dormait, et le processus avec lui. Quatre émissions
+//   ont donc été publiées entre 7 h et 7 h 48 du matin.
+//
+//   Ce poste est réglé sur `sleep 1` sur batterie : une minute suffit.
+//   Sans `caffeinate`, la fenêtre 20 h–minuit ne veut rien dire.
+// ─────────────────────────────────────────────────────────────────────
+
+const SOURCE = readFileSync(SCRIPT, 'utf8')
+/** Le script sans ses commentaires : une garde ne doit pas se satisfaire
+ *  d'un mot trouvé dans une explication. */
+const CODE = SOURCE.split('\n').map(l => l.replace(/(^|\s)#.*$/, '')).join('\n')
+
+test('🔴 le Mac est empêché de dormir pendant la nuit', () => {
+  assert.match(CODE, /caffeinate/, 'sans caffeinate, le Mac s’endort au bout d’une minute sur batterie')
+})
+
+test('la veille est tenue par le SCRIPT lui-même, pas laissée derrière', () => {
+  // `-w $$` : caffeinate meurt avec le script. Sans lui, un script tué
+  // laisserait la machine éveillée indéfiniment.
+  assert.match(CODE, /caffeinate[^\n]*-w \$\$/, 'caffeinate doit être adossé au PID du script')
+  assert.match(CODE, /caffeinate[^\n]*&\s*$/m, 'caffeinate doit tourner en tâche de fond, sinon il bloque la nuit')
+})
+
+test('la veille est demandée APRÈS la décision, jamais avant', () => {
+  // launchd nous réveille toutes les 15 minutes. Si caffeinate précédait
+  // le `case`, chaque sondage retiendrait la machine : veille permanente.
+  const iCase = CODE.indexOf('RATTRAPAGE)')
+  const iCaf  = CODE.indexOf('caffeinate')
+  const iGen  = CODE.indexOf('generate-all.ts')
+  assert.ok(iCase > 0 && iCaf > 0 && iGen > 0, 'repères introuvables')
+  assert.ok(iCaf > iCase, 'caffeinate avant la décision = veille permanente')
+  assert.ok(iCaf < iGen, 'caffeinate après la génération ne protège rien')
+})
+
+test('les verdicts qui ne diffusent pas sortent AVANT la veille', () => {
+  const avant = CODE.slice(0, CODE.indexOf('caffeinate'))
+  assert.match(avant, /DEJA_FAIT\)[^\n]*exit 0/, 'une nuit déjà faite doit sortir avant de retenir la machine')
+  assert.match(avant, /ATTENDRE\)[^\n]*exit 0/, 'hors fenêtre, on ne retient pas la machine')
+})
+
+test('l’écran n’est PAS maintenu allumé (batterie)', () => {
+  const ligne = /caffeinate[^\n]*/.exec(CODE)?.[0] ?? ''
+  assert.ok(!/-\w*d/.test(ligne.replace('-w $$', '')), `-d allumerait l’écran toute la nuit : « ${ligne.trim()} »`)
+})
+
+test('🔴 un sondage de décision ne retient JAMAIS la machine', () => {
+  // Test de comportement, pas de lecture : on met un faux `caffeinate` en
+  // tête de PATH et on vérifie qu'il n'est pas appelé.
+  const marqueur = `/tmp/caf-marqueur-${process.pid}-${Date.now()}`
+  const faux = `/tmp/faux-bin-${process.pid}-${Date.now()}`
+  execFileSync('bash', ['-c',
+    `mkdir -p "${faux}" && printf '#!/bin/sh\\ntouch "${marqueur}"\\n' > "${faux}/caffeinate" && chmod +x "${faux}/caffeinate"`,
+  ])
+  try {
+    execFileSync('bash', ['-c', `PATH="${faux}:$PATH" bash "${SCRIPT}" --decision`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    const appele = execFileSync('bash', ['-c', `[ -e "${marqueur}" ] && echo oui || echo non`], { encoding: 'utf8' }).trim()
+    assert.equal(appele, 'non', 'le sondage des 15 minutes ne doit pas bloquer la veille')
+  } finally {
+    execFileSync('bash', ['-c', `rm -rf "${faux}" "${marqueur}"`])
+  }
+})
