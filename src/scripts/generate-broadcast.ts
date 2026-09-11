@@ -30,6 +30,7 @@ import { appelerLLM, maillonsDisponibles, bilanDesMaillons, type LLMMessage } fr
 import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
+import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
   ouvrirSessionDiffusion, preparerAccesChatterbox, ouvrirEcheanceClone,
@@ -402,13 +403,18 @@ async function generateBroadcastBytes(opts: {
       }
     }
     if (!wav) {
-      const wavPath = await synthesize(plan.texte, plan.voixPiper)
+      // Voix native de la langue : Kokoro pour le chinois, Piper ailleurs.
+      const kokoro = estVoixKokoro(plan.voixPiper)
+      const wavPath = kokoro
+        ? await synthesizeKokoro(plan.texte, plan.voixPiper)
+        : await synthesize(plan.texte, plan.voixPiper)
       const piperWav = readWav(wavPath)
-      if (piperWav.sampleRate !== getVoiceSampleRate(plan.voixPiper)) {
-        console.warn(`  sample rate mismatch ${piperWav.sampleRate} vs ${getVoiceSampleRate(plan.voixPiper)}`)
+      const tauxAttendu = kokoro ? TAUX_KOKORO : getVoiceSampleRate(plan.voixPiper)
+      if (piperWav.sampleRate !== tauxAttendu) {
+        console.warn(`  sample rate mismatch ${piperWav.sampleRate} vs ${tauxAttendu}`)
       }
       wav = piperWav
-      if (!plan.voixPersonnage) process.stdout.write(`piper:${plan.voixPiper}\n`)
+      if (!plan.voixPersonnage) process.stdout.write(`${kokoro ? '' : 'piper:'}${plan.voixPiper}\n`)
     }
     wavEntries.push({ wav })
   }
@@ -578,7 +584,8 @@ async function main() {
         + `(aucune voix commercialisable) — pis-aller assumé, pas une panne.`)
     }
   }
-  for (const v of uniqueVoices) await ensureVoice(v)
+  // Le chinois passe par Kokoro (lib/kokoro.ts), toutes les autres langues par Piper.
+  for (const v of uniqueVoices) await (estVoixKokoro(v) ? ensureKokoro() : ensureVoice(v))
   const attributions = [...uniqueVoices]
     .map(v => licenceDe(v)?.attribution)
     .filter((a): a is string => !!a)

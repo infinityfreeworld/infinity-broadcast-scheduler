@@ -78,7 +78,7 @@ const VOIX_FR_PAR_GENRE: Record<Genre, string> = {
 
 /**
  * Voix natives par langue. Une langue ABSENTE de cette table n'a pas de
- * voix : c'est le cas de `en`, `zh`, `it`, `pt`, `hi`, `ja`.
+ * voix : c'est le cas de `it`, `pt`, `hi`, `ja`.
  *
  * `en` a été audité à part le 01/09/2026 : la PWA le sert par Kokoro, qui
  * vit dans le navigateur et n'existe pas ici. Les voix américaines usuelles
@@ -107,6 +107,15 @@ const VOIX_PAR_LANGUE: Partial<Record<StationLanguage, Record<Genre, string>>> =
     male:     'ru_RU-dmitri-medium',
     female:   'ru_RU-denis-medium',
     androgyn: 'ru_RU-dmitri-medium',
+  },
+  zh: {
+    // Kokoro-82M v1.1-zh (Apache-2.0) : voix chinoises NATIVES — cf.
+    // lib/kokoro.ts. Avant le 11/09/2026 le chinois n'avait aucune voix et
+    // 自由之声 était refusée chaque nuit. Choisies sans avoir été écoutées
+    // par un sinophone : À VALIDER à l'oreille.
+    male:     'kokoro-zh:zm_009',
+    female:   'kokoro-zh:zf_001',
+    androgyn: 'kokoro-zh:zf_001',
   },
 }
 
