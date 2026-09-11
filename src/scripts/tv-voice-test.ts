@@ -126,6 +126,13 @@ console.log('\n— La chaîne complète reste branchée —')
     generator: 'ffmpeg-compose+llm+piper:fr_FR-tom-medium',
   })
   chk('le programme dit avec quelle voix il a été fait', prog.generator?.includes('piper:') === true)
+
+  // ⭐ ÉCRAN NOIR DU 10/09 : avec un CID, l'URL de la forge disparaissait du programme ; il ne
+  // restait que la passerelle IPFS, qui type mal les plages au milieu (Chrome les bloque).
+  const deux = buildProgram({ id: 'tv-main-1', name: 'JT' } as TvChannelConfig, conducteur, 0,
+    { id: 'r1', url: 'https://forge/api/assets/r1/file', ipfs: 'QmCID', durationSec: 10 })
+  chk('⭐ avec un CID, l’URL directe de la forge est QUAND MÊME publiée', deux.blossomUrl === 'https://forge/api/assets/r1/file')
+  chk('… et le CID aussi (survivre au domaine)', deux.videoCid === 'QmCID')
 }
 
 console.log(pass ? '\n🎉 voix TV : tout est vert' : '\n💥 voix TV : échec')
