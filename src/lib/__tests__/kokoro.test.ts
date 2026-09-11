@@ -6,13 +6,13 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 
-import { estVoixKokoro, nomKokoro, empreinte, FICHIERS_KOKORO, TAUX_KOKORO } from '../kokoro'
+import { estVoixKokoro, nomKokoro, empreinte, FICHIERS_KOKORO, TAUX_KOKORO, causeDEchec } from '../kokoro'
 import { voixPourLangue, languesDiffusables, timbreHonore, type Genre } from '../voix'
 import { voixCommercialisable, licenceDe, attributionsRequises } from '../voix-licences'
 
@@ -105,6 +105,8 @@ function sigles(texte: string): string {
     // numpy INTERDIT : la fonction des sigles doit se charger sans lui, quelle que
     // soit la machine (le Python système de ce Mac l'a — la mutation passait).
     "sys.modules['numpy'] = None",
+    // Aucun cache .pyc : le test ne doit laisser aucun fichier dans le dépôt.
+    'sys.dont_write_bytecode = True',
     `spec = importlib.util.spec_from_file_location('pont', ${JSON.stringify(PONT)})`,
     'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
     'print(m.remplacer_sigles(sys.argv[1]))',
@@ -116,6 +118,7 @@ function sigles(texte: string): string {
 test('🔴 les sigles de l’actualité sont DITS en chinois, pas supprimés', () => {
   assert.equal(sigles('关于AI和NGO的报道，CNN说'), '关于人工智能和非政府组织的报道，美国有线电视新闻网说')
   assert.equal(sigles('比特币和Bitcoin、blockchain'), '比特币和比特币、区块链')
+  assert.ok(!existsSync(resolve(process.cwd(), 'scripts/__pycache__')), 'le test ne doit laisser aucun cache Python dans le dépôt')
 })
 
 test('un mot latin inconnu est laissé tel quel — pour être SIGNALÉ, pas deviné', () => {
@@ -133,4 +136,20 @@ test('le remplacement a lieu AVANT la phonétique, et le signalement APRÈS', ()
 
 test('la consigne d’écriture chinoise demande les sigles en caractères', () => {
   assert.match(readFileSync(resolve(process.cwd(), 'src/lib/personas.ts'), 'utf8'), /zh: '[^']*外国缩写和外文名称一律用汉字写出/)
+})
+
+// ── Un échec doit dire sa CAUSE : « Command failed: <commande> » ne dit rien.
+test('🔴 la cause d’un échec vient du signal et de stderr, pas de la ligne de commande', () => {
+  const cmd = { message: 'Command failed: /…/python /…/kokoro-python.py --model …' }
+  assert.equal(causeDEchec({ ...cmd, signal: 'SIGKILL' }, []), 'tué par SIGKILL', 'un processus tué par manque de mémoire doit le dire')
+  assert.equal(
+    causeDEchec({ ...cmd, code: 1 }, ['Traceback (most recent call last):', '  File "x"', 'onnxruntime: bad allocation']),
+    'code 1 · File "x" | onnxruntime: bad allocation')
+  assert.equal(causeDEchec({ ...cmd, code: 1 }, ['lettres latines ignorées par la phonétique chinoise : CNN']), 'code 1',
+    'un simple avertissement n’est pas une cause')
+  assert.equal(causeDEchec(cmd, []), cmd.message, 'sans rien d’autre, le message d’origine')
+})
+
+test('le rejet d’un essai porte la cause EN PREMIÈRE ligne — celle que la reprise affiche', () => {
+  assert.match(code('src/lib/kokoro.ts'), /reject\(new Error\(`\$\{causeDEchec\(err, lignes\)\}\\n\$\{err\.message\}`\)\)/)
 })

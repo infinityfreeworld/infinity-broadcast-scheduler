@@ -118,6 +118,23 @@ export async function ensureKokoro(): Promise<void> {
   pret = true
 }
 
+/**
+ * La CAUSE d'un échec du pont, en une ligne. « Command failed: <commande> »
+ * ne dit rien : répétition du 11/09/2026, deux échecs dont le journal ne
+ * montrait que la ligne de commande, tronquée. La cause est dans le signal
+ * (processus tué, souvent par manque de mémoire) ou dans les dernières
+ * lignes de stderr.
+ */
+export function causeDEchec(err: { message: string; signal?: string | null; code?: number | string | null }, stderr: string[]): string {
+  const utiles = stderr.filter(l => l.trim() && !l.includes('lettres latines') && !l.includes('en_callable is None'))
+  const morceaux = [
+    err.signal ? `tué par ${err.signal}` : '',
+    typeof err.code === 'number' ? `code ${err.code}` : '',
+    utiles.slice(-2).map(l => l.trim()).join(' | '),
+  ].filter(Boolean)
+  return morceaux.length ? morceaux.join(' · ') : err.message
+}
+
 function unEssai(texte: string, voix: string, sortie: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const enfant = execFile(python(), [
@@ -129,7 +146,7 @@ function unEssai(texte: string, voix: string, sortie: string): Promise<void> {
       '--output_file', sortie,
     ], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }, (err, _stdout, stderr) => {
       const lignes = stderr.toString().split('\n').filter(l => l && !l.includes('en_callable is None'))
-      if (err) { reject(new Error(`${err.message}\n${lignes.join('\n')}`)); return }
+      if (err) { reject(new Error(`${causeDEchec(err, lignes)}\n${err.message}`)); return }
       const latines = lignes.find(l => l.includes('lettres latines'))
       if (latines) console.warn(`  [kokoro] ${latines}`)
       if (!existsSync(sortie)) { reject(new Error(`kokoro n'a produit aucun fichier ${sortie}`)); return }

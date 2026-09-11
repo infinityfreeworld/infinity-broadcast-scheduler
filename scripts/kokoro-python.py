@@ -34,6 +34,8 @@ SIGLES = {
     'IMF': '国际货币基金组织', 'WTO': '世界贸易组织', 'GDP': '国内生产总值', 'CEO': '首席执行官',
     'USA': '美国', 'US': '美国', 'UK': '英国', 'IT': '信息技术', 'VPN': '虚拟专用网络',
     'NASA': '美国国家航空航天局', 'FBI': '美国联邦调查局', 'CIA': '美国中央情报局',
+    # Relevés à la répétition du 11/09 :
+    'CNBC': '美国消费者新闻与商业频道', 'NFT': '非同质化代币',
 }
 # Mots du réseau Infinity, insensibles à la casse.
 MOTS = {'bitcoin': '比特币', 'blockchain': '区块链', 'internet': '互联网', 'app': '应用程序'}
