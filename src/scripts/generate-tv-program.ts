@@ -28,6 +28,7 @@ import { fetchSujetsInfinity } from '../lib/infinity-sujets'
 import { choisirSujetsEcosysteme } from '../data/sujets-ecosysteme'
 import { generateConductor } from '../lib/tv-conductor'
 import { generateImage, renderTimeline, uploadMedia, attendreCid } from '../lib/waf'
+import { habillerPrompt, indicesConventionnels } from '../lib/tv-direction-artistique'
 import { buildShots, buildProgram, totalDuration, applyTimings } from '../lib/tv-assemble'
 import { synthesizeConductor, DEFAULT_TV_VOICE } from '../lib/tv-voice'
 import { tvProgramEventTemplate, publishTvProgram } from '../lib/tv-nostr'
@@ -141,7 +142,12 @@ async function main() {
   if (!plan) {
     console.log('\n   🖼️  Génération des images via WAF…')
     for (const [i, s] of conductor.segments.entries()) {
-      const img = await generateImage(s.imagePrompt, { ratio: '16:9', seed: 1000 + i })
+      // La scène vient du conducteur ; l'esprit d'Infinity est ajouté ICI, à chaque envoi,
+      // quoi qu'il ait écrit (cf. tv-direction-artistique : une consigne suivie « la plupart
+      // du temps » laisse passer l'image ratée à l'antenne).
+      const indices = indicesConventionnels(s.imagePrompt)
+      if (indices.length) console.log(`      ⚠️  plan ${i + 1} : scène conventionnelle dans la consigne (${indices.join(', ')})`)
+      const img = await generateImage(habillerPrompt(s.imagePrompt), { ratio: '16:9', seed: 1000 + i })
       imageAssetIds.push(img.id)
       console.log(`      plan ${i + 1} → asset ${img.id}`)
     }

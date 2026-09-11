@@ -7,6 +7,7 @@
  */
 import { callAnthropic } from './anthropic'
 import type { TvChannelConfig, TvConductor, TvSegment } from './tv-types'
+import { CHARTE_VISUELLE } from './tv-direction-artistique'
 
 const SYSTEM = `Tu es le rédacteur en chef d'une chaîne de télévision décentralisée.
 À partir d'un thème et d'actualités, tu produis le CONDUCTEUR d'un court épisode
@@ -16,7 +17,7 @@ texte autour, de la forme :
   "title": "titre de l'épisode",
   "segments": [
     { "title": "titre court du plan (lower-third)", "subtitle": "accroche courte",
-      "imagePrompt": "prompt visuel en anglais, cinématique, 16:9, sans texte incrusté",
+      "imagePrompt": "prompt visuel en anglais, fidèle à la CHARTE VISUELLE ci-dessous, sans texte incrusté",
       "narration": "1 à 2 phrases de voix-off", "role": "plateau" ou "terrain", "durationSec": 8 }
   ]
 }
@@ -50,7 +51,9 @@ enchaînant. Quatre paragraphes lus l'un après l'autre par deux timbres différ
 pas un dialogue — c'est deux monologues.
 
 ⚠️ TU N'INVENTES AUCUN CHIFFRE, aucun nom de participant, aucun résultat. Si une
-actualité ne dit pas combien ils étaient, le JT ne le dit pas non plus.`
+actualité ne dit pas combien ils étaient, le JT ne le dit pas non plus.
+
+${CHARTE_VISUELLE}`
 
 function extractJson(text: string): unknown {
   // Le modèle peut entourer le JSON de ``` ou de texte : on isole { … }.
