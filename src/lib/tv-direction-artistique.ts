@@ -79,14 +79,21 @@ circulation automobile, écrans géants, foule en colère, pancartes, police.`
  * Chaque motif est cherché sans tenir compte de la casse ; l'ordre compte (le plus précis d'abord).
  */
 const RECADRAGES: ReadonlyArray<[RegExp, string]> = [
-  [/\b(?:modern\s+)?(?:newsroom|news studio|tv studio|television studio|broadcast studio)\b/gi,
+  // Le mot « studio » qui suit est avalé avec la salle de presse — sinon « a lush garden studio ».
+  [/\b(?:modern\s+)?(?:newsroom(?:\s+studio)?|news studio|tv studio|television studio|broadcast studio)\b/gi,
     'open-air broadcast set in a lush garden'],
-  [/\b(?:democratic|political|public|general|citizens'?|national)?\s*(?:assembly|assemblies|parliament|hemicycle|congress|senate|town hall meeting|council chamber)\b/gi,
-    'people gathered in a wide circle in a sunlit forest clearing'],
-  [/\b(?:conference room|meeting room|boardroom|offices?)\b/gi,
-    'open biophilic timber hall with living green walls'],
-  [/\b(?:protesters?|protests?|demonstrators?|demonstrations?|rally|rallies|marching|placards?|picket lines?)\b/gi,
-    'joyful crowd acting together for the living'],
+  // L'article est avalé avec l'assemblée ; le remplacement se glisse aussi bien après « in » qu'en
+  // tête : « people in a circle gathering… », « a circle gathering…, hands raised ».
+  [/\b(?:an?\s+|the\s+)?(?:(?:democratic|political|public|general|citizens'?|national)\s+)?(?:assembly|assemblies|parliament|hemicycle|congress|senate|town hall meeting|council chamber)\b/gi,
+    'a circle gathering in a sunlit forest clearing'],
+  [/\b(?:an?\s+|the\s+)?(?:conference room|meeting room|boardroom|offices?)\b/gi,
+    'an open biophilic timber hall with living green walls'],
+  // Les pancartes partent avec leur préposition, d'un bloc.
+  [/\s*\b(?:with|holding|carrying)\s+(?:placards?|signs?|banners?)\b/gi, ''],
+  // Toute une suite de mots de manifestation devient UNE seule foule (pas trois à la file).
+  [/\b(?:protesters?|protests?|demonstrators?|demonstrations?|rally|rallies|marchers?)(?:\s+(?:marching|rallying|protesting))*\b/gi,
+    'a joyful crowd acting together for the living'],
+  [/\b(?:placards?|picket lines?)\b/gi, ''],
   [/\b(?:ballot box(?:es)?|voting booths?)\b/gi, 'hands raised together in the circle'],
   [/\b(?:skyscrapers?|highways?|traffic)\b/gi, 'green eco-futurist architecture with living roofs'],
   [/\b(?:business suits?|suits and ties|suit and tie)\b/gi, 'simple natural clothing'],
@@ -104,6 +111,12 @@ const INDICES_CONVENTIONNELS = [
 export function recadrerScene(consigne: string): string {
   let c = consigne
   for (const [motif, remplacement] of RECADRAGES) c = c.replace(motif, remplacement)
+  // Deux indices voisins donnaient deux fois la même scène à la file : on n'en garde qu'une.
+  for (const [, r] of RECADRAGES) {
+    if (!r) continue
+    const double = new RegExp(`(${r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?:[\\s,]+\\1)+`, 'gi')
+    c = c.replace(double, '$1')
+  }
   return c
     .replace(/\s+,/g, ',')
     .replace(/,(\s*,)+/g, ',')

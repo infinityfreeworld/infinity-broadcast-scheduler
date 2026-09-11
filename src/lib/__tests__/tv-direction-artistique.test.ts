@@ -63,7 +63,7 @@ test('la charte ne contient aucun accent grave (elle est injectée dans un gabar
 test('⭐ l’assemblée du 10/09 est RECADRÉE en cercle dans une clairière — le style seul ne la déplaçait pas', () => {
   const p = habillerPrompt('Diverse group of people in democratic assembly, hands raised')
   assert.doesNotMatch(p, /assembly/i)
-  assert.match(p, /wide circle in a sunlit forest clearing/)
+  assert.match(p, /a circle gathering in a sunlit forest clearing/)
   assert.match(p, /hands raised/, 'le reste de la scène est conservé')
 })
 
@@ -83,4 +83,33 @@ test('⭐ une manifestation de rue devient une action collective pour le vivant,
 test('une scène déjà juste n’est pas touchée', () => {
   const juste = 'hundreds of people planting trees together, aerial wide shot'
   assert.equal(recadrerScene(juste), juste)
+})
+
+// ── Sorties EXACTES : des tests de présence laissaient passer « people in people gathered » et
+//    « a lush garden studio ». Seule la phrase entière dit si la consigne est bien écrite. ──
+test('⭐ sortie exacte — l’assemblée du 10/09', () => {
+  assert.equal(recadrerScene('Diverse group of people in democratic assembly, hands raised'),
+    'Diverse group of people in a circle gathering in a sunlit forest clearing, hands raised')
+})
+
+test('⭐ sortie exacte — la salle de presse du 10/09', () => {
+  assert.equal(recadrerScene('Modern newsroom studio, green and warm lighting, minimalist'),
+    'open-air broadcast set in a lush garden, green and warm lighting, minimalist')
+})
+
+test('⭐ sortie exacte — une manifestation de rue ne donne qu’UNE foule, sans pancartes ni police', () => {
+  assert.equal(recadrerScene('Protesters marching with placards, riot police watching'),
+    'a joyful crowd acting together for the living, watching')
+})
+
+test('l’article n’est pas doublé devant le remplacement', () => {
+  assert.equal(recadrerScene('a parliament debating the new law'),
+    'a circle gathering in a sunlit forest clearing debating the new law')
+})
+
+test('⭐ des indices séparés par des virgules ne donnent qu’UNE foule (fusion des répétitions)', () => {
+  // Chaque mot est remplacé à part (la virgule coupe le motif) : sans la fusion, la consigne
+  // décrirait trois fois la même foule à la file.
+  assert.equal(recadrerScene('Protesters, demonstrators, marchers in the square'),
+    'a joyful crowd acting together for the living in the square')
 })
