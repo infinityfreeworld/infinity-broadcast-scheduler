@@ -19,10 +19,29 @@ Usage :
   .venv-kokoro/bin/python scripts/kokoro-python.py --lister --voices voices/kokoro/voices-v1.1-zh.bin
 """
 import argparse
+import re
 import sys
 import wave
 
-import numpy as np
+# Sigles et mots étrangers FRÉQUENTS dans l'actualité : la phonétique chinoise
+# supprime tout mot en lettres latines, sans rien dire. Relevé à la première
+# répétition (11/09/2026) : « AI », « NGO », « CNN » disparaissaient de 5 tours
+# sur 14 — « 关于AI的发展 » devenait « 关于的发展 ». Sensible à la casse : « IT »
+# est un sigle, « it » n'en est pas un.
+SIGLES = {
+    'AI': '人工智能', 'NGO': '非政府组织', 'CNN': '美国有线电视新闻网', 'BBC': '英国广播公司',
+    'UN': '联合国', 'EU': '欧盟', 'NATO': '北约', 'WHO': '世界卫生组织',
+    'IMF': '国际货币基金组织', 'WTO': '世界贸易组织', 'GDP': '国内生产总值', 'CEO': '首席执行官',
+    'USA': '美国', 'US': '美国', 'UK': '英国', 'IT': '信息技术', 'VPN': '虚拟专用网络',
+    'NASA': '美国国家航空航天局', 'FBI': '美国联邦调查局', 'CIA': '美国中央情报局',
+}
+# Mots du réseau Infinity, insensibles à la casse.
+MOTS = {'bitcoin': '比特币', 'blockchain': '区块链', 'internet': '互联网', 'app': '应用程序'}
+
+
+def remplacer_sigles(texte: str) -> str:
+    """Remplace les sigles connus par leur nom chinois ; laisse les autres (signalés plus loin)."""
+    return re.sub(r'[A-Za-z]+', lambda m: SIGLES.get(m.group(0)) or MOTS.get(m.group(0).lower()) or m.group(0), texte)
 
 
 def main() -> None:
@@ -36,6 +55,8 @@ def main() -> None:
     ap.add_argument('--lister', action='store_true', help='affiche les voix disponibles')
     a = ap.parse_args()
 
+    import numpy as np   # ici, pas en tête : remplacer_sigles doit rester importable sans numpy
+
     if a.lister:
         print('\n'.join(sorted(np.load(a.voices).keys())))
         return
@@ -47,9 +68,10 @@ def main() -> None:
     if not texte:
         sys.exit('texte vide sur stdin')
 
-    # La phonétique chinoise SUPPRIME les mots en lettres latines (« AI »,
-    # « NASA ») — sans rien dire. On le dit, pour que le journal le montre.
-    import re
+    # La phonétique chinoise SUPPRIME les mots en lettres latines — sans rien
+    # dire. Les sigles connus sont d'abord dits en chinois ; les autres sont
+    # SIGNALÉS, pour que le journal le montre.
+    texte = remplacer_sigles(texte)
     latines = re.findall(r'[A-Za-z]+', texte)
     if latines:
         print(f"lettres latines ignorées par la phonétique chinoise : {' '.join(latines[:8])}", file=sys.stderr)

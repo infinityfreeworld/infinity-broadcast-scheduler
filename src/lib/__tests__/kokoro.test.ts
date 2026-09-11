@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 
 import { estVoixKokoro, nomKokoro, empreinte, FICHIERS_KOKORO, TAUX_KOKORO } from '../kokoro'
 import { voixPourLangue, languesDiffusables, timbreHonore, type Genre } from '../voix'
@@ -92,4 +93,44 @@ test('le pont utilise le vocabulaire et la phonétique de la v1.1, et signale le
 
 test('l’environnement Kokoro n’entre jamais dans le dépôt', () => {
   assert.match(readFileSync(resolve(process.cwd(), '.gitignore'), 'utf8'), /^\.venv-kokoro\/$/m)
+})
+
+// ── Les lettres latines : la phonétique chinoise les SUPPRIME en silence.
+//    Première répétition (11/09) : « AI », « NGO », « CNN » disparus de 5 tours.
+
+const PONT = resolve(process.cwd(), 'scripts/kokoro-python.py')
+function sigles(texte: string): string {
+  const r = spawnSync('python3', ['-c', [
+    'import importlib.util, sys',
+    // numpy INTERDIT : la fonction des sigles doit se charger sans lui, quelle que
+    // soit la machine (le Python système de ce Mac l'a — la mutation passait).
+    "sys.modules['numpy'] = None",
+    `spec = importlib.util.spec_from_file_location('pont', ${JSON.stringify(PONT)})`,
+    'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+    'print(m.remplacer_sigles(sys.argv[1]))',
+  ].join('\n'), texte], { encoding: 'utf8' })
+  assert.equal(r.status, 0, `pont inimportable : ${r.stderr}`)
+  return r.stdout.trim()
+}
+
+test('🔴 les sigles de l’actualité sont DITS en chinois, pas supprimés', () => {
+  assert.equal(sigles('关于AI和NGO的报道，CNN说'), '关于人工智能和非政府组织的报道，美国有线电视新闻网说')
+  assert.equal(sigles('比特币和Bitcoin、blockchain'), '比特币和比特币、区块链')
+})
+
+test('un mot latin inconnu est laissé tel quel — pour être SIGNALÉ, pas deviné', () => {
+  assert.equal(sigles('XYZ公司'), 'XYZ公司')
+  assert.equal(sigles('it'), 'it', '« it » minuscule n’est pas le sigle IT')
+})
+
+test('le remplacement a lieu AVANT la phonétique, et le signalement APRÈS', () => {
+  const py = readFileSync(PONT, 'utf8')
+  const iRemp = py.indexOf('texte = remplacer_sigles(texte)')
+  const iSign = py.indexOf("latines = re.findall(r'[A-Za-z]+', texte)")
+  const iG2P = py.indexOf("ZHG2P(version='1.1')(texte)")
+  assert.ok(iRemp > 0 && iSign > iRemp && iG2P > iSign, 'ordre : remplacer → signaler → phonétique')
+})
+
+test('la consigne d’écriture chinoise demande les sigles en caractères', () => {
+  assert.match(readFileSync(resolve(process.cwd(), 'src/lib/personas.ts'), 'utf8'), /zh: '[^']*外国缩写和外文名称一律用汉字写出/)
 })
