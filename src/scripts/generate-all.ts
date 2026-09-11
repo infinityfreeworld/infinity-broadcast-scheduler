@@ -18,6 +18,7 @@ import 'dotenv/config'
 import { getChatterboxVoiceForHost } from '../lib/chatterbox'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { delaiStationMs } from '../lib/sortie'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
@@ -200,13 +201,18 @@ async function main() {
       const { stdout, stderr } = await exec(
         'npx',
         ['tsx', 'src/scripts/generate-broadcast.ts', station.id, targetDate],
-        { env: process.env, maxBuffer: 50 * 1024 * 1024 },   // 50 MB output max
+        // Filet : une station qui ne rend pas la main (socket orpheline,
+        // lib/sortie.ts) ne retient plus toute la nuit derrière elle.
+        { env: process.env, maxBuffer: 50 * 1024 * 1024, timeout: delaiStationMs(), killSignal: 'SIGTERM' },
       )
       if (stdout) process.stdout.write(stdout)
       if (stderr) process.stderr.write(stderr)
       results.push({ stationId: station.id, ok: true })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const suspendue = (err as { killed?: boolean })?.killed === true
+      const msg = suspendue
+        ? `abandonnée après ${delaiStationMs() / 60_000} min sans rendre la main (processus suspendu)`
+        : err instanceof Error ? err.message : String(err)
       console.error(`✗ ${station.id} : ${msg}`)
       results.push({ stationId: station.id, ok: false, error: msg })
     }
