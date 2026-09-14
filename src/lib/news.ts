@@ -18,6 +18,18 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
+  // 🔴 Reporterre était MUET : « Entity expansion limit exceeded: 1009 > 1000 » (14/09/2026). La
+  // limite par défaut compte chaque `&amp;` ou `&#8217;` d'un flux ordinaire ; un long flux la
+  // dépasse sans rien avoir d'hostile. On relève le TOTAL, et l'on garde serrées les bornes qui
+  // arrêtent vraiment une bombe d'entités (profondeur d'imbrication, taille d'une entité, longueur
+  // dépliée) — la seule chose dangereuse est l'entité qui en contient d'autres.
+  processEntities: {
+    enabled: true,
+    maxEntitySize: 10_000,
+    maxExpansionDepth: 10,
+    maxTotalExpansions: 50_000,
+    maxExpandedLength: 2_000_000,
+  },
 })
 
 async function fetchSource(source: NewsSource): Promise<NewsItem[]> {
@@ -196,13 +208,63 @@ export async function fetchNewsForStation(
   return all.slice(0, limit)
 }
 
-export function formatNewsForPrompt(items: NewsItem[]): string {
+const HEURE = 3_600_000
+const JOUR = 24 * HEURE
+
+/**
+ * Tri de FRAÎCHEUR pour le JT — ligne éditoriale du fondateur (14/09/2026) : « majoritairement des
+ * actualités positives des dernières 24 h, mais peut également évoquer des sujets plus anciens ».
+ *
+ * Le tri garde MAJORITAIREMENT le frais (≤ 24 h) et quelques sujets plus anciens (≤ 7 jours). Le
+ * choix des nouvelles POSITIVES, lui, revient au rédacteur (le LLM) : il faut donc lui en donner
+ * assez pour qu'il puisse choisir, et venues de plusieurs sources — tirées à tour de rôle, sinon le
+ * flux le plus bavard remplirait tout.
+ * Une nouvelle SANS date compte comme ancienne : rien ne permet de la dire « du jour ».
+ */
+export function choisirActualites(
+  items: NewsItem[],
+  { frais = 6, anciens = 2, maintenant = Date.now() }: { frais?: number; anciens?: number; maintenant?: number } = {},
+): NewsItem[] {
+  const vus = new Set<string>()
+  const uniques = items.filter(it => {
+    const cle = it.title.trim().toLowerCase()
+    if (!cle || vus.has(cle)) return false
+    vus.add(cle)
+    return true
+  })
+  const estFrais = (it: NewsItem) => !!it.publishedAt && it.publishedAt <= maintenant + HEURE && maintenant - it.publishedAt <= JOUR
+  const recent = (a: NewsItem, b: NewsItem) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+  const tourDeRole = (liste: NewsItem[], n: number): NewsItem[] => {
+    const parSource = new Map<string, NewsItem[]>()
+    for (const it of [...liste].sort(recent)) parSource.set(it.sourceTitle, [...(parSource.get(it.sourceTitle) ?? []), it])
+    const files = [...parSource.values()]
+    const pris: NewsItem[] = []
+    while (pris.length < n && files.some(f => f.length)) {
+      for (const f of files) { const it = f.shift(); if (it && pris.length < n) pris.push(it) }
+    }
+    return pris
+  }
+  const fraiches = uniques.filter(estFrais)
+  const plusAnciennes = uniques.filter(it => !estFrais(it) && (!it.publishedAt || maintenant - it.publishedAt <= 7 * JOUR))
+  return [...tourDeRole(fraiches, frais), ...tourDeRole(plusAnciennes, anciens)]
+}
+
+/**
+ * `maintenant` (facultatif, le JT) ajoute la FRAÎCHEUR à chaque date : « il y a 5 h » ou « plus
+ * ancien ». Sans lui, le format reste celui de la radio, à l'identique.
+ */
+export function formatNewsForPrompt(items: NewsItem[], opts: { maintenant?: number } = {}): string {
   if (items.length === 0) return ''
   return items.map(item => {
     const date = item.publishedAt
       ? new Date(item.publishedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
       : ''
+    let etiquette = date
+    if (opts.maintenant !== undefined && item.publishedAt && item.publishedAt <= opts.maintenant + HEURE) {
+      const heures = Math.max(0, Math.round((opts.maintenant - item.publishedAt) / HEURE))
+      etiquette = heures <= 24 ? `il y a ${heures} h` : `${date} · plus ancien`
+    }
     const summary = item.summary ? ` — ${item.summary.slice(0, 180)}` : ''
-    return `• ${date ? `[${date}] ` : ''}${item.title}${summary} (${item.sourceTitle})`
+    return `• ${etiquette ? `[${etiquette}] ` : ''}${item.title}${summary} (${item.sourceTitle})`
   }).join('\n')
 }

@@ -37,11 +37,15 @@ test('les bornes : zéro demandé → rien ; trop demandé → tout, sans doublo
   assert.equal(new Set(tout.map(s => s.title)).size, tout.length)
 })
 
-test('⭐ le générateur présente l’application AVANT de puiser à l’extérieur, et borne l’extérieur à deux', () => {
+test('⭐ le générateur MÉLANGE l’écosystème et le monde (ligne éditoriale du 14/09/2026)', () => {
+  // Règle du 10/09 : l'extérieur « borné à deux ». Remplacée le 14/09 par le fondateur : un mélange
+  // écosystème + quotidien du monde, surtout des bonnes nouvelles des dernières 24 h.
   const gen = readFileSync(new URL('../../scripts/generate-tv-program.ts', import.meta.url), 'utf8')
-  assert.match(gen, /choisirSujetsEcosysteme\(Math\.max\(0, 3 - sujets\.length\)\)/)
-  assert.match(gen, /fetchNewsForStation\(\{ sources: channel\.sources \} as RadioStation, 2\)/)
-  assert.match(gen, /\[\.\.\.sujets, \.\.\.presentation, \.\.\.news\]/, 'ordre : réel, présentation, extérieur')
+  assert.match(gen, /choisirSujetsEcosysteme\(Math\.max\(0, 2 - sujets\.length\)\)/)
+  assert.match(gen, /choisirActualites\(await fetchNewsForStation\(/, 'le monde passe par le tri de fraîcheur')
+  assert.match(gen, /formatNewsForPrompt\(\[\.\.\.sujets, \.\.\.presentation\]\)/, 'l’écosystème, réel puis présentation')
+  assert.match(gen, /L'écosystème Infinity :/)
+  assert.match(gen, /Le quotidien du monde :/)
 })
 
 const CLES = [

@@ -22,11 +22,18 @@ export const TV_CHANNELS: TvChannelConfig[] = [
     id: 'tv-main-1',
     name: 'JT INFINITY',
     language: 'fr',
-    theme: "journal quotidien des SOLUTIONS : écologie, entraide, initiatives citoyennes, technologies libres. Ton posé, factuel, constructif.",
+    // Ligne éditoriale du fondateur (14/09/2026) : écosystème + quotidien du monde, surtout des
+    // bonnes nouvelles des dernières 24 h ; les nouvelles inquiétantes, avec douceur et solutions.
+    theme: "journal quotidien : la vie de l'écosystème Infinity et le quotidien du monde, surtout des bonnes nouvelles des dernières 24 heures. Ton posé, doux, une pointe d'humour bienveillant, toujours tourné vers les solutions.",
     segments: 4,
     sources: [
       { type: 'rss', url: 'https://www.reporterre.net/spip.php?page=backend', title: 'Reporterre' },
       { type: 'rss', url: 'https://mrmondialisation.org/feed/', title: 'Mr Mondialisation' },
+      // Ajoutées le 14/09/2026 (flux vérifiés ce jour-là, tous datés du matin même) : des bonnes
+      // nouvelles, et le quotidien du monde. Good News Network est en anglais : le rédacteur traduit.
+      { type: 'rss', url: 'https://positivr.fr/feed/', title: 'Positivr' },
+      { type: 'rss', url: 'https://www.rfi.fr/fr/monde/rss', title: 'RFI Monde' },
+      { type: 'rss', url: 'https://www.goodnewsnetwork.org/feed/', title: 'Good News Network' },
     ],
   },
   {

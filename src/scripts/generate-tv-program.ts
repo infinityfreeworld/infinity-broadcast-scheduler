@@ -23,7 +23,7 @@
  */
 import 'dotenv/config'
 import { findChannel } from '../data/seed-tv-channels'
-import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
+import { fetchNewsForStation, formatNewsForPrompt, choisirActualites } from '../lib/news'
 import { fetchSujetsInfinity } from '../lib/infinity-sujets'
 import { choisirSujetsEcosysteme } from '../data/sujets-ecosysteme'
 import { generateConductor } from '../lib/tv-conductor'
@@ -88,19 +88,23 @@ async function main() {
     // doivent ABSOLUMENT concerner les sujets de l'application »). Avant l'ouverture
     // publique, c'est l'état normal : on explique alors comment Infinity fonctionne,
     // à partir de ses propres fiches.
-    const presentation = choisirSujetsEcosysteme(Math.max(0, 3 - sujets.length))
+    const presentation = choisirSujetsEcosysteme(Math.max(0, 2 - sujets.length))
     if (presentation.length) {
       console.log(`   🧭 + ${presentation.length} présentation(s) de l'application (activité réelle insuffisante)`)
     }
-    // ⚠️ L'EXTÉRIEUR N'EST PLUS QU'UN COMPLÉMENT, BORNÉ À DEUX. Il ne comble plus le vide :
-    // c'est l'application qui le comble.
+    // 🗞️ LIGNE ÉDITORIALE DU FONDATEUR (14/09/2026) : un MÉLANGE — la vie de l'écosystème ET le
+    // quotidien du monde, majoritairement des nouvelles POSITIVES des dernières 24 h, quelques sujets
+    // plus anciens. L'extérieur n'est donc plus « un complément borné à deux » (règle du 10/09) : on
+    // en ramène assez, de plusieurs sources, pour que le rédacteur CHOISISSE les positives.
     const news = channel.sources
-      ? await fetchNewsForStation({ sources: channel.sources } as RadioStation, 2)
+      ? choisirActualites(await fetchNewsForStation({ sources: channel.sources } as RadioStation, 60), { frais: 6, anciens: 2 })
       : []
-    if (news.length) console.log(`   📰 + ${news.length} actualité(s) extérieure(s), en complément`)
+    if (news.length) console.log(`   📰 + ${news.length} actualité(s) du monde (${news.filter(n => n.publishedAt && Date.now() - n.publishedAt <= 86_400_000).length} des dernières 24 h)`)
+    const ecosysteme = formatNewsForPrompt([...sujets, ...presentation])
+    const monde = formatNewsForPrompt(news, { maintenant: Date.now() })
     conductor = await generateConductor(
       channel,
-      formatNewsForPrompt([...sujets, ...presentation, ...news]),
+      [ecosysteme && `L'écosystème Infinity :\n${ecosysteme}`, monde && `Le quotidien du monde :\n${monde}`].filter(Boolean).join('\n\n'),
       apiKey,
       process.env.ANTHROPIC_MODEL,
     )
