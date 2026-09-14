@@ -55,7 +55,8 @@ import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '..
 import { encoderEmission, FORMAT_EMISSION } from '../lib/opus'
 import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
-import { publishBroadcast } from '../lib/nostr'
+import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
+import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
@@ -541,6 +542,21 @@ async function main() {
       + `commercialisable (cf. lib/voix-licences.ts). Génération abandonnée — `
       + `mieux vaut le silence qu'une voix étrangère qui épelle le texte.`,
     )
+  }
+
+  // ── ANTI-DOUBLON (14/09/2026) ──
+  // Plusieurs producteurs peuvent fabriquer la même nuit : le Mac, le secours GitHub, bientôt
+  // l'usine de nuit. Si l'émission est DÉJÀ sur les relais, signée par notre clé, on s'arrête AVANT
+  // d'avoir dépensé un seul jeton. Relais illisibles → on produit (cf. lib/deja-diffuse).
+  // `FORCER_REGENERATION=1` refait quand même (une émission ratée qu'on veut remplacer).
+  if (!repetition && process.env.FORCER_REGENERATION !== '1') {
+    const d = broadcastDTag(stationId, targetDate)
+    const deja = await dTagsPublies(RADIO_BROADCAST_KIND, [d], pubkeyDe(nostrPriv), getRelays())
+    if (deja?.has(d)) {
+      console.log(`✓ ${stationId} ${targetDate} : déjà à l'antenne (un autre producteur l'a faite) — rien à refaire.`)
+      process.exit(0)
+    }
+    if (deja === null) console.warn('  ⚠ relais illisibles : impossible de vérifier un doublon — on produit.')
   }
 
   await assurerConfigNostr(SEED_STATIONS.map(s => s.id))
