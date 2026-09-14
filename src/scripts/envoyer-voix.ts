@@ -26,12 +26,16 @@
  *     tsx src/scripts/envoyer-voix.ts [dossier]              # à blanc
  *     tsx src/scripts/envoyer-voix.ts [dossier] --executer   # envoie
  *
- *   Exige DATASPACE_API_KEY.
+ *     tsx src/scripts/envoyer-voix.ts [dossier] --executer --json cids.json   # + correspondance pour declarer-voix
+ *
+ *   Exige un jeton data-space : DATASPACE_API_KEY, ou DATASPACE_NOSTR_KEY (jeton dérivé, ne périme pas —
+ *   c'est la clé du générateur, en secret GitHub depuis le 14/09/2026 : le workflow « deposer-voix » s'en sert).
  */
 
 import 'dotenv/config'
-import { readdirSync, statSync, readFileSync } from 'node:fs'
+import { readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, extname, basename } from 'node:path'
+import { jetonDataspace } from '../lib/dataspace-jeton'
 
 const URL_ENVOI = 'https://data-space.world/api/v1/upload'
 const DOSSIER_DEFAUT = '/Users/med/Desktop/Voice'
@@ -105,10 +109,12 @@ async function envoyer(c: Candidat, cle: string): Promise<string> {
 }
 
 async function main() {
-  const args = process.argv.slice(2).filter(a => a !== '--executer')
+  const argv = process.argv.slice(2)
+  const iJson = argv.indexOf('--json')
+  const sortieJson = iJson >= 0 ? (argv[iJson + 1] ?? '') : ''
+  const args = argv.filter((a, i) => a !== '--executer' && (iJson < 0 || (i !== iJson && i !== iJson + 1)))
   const dossier = args[0] ?? DOSSIER_DEFAUT
   const executer = process.argv.includes('--executer')
-  const cle = process.env.DATASPACE_API_KEY ?? ''
 
   const tous = inventorier(dossier)
   const bons = tous.filter(c => !c.refus)
@@ -130,8 +136,9 @@ async function main() {
     console.log(`\n· Mode à blanc. Relancer avec --executer pour envoyer.`)
     return
   }
+  const cle = await jetonDataspace()
   if (!cle) {
-    console.error(`\n❌ DATASPACE_API_KEY manquante — rien n'a été envoyé.`)
+    console.error(`\n❌ Aucun jeton data-space (DATASPACE_NOSTR_KEY ou DATASPACE_API_KEY) — rien n'a été envoyé.`)
     process.exit(1)
   }
 
@@ -156,6 +163,11 @@ async function main() {
     console.log('| voix | CID |')
     console.log('|---|---|')
     for (const [nom, cid] of cids) console.log(`| \`${nom}\` | \`${cid}\` |`)
+    // La correspondance que `declarer-voix.ts` relit : { "<nom>.wav": "<cid>" }.
+    if (sortieJson) {
+      writeFileSync(sortieJson, JSON.stringify(Object.fromEntries(cids), null, 1))
+      console.log(`\n→ ${sortieJson}`)
+    }
   }
   if (echecs.length && cids.length === 0) process.exit(1)
 }
