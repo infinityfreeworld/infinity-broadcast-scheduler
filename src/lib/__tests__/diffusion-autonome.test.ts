@@ -63,10 +63,16 @@ test('⭐ le secours ne produit QUE les stations manquantes, et ne démarre rien
   assert.match(WF, /PRODUCTEUR: github-secours/)
 })
 
-test('🔴 les tests du préparateur ont leurs outils : sans opusenc, le secours échouait AVANT de produire', () => {
+test('🔴 les deux jobs du secours ont leurs outils (opusenc ET ffmpeg) : sans eux, il échouait AVANT de produire', () => {
+  // opus-tools manquait au préparateur (14/09) ; ffmpeg manquait aux DEUX jobs — un vrai essai du secours
+  // l'a montré le soir même (run 34885807714) : l'image ubuntu-latest ne le fournit plus.
   const prep = WF.slice(WF.indexOf('preparer:'), WF.indexOf('emission:'))
-  assert.match(prep, /opus-tools/)
-  assert.ok(prep.indexOf('opus-tools') < prep.indexOf('npm test'))
+  const emis = WF.slice(WF.indexOf('emission:'), WF.indexOf('\n  bilan:'))
+  for (const outil of ['opus-tools', 'ffmpeg']) {
+    assert.match(prep, new RegExp(`apt-get install -y[^\\n]*${outil}`), `préparateur : ${outil}`)
+    assert.ok(prep.indexOf(`install -y opus-tools ffmpeg`) < prep.indexOf('npm test'), 'installés AVANT les tests')
+    assert.match(emis, new RegExp(`apt-get install -y[^\\n]*${outil}`), `émission : ${outil}`)
+  }
 })
 
 // ── Veille du matin ────────────────────────────────────────────────────

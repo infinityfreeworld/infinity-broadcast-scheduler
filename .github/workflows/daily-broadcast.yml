@@ -85,10 +85,12 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # 🔴 Sans opusenc, trois tests (encodage WebM) échouent — et le préparateur avec eux : le
-      # secours se serait arrêté AVANT de produire la moindre émission (constaté le 14/09/2026).
-      - name: Outils des tests (opus-tools)
-        run: sudo apt-get update && sudo apt-get install -y opus-tools
+      # 🔴 Sans opusenc NI ffmpeg, trois tests (encodage WebM) échouent — et le préparateur avec eux :
+      # le secours s'arrête AVANT de produire la moindre émission. opus-tools manquait (14/09/2026) ;
+      # ffmpeg aussi, découvert le même soir par un vrai essai (run 34885807714) : l'image
+      # ubuntu-latest ne le fournit plus.
+      - name: Outils des tests (opus-tools + ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y opus-tools ffmpeg
 
       # Date cible : celle demandée à la main ; sinon, en SECOURS (cron de 01:30 UTC), le jour qui
       # commence ; sinon (lancement manuel sans date) le comportement historique, J+1.
@@ -158,8 +160,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install espeak-ng + opus-tools (deps système Piper + encodage Opus)
-        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools
+      # ffmpeg réemballe l'Ogg en WebM (opus.ts) : sans lui, la synthèse irait au bout et l'émission
+      # ne serait jamais déposée.
+      - name: Install espeak-ng + opus-tools + ffmpeg (Piper, encodage Opus, réemballage WebM)
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools ffmpeg
 
       - name: Install deps
         run: npm ci
