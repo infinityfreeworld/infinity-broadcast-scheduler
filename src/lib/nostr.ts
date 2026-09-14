@@ -38,6 +38,11 @@ export function getRelays(): string[] {
 }
 
 /** Construit le d-tag d'un broadcast (= clé replaceable). */
+/** Clé publique hex d'une clé privée hex (sert à reconnaître NOS émissions sur les relais). */
+export function pubkeyDe(privKeyHex: string): string {
+  return getPublicKey(hexToBytes(privKeyHex))
+}
+
 export function broadcastDTag(stationId: string, date: string): string {
   return `${stationId}:${date}`
 }
@@ -71,6 +76,8 @@ export async function publishBroadcast(
       ['duration',   String(Math.round(finalBroadcast.durationSec))],
       ['t',          'radio-broadcast'],
       ['visibility', 'public'],
+      // Qui a fabriqué la nuit : le Mac, le secours GitHub, l'usine de nuit (anti-doublon, 14/09/2026).
+      ['producteur', process.env.PRODUCTEUR || 'inconnu'],
     ],
     content: JSON.stringify({
       stationId:   finalBroadcast.stationId,

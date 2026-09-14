@@ -197,6 +197,7 @@ npx tsx src/scripts/verifier-voix.ts || echo "  (voix manquantes — repli Piper
 # ── 2. Les quinze stations ──
 echo ""
 echo "── génération ──"
+export PRODUCTEUR="${PRODUCTEUR:-mac}"   # anti-doublon : l'émission dit qui l'a fabriquée
 npx tsx src/scripts/generate-all.ts
 CODE=$?
 echo "  generate-all → code $CODE"

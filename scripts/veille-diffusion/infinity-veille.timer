@@ -1,0 +1,11 @@
+# 06:00 UTC : bilan du matin (le secours GitHub tourne à 01:30 UTC) · 09:00 UTC : deuxième regard.
+[Unit]
+Description=Veille du matin de la diffusion Infinity — 06:00 et 09:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

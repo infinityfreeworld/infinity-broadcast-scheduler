@@ -1,0 +1,19 @@
+# Veille du matin de la diffusion Infinity (radio + TV) — lecture SEULE des relais NOSTR publics.
+# Conditions de la session DATASPACE (14/09/2026) : dossier /root/veille-diffusion uniquement,
+# protocole public, nice + CPUQuota + MemoryMax + PrivateTmp.
+[Unit]
+Description=Veille du matin de la diffusion Infinity (radio + TV)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/veille-diffusion
+ExecStart=/opt/node22/bin/node /root/veille-diffusion/veille-diffusion.mjs
+# 0 = tout est là, 1 = il manque des émissions (alerte envoyée), 2 = aveugle : aucun n'est une panne du service.
+SuccessExitStatus=1 2
+Nice=19
+CPUQuota=20%
+MemoryMax=256M
+PrivateTmp=true
+TimeoutStartSec=120

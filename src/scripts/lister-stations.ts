@@ -12,6 +12,8 @@
 
 import 'dotenv/config'
 import { SEED_STATIONS } from '../data/seed-stations'
+import { pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
+import { dTagsPublies } from '../lib/deja-diffuse'
 import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import {
@@ -59,9 +61,29 @@ async function ordonnerParBesoinDeGpu(): Promise<string[]> {
   }
 }
 
-const ids = process.argv.includes('--brut')
+let ids = process.argv.includes('--brut')
   ? SEED_STATIONS.map(s => s.id)
   : await ordonnerParBesoinDeGpu()
+
+// `--manquantes` : ne garder que les stations dont l'émission de TARGET_DATE n'est PAS encore à
+// l'antenne (secours GitHub, 14/09/2026). Relais illisibles → on les garde toutes : mieux vaut
+// produire deux fois qu'un soir de silence.
+if (process.argv.includes('--manquantes')) {
+  const date = process.env.TARGET_DATE || ''
+  const cle = process.env.NOSTR_PRIVATE_KEY || ''
+  if (date && cle) {
+    const deja = await dTagsPublies(RADIO_BROADCAST_KIND, ids.map(i => broadcastDTag(i, date)), pubkeyDe(cle), getRelays())
+    if (deja) {
+      const avant = ids.length
+      ids = ids.filter(i => !deja.has(broadcastDTag(i, date)))
+      console.error(`[stations] ${avant - ids.length} déjà à l'antenne pour ${date} — ${ids.length} à produire`)
+    } else {
+      console.error('[stations] relais illisibles : on produit toutes les stations')
+    }
+  } else {
+    console.error('[stations] --manquantes sans TARGET_DATE ni NOSTR_PRIVATE_KEY : liste complète')
+  }
+}
 if (process.argv.includes('--lisible')) {
   for (const s of SEED_STATIONS) console.log(`${s.id}\t${s.language ?? 'fr'}\t${s.name}`)
 } else {
