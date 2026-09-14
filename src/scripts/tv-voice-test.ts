@@ -116,6 +116,7 @@ console.log('\n— La chaîne complète reste branchée —')
   // qui accusait un code correct).
   const corps = code.slice(code.indexOf('async function main'))
   chk('⭐ la piste est passée au montage', /audio:\s*audioAssetId\s*\?\s*\{\s*assetId:\s*audioAssetId\s*\}/.test(corps))
+  chk('⭐ le programme est rendu pour tourner EN BOUCLE (pas de noir à chaque tour)', /renderTimeline\(\{[\s\S]*?boucle:\s*true/.test(corps))
   chk('la voix est synthétisée avant les images', corps.indexOf('synthesizeConductor') < corps.indexOf('generateImage'))
   chk('les durées mesurées sont appliquées avant le montage', corps.indexOf('applyTimings') < corps.indexOf('buildShots'))
   chk('la piste est déposée dans la forge (pas chez un tiers)', /uploadMedia\(/.test(code) && !/pinata/i.test(code))

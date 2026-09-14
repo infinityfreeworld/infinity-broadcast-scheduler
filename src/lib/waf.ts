@@ -176,6 +176,8 @@ export async function renderTimeline(payload: {
   height?: number
   fps?: number
   prompt?: string
+  /** Programme fait pour tourner en boucle (la TV) : ni fondu d'ouverture ni fondu de fin. */
+  boucle?: boolean
 }): Promise<RenderResult> {
   return post<RenderResult>('/api/v1/render', payload)
 }

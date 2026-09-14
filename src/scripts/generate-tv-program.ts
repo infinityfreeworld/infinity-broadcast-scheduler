@@ -154,6 +154,9 @@ async function main() {
     // ── 4) Montage (WAF /render) ────────────────────────────────────────────
     console.log('   🎞️  Montage ffmpeg via WAF /api/v1/render…')
     render = await renderTimeline({
+      // Le lecteur d'Infinity fait tourner le programme EN BOUCLE : un fondu au noir en fin ou en
+      // ouverture y ferait un battement noir à chaque tour (constaté au banc Chromium, 11/09/2026).
+      boucle: true,
       shots: buildShots(conductor, imageAssetIds),
       audio: audioAssetId ? { assetId: audioAssetId } : undefined,
       width: channel.width ?? 1280, height: channel.height ?? 720, fps: channel.fps ?? 30,
