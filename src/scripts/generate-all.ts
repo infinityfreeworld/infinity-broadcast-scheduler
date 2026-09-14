@@ -15,7 +15,7 @@
  */
 
 import 'dotenv/config'
-import { getChatterboxVoiceForHost } from '../lib/chatterbox'
+import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { delaiStationMs } from '../lib/sortie'
@@ -65,7 +65,7 @@ async function main() {
   // et chaque sous-process generate-broadcast hérite via `env: process.env`.
   // Évite N × round-trips NOSTR (1 par station). Si fetch échoue, on
   // continue avec une map vide → fallback CHATTERBOX_DEFAULT_VOICE.
-  if (process.env.CHATTERBOX_TTS_URL) {
+  if (chatterboxBranche()) {
     console.log(`\n📨 Fetch mappings animateurs (NOSTR kind:30095)…`)
     const mappings = await fetchHostVoiceMappings()
     exportHostVoiceMappingsToEnv(mappings)

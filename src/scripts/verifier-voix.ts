@@ -21,7 +21,7 @@
  *
  *   Usage :
  *     tsx src/scripts/verifier-voix.ts
- *   Exige DATASPACE_API_KEY et CHATTERBOX_TTS_URL.
+ *   Exige DATASPACE_API_KEY (CHATTERBOX_TTS_URL facultatif : data-space par défaut).
  *   Sort en 1 si une seule voix manque : c'est un feu ROUGE, pas un avis.
  */
 

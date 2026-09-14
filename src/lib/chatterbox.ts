@@ -8,9 +8,12 @@
  *     - Pas d'admin upload depuis ici (upload géré côté IHL browser)
  *     - Health check `pingUntilReady()` qui attend le réveil du HF Space
  *
- *   Variables d'environnement requises :
- *     - CHATTERBOX_TTS_URL : https://username-chatterbox-xxx.hf.space
- *     - CHATTERBOX_API_KEY : bearer token (hf_xxx)
+ *   Variables d'environnement :
+ *     - identifiants data-space : DATASPACE_NOSTR_KEY (recommandé, ne périme
+ *       pas), DATASPACE_API_KEY ou CHATTERBOX_API_KEY. Leur présence SUFFIT à
+ *       brancher les voix clonées (cf. `chatterboxBranche`).
+ *     - CHATTERBOX_TTS_URL : facultatif, défaut https://data-space.world. Un
+ *       Space Hugging Face (fournisseur d'avant le 02/09/2026) est IGNORÉ.
  *     - CHATTERBOX_VOICE_MAP : JSON optionnel `{ "<hostId>": "<voiceName>" }`
  *     - CHATTERBOX_DEFAULT_VOICE : voix utilisée si hostId pas dans la map
  *     - CHATTERBOX_LANGUAGE : défaut 'fr'
@@ -223,14 +226,59 @@ export async function preparerAccesChatterbox(): Promise<void> {
   }
 }
 
+const DATASPACE = 'https://data-space.world'
+let hfSignale = false
+
+/**
+ * Adresse du service de voix clonée.
+ *
+ * 🔴 Deux valeurs ne mènent nulle part, et la nuit ne le dit pas :
+ *   - VIDE : un secret absent du CI arrive en '' ;
+ *   - un Space Hugging Face : le fournisseur d'avant le 02/09/2026, en pause
+ *     depuis juillet, et qui n'a de toute façon jamais servi `/api/v1/gpu/voix`.
+ * Les deux finissaient en Piper sur toute la radio. On les remplace par
+ * data-space, notre seul fournisseur — et on le DIT pour le second.
+ */
+export function baseChatterbox(): string {
+  const brut = (process.env.CHATTERBOX_TTS_URL ?? '').trim()
+  if (!brut) return DATASPACE
+  if (/\.hf\.space\b|huggingface\.co/i.test(brut)) {
+    if (!hfSignale) {
+      console.warn(`  ⚠️ [chatterbox] CHATTERBOX_TTS_URL pointe encore vers Hugging Face (${brut}) :`
+        + ` ignoré, la voix passe par data-space. Retirer cette ligne du .env.`)
+      hfSignale = true
+    }
+    return DATASPACE
+  }
+  return brut.replace(/\/+$/, '')
+}
+
+/**
+ * La radio doit-elle demander des voix clonées ?
+ *
+ * 🔴 Jusqu'au 14/09/2026, SIX endroits répondaient « oui » seulement si
+ * `CHATTERBOX_TTS_URL` était non vide — alors que l'adresse a un défaut
+ * (data-space) depuis le 02/09. Une machine qui n'avait que ses identifiants
+ * data-space — le Mac de la nuit radio, qui y dépose pourtant chaque
+ * émission — partait donc en Piper sur toute la radio, sans une ligne
+ * d'erreur. Ce qui décide, c'est d'avoir de quoi s'authentifier.
+ */
+export function chatterboxBranche(): boolean {
+  return Boolean(
+    (process.env.CHATTERBOX_TTS_URL ?? '').trim()
+    || process.env.CHATTERBOX_API_KEY
+    || process.env.DATASPACE_API_KEY
+    || process.env.DATASPACE_NOSTR_KEY,
+  )
+}
+
 function getEndpoint(): { url: string; apiKey: string } {
   // Défaut explicite : data-space est notre fournisseur depuis le
   // 02/09/2026. Sans ce défaut, un secret vide faisait lever ici, et
   // l'appelant repliait TOUT sur Piper — une soirée sans aucune voix de
   // personnage, indiscernable d'une soirée où le service dort.
-  const url = process.env.CHATTERBOX_TTS_URL || 'https://data-space.world'
   return {
-    url:    url.replace(/\/+$/, ''),
+    url:    baseChatterbox(),
     apiKey: jetonResolu ?? process.env.CHATTERBOX_API_KEY ?? '',
   }
 }
@@ -778,8 +826,9 @@ const SHIPPED_ENGLISH_VOICES = new Set([
  *   3. CHATTERBOX_DEFAULT_VOICE (fallback global).
  *   4. null → fallback Piper (cf isFallbackPiperEnabled).
  *
- *   Si Chatterbox n'est pas du tout configuré (`CHATTERBOX_TTS_URL` vide),
- *   on retourne null direct pour basculer sur Piper.
+ *   Si Chatterbox n'est pas du tout branché (ni adresse ni identifiants
+ *   data-space, cf. `chatterboxBranche`), on retourne null direct pour
+ *   basculer sur Piper.
  *
  *   Phase E pré-fix (2026-05-20) — si `language` est fourni et != 'en',
  *   et que la voix résolue est une voix shipée anglaise (Abigail, Adrian…),
@@ -791,7 +840,7 @@ export function getChatterboxVoiceForHost(
   hostId: string,
   language?: string,
 ): string | null {
-  if (!process.env.CHATTERBOX_TTS_URL) return null
+  if (!chatterboxBranche()) return null
 
   let resolved: string | null = null
 

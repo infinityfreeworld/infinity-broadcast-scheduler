@@ -12,7 +12,7 @@
 
 import 'dotenv/config'
 import { SEED_STATIONS } from '../data/seed-stations'
-import { getChatterboxVoiceForHost } from '../lib/chatterbox'
+import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import {
   fetchRadioPersonas, exportRadioPersonasToEnv, unifiedGuestsForStation,
@@ -37,7 +37,7 @@ import {
  */
 async function ordonnerParBesoinDeGpu(): Promise<string[]> {
   const ids = SEED_STATIONS.map(s => s.id)
-  if (!process.env.CHATTERBOX_TTS_URL) return ids
+  if (!chatterboxBranche()) return ids
   try {
     exportHostVoiceMappingsToEnv(await fetchHostVoiceMappings())
     exportRadioPersonasToEnv(await fetchRadioPersonas(ids))
