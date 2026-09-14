@@ -77,27 +77,7 @@ export const SEED_STATIONS: RadioStation[] = [
     live: false,
     creatorPubkey: null,
   },
-  {
-    id: 'bigballs-radio',
-    kind: 'bigballs',
-    language: 'fr',
-    frequency: 108.5,
-    name: 'Big Balls Radio',
-    tagline: 'Action ou silence.',
-    color: '#ffb320',
-    hosts: [
-      { id: 'bb-rocco', name: 'Rocco', gender: 'male',   trait: 'punch / motivation, ex-coach',         color: '#ffb320', avatar: '🥊' },
-      { id: 'bb-vince', name: 'Vince', gender: 'male',   trait: 'tacticien stratégique, références cinéma de boxe et arts martiaux', color: '#ffd76a', avatar: '🎬' },
-    ],
-    sources: [
-      { type: 'rss', url: 'https://www.numerama.com/feed/',                  title: 'Numerama' },
-      { type: 'rss', url: 'https://korben.info/feed',                        title: 'Korben' },
-      { type: 'rss', url: 'https://www.lemonde.fr/rss/une.xml',              title: 'Le Monde' },
-    ],
-    tracks: DEFAULT_TRACKS,
-    live: false,
-    creatorPubkey: null,
-  },
+  // Big Balls Radio (108.5) SUPPRIMÉE le 14/09/2026 à la demande du fondateur, avec ses deux animateurs.
   {
     id: 'mindctrl-radio',
     kind: 'mindctrl',

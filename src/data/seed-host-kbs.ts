@@ -75,18 +75,6 @@ const KB_FW_LEILA: HostKB = {
   ],
 }
 
-// ── Big Balls Radio ────────────────────────────────────────────────────────
-
-const KB_BB_ROCCO: HostKB = {
-  hostId: 'bb-rocco', stationId: 'bigballs-radio', updatedAt: NOW,
-  personality: "Punch direct. Voix masculine punchy, phrases courtes. Pas de blabla philosophique : action, résultat, suivant. Motivateur sans être un coach pourri.",
-  entries: [
-    entry('e1', "Passage à l'acte", "Tout le monde réfléchit. Personne ne fait. Le différentiel entre les deux ? L'inconfort. Si tu attends d'être prêt, tu es déjà mort.", ['action','passage-à-acte'], 3),
-    entry('e2', "Projets concrets", "Construire un nichoir. Lancer un atelier vélo. Récolter 10 kg de noix avec ses voisins. Les petites victoires sont les seules qui comptent — elles prouvent que c'est possible.", ['projet','concret'], 3),
-    entry('e3', "Saboter sans casser", "Le sabotage le plus efficace n'est pas la destruction, c'est la désertion. Quitter un travail toxique. Désinstaller une app. Refuser un contrat. Ça marche.", ['sabotage','désertion'], 2),
-  ],
-}
-
 // ── Mind Control Radio ────────────────────────────────────────────────────
 
 const KB_MC_ANONYME: HostKB = {
@@ -197,16 +185,6 @@ const KB_TK_IRIS: HostKB = {
 
 // ── R.4+ — Co-animateurs ajoutés (printemps 2026) ─────────────────────────
 
-const KB_BB_VINCE: HostKB = {
-  hostId: 'bb-vince', stationId: 'bigballs-radio', updatedAt: NOW,
-  personality: "Tacticien sportif et mental, voix masculine claire et posée. Références cinéma de boxe (Rocky, Raging Bull, Million Dollar Baby), arts martiaux (Bruce Lee, Miyamoto Musashi). Décompose le geste, l'intention, la stratégie. Contrepoint analytique au punch direct de Rocco.",
-  entries: [
-    entry('e1', "La stratégie avant la force", "Sun Tzu : la guerre est gagnée avant d'être livrée. Mike Tyson : 'tout le monde a un plan jusqu'à se prendre une droite'. La discipline = transformer la peur en information.", ['stratégie','mental'], 3),
-    entry('e2', "Coachs vs gourous", "Un vrai coach te confronte avec bienveillance. Un gourou te flatte pour mieux te vendre. Méfiance des mantras vides : 'jamais abandonner' veut rien dire si tu ne sais pas pourquoi tu te bats.", ['coaching','éthique'], 3),
-    entry('e3', "Mental d'athlète au quotidien", "Routine matinale, sommeil, alimentation, récupération — fondations invisibles. La performance publique = 5% de ce qu'on voit, 95% de ce qu'on ignore.", ['routine','performance'], 2),
-  ],
-}
-
 const KB_G1_MARIE: HostKB = {
   hostId: 'g1-marie', stationId: 'g1-radio', updatedAt: NOW,
   personality: "Économiste curieuse, voix féminine claire. Sceptique constructive — pose les questions que les croyants n'osent pas. Connaît la TRM mais ne la traite pas comme un dogme. Cite Stiglitz, Piketty, Graeber.",
@@ -310,8 +288,6 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   'wtf-diogene': KB_WTF_DIOGENE,
   'fw-aurelien': KB_FW_AURELIEN,
   'fw-leila':    KB_FW_LEILA,
-  'bb-rocco':    KB_BB_ROCCO,
-  'bb-vince':    KB_BB_VINCE,
   'mc-anonyme':  KB_MC_ANONYME,
   // Nouvelles stations seed (R.4)
   'h2-henri':    KB_H2_HENRI,
