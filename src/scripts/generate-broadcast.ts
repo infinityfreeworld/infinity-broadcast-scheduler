@@ -36,6 +36,7 @@ import {
   ouvrirSessionDiffusion, preparerAccesChatterbox, ouvrirEcheanceClone,
   isFallbackPiperEnabled, ChatterboxError, chatterboxBranche,
 } from '../lib/chatterbox'
+import { fileEnVol } from '../lib/en-vol'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
 import {
@@ -348,22 +349,32 @@ async function generateBroadcastBytes(opts: {
   // En groupant, la file reste alimentée le temps du lot et une seule
   // location sert toute la station.
   const aSynthetiser = plansVoix.filter(p => p.voixPersonnage).length
+  // 🚀 k tours EN VOL chez data-space (cf. lib/en-vol.ts) : un seul à la fois laissait leur station
+  // chômer ~80 % du temps entre deux « 429 not_ready ». L'ordre, le décodage et les replis restent
+  // ceux de la boucle ci-dessous, tour par tour.
+  const enVolMax = Number.parseInt(process.env.CHATTERBOX_EN_VOL ?? '3', 10)
+  const file = fileEnVol(
+    plansVoix.length, enVolMax,
+    j => !!plansVoix[j].voixPersonnage,
+    j => synthesizeWithChatterbox({
+      voice:    plansVoix[j].voixPersonnage as string,
+      text:     plansVoix[j].texte,
+      language,
+      format:   'wav',
+    }),
+  )
   if (aSynthetiser > 0) {
-    console.log(`\n🎤 Synthèse groupée — ${aSynthetiser} tour(s) en voix de personnage, d'un seul trait`)
+    console.log(`\n🎤 Synthèse groupée — ${aSynthetiser} tour(s) en voix de personnage, d'un seul trait (${enVolMax} en vol)`)
   }
   for (let i = 0; i < plansVoix.length; i++) {
     const plan = plansVoix[i]
     let wav: import('../lib/audio').DecodedWav | null = null
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
+    file.remplir(i)
 
     if (plan.voixPersonnage) {
       try {
-        const buf = await synthesizeWithChatterbox({
-          voice:    plan.voixPersonnage,
-          text:     plan.texte,
-          language,
-          format:   'wav',
-        })
+        const buf = await file.prendre(i)
         // Écrit le buffer dans un tmpfile WAV pour réutiliser readWav.
         const tmpPath = join(tmpdir(), `chatterbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
         writeFileSync(tmpPath, buf)
