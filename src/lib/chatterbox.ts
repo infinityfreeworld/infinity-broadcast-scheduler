@@ -34,6 +34,7 @@
 
 import { decodeWav, concatWavs, encodeWav, type ConcatEntry } from './audio'
 import { getNostrVoiceForHost } from './host-voice-mappings'
+import { voixInventee } from '../data/voix-inventees'
 import { jetonDataspace } from './dataspace-jeton'
 
 export interface ChatterboxSpeakOptions {
@@ -818,22 +819,17 @@ const SHIPPED_ENGLISH_VOICES = new Set([
  * ou null si le mapping n'est pas configuré OU si le host n'a pas de
  * voix custom.
  *
- * Ordre de résolution (Phase C.3 2026-05-20) :
- *   1. NOSTR mapping kind:30095 (chargé depuis HOST_VOICE_MAP_JSON)
- *      — source de vérité gérée par l'IHL Infinity.
- *   2. CHATTERBOX_VOICE_MAP (legacy, par hostId seulement, pas station)
- *      — gardé pour rétrocompat tant que la migration n'est pas terminée.
- *   3. CHATTERBOX_DEFAULT_VOICE (fallback global).
- *   4. null → fallback Piper (cf isFallbackPiperEnabled).
+ * Ordre de résolution : voir `resoudreVoix` (14/09/2026) — admin (kind 30095), carte legacy,
+ * voix INVENTÉE par défaut, défaut global ; null → Piper (cf isFallbackPiperEnabled).
  *
  *   Si Chatterbox n'est pas du tout branché (ni adresse ni identifiants
  *   data-space, cf. `chatterboxBranche`), on retourne null direct pour
  *   basculer sur Piper.
  *
- *   Phase E pré-fix (2026-05-20) — si `language` est fourni et != 'en',
- *   et que la voix résolue est une voix shipée anglaise (Abigail, Adrian…),
- *   on retourne null pour forcer le fallback Piper (qui est natif
- *   multilingue). Évite l'accent anglais entendu sur les stations FR.
+ *   Phase E (2026-05-20) — une voix shipée anglaise (Abigail, Adrian…) sur
+ *   une station non anglaise donnait l'accent anglais : elle est écartée.
+ *   Depuis le 14/09/2026, écartée veut dire SAUTÉE (la source suivante
+ *   répond), plus « tout retombe sur Piper ».
  */
 export function getChatterboxVoiceForHost(
   stationId: string,
@@ -842,39 +838,53 @@ export function getChatterboxVoiceForHost(
 ): string | null {
   if (!chatterboxBranche()) return null
 
-  let resolved: string | null = null
-
-  // 1. NOSTR mapping (kind:30095) — source de vérité IHL
-  const fromNostr = getNostrVoiceForHost(stationId, hostId)
-  if (fromNostr) resolved = fromNostr
-
-  // 2. Legacy env JSON map (par hostId seulement)
-  if (!resolved) {
-    const json = process.env.CHATTERBOX_VOICE_MAP
-    if (json) {
-      try {
-        const map = JSON.parse(json) as Record<string, string>
-        if (map[hostId]) resolved = map[hostId]
-      } catch (err) {
-        console.warn('[chatterbox] CHATTERBOX_VOICE_MAP malformé:', (err as Error).message)
-      }
+  // Carte legacy par hostId (CHATTERBOX_VOICE_MAP), gardée pour rétrocompatibilité.
+  let carteLegacy: string | null = null
+  const json = process.env.CHATTERBOX_VOICE_MAP
+  if (json) {
+    try {
+      carteLegacy = (JSON.parse(json) as Record<string, string>)[hostId] ?? null
+    } catch (err) {
+      console.warn('[chatterbox] CHATTERBOX_VOICE_MAP malformé:', (err as Error).message)
     }
   }
 
-  // 3. Default global
-  if (!resolved) {
-    const defaultVoice = process.env.CHATTERBOX_DEFAULT_VOICE
-    if (defaultVoice && defaultVoice.length > 0) resolved = defaultVoice
+  return resoudreVoix({
+    admin: getNostrVoiceForHost(stationId, hostId),   // kind 30095 — le choix fait dans l'admin
+    carteLegacy,
+    inventee: voixInventee(stationId, hostId),
+    defaut: process.env.CHATTERBOX_DEFAULT_VOICE || null,
+  }, language)
+}
+
+/** Les sources possibles de la voix d'un animateur. */
+export interface SourcesVoix {
+  admin?: string | null
+  carteLegacy?: string | null
+  inventee?: string | null
+  defaut?: string | null
+}
+
+/**
+ * Choisit la voix d'un animateur, dans cet ORDRE — décision du fondateur (14/09/2026) : « il faudra
+ * que je puisse remplacer les voix à tout moment » :
+ *   1. le choix fait dans l'ADMIN (NOSTR kind 30095) ;
+ *   2. la carte legacy `CHATTERBOX_VOICE_MAP` ;
+ *   3. la voix INVENTÉE par défaut (`data/voix-inventees`) ;
+ *   4. le défaut global `CHATTERBOX_DEFAULT_VOICE`.
+ *
+ * 🔴 Une voix anglaise livrée avec l'ancien Space Hugging Face (Abigail, Alice…) n'est pas
+ * « utilisable » sur une station non anglaise : elle est SAUTÉE, et la source suivante répond.
+ * Avant, elle faisait tout retomber sur Piper — c'est ce qui laissait 0 animateur sur 33 en voix
+ * clonée le 14/09 (23 attributions de l'ère HF bloquaient chacune leur animateur).
+ */
+export function resoudreVoix(sources: SourcesVoix, language?: string): string | null {
+  const utilisable = (v?: string | null): v is string =>
+    !!v && !(language && language !== 'en' && SHIPPED_ENGLISH_VOICES.has(v))
+  for (const v of [sources.admin, sources.carteLegacy, sources.inventee, sources.defaut]) {
+    if (utilisable(v)) return v
   }
-
-  if (!resolved) return null
-
-  // 4. Phase E pré-fix — voix shipée anglaise sur station non-en → Piper
-  if (language && language !== 'en' && SHIPPED_ENGLISH_VOICES.has(resolved)) {
-    return null
-  }
-
-  return resolved
+  return null
 }
 
 /**
