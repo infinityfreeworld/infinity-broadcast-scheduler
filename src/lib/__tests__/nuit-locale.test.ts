@@ -145,3 +145,48 @@ test('🔴 un sondage de décision ne retient JAMAIS la machine', () => {
     execFileSync('bash', ['-c', `rm -rf "${faux}" "${marqueur}"`])
   }
 })
+
+// ── Le Mac se met à jour (14/09/2026) ──────────────────────────────────
+// Il produisait la radio avec la version posée sur son disque : les correctifs fusionnés ne
+// l'atteignaient jamais. La mise à jour doit être PRUDENTE — une nuit sans radio coûte plus cher
+// qu'une nuit avec la version d'hier.
+
+test('🔴 le Mac récupère le code fusionné avant de produire, en avance rapide SEULEMENT', () => {
+  assert.match(CODE, /pull -q --ff-only origin main/)
+  assert.ok(!/reset --hard|checkout -f|pull[^\n]*--rebase/.test(CODE), 'jamais écraser la copie locale')
+})
+
+test('une copie modifiée ou une autre branche ne sont jamais mises à jour de force', () => {
+  assert.match(CODE, /git status --porcelain --untracked-files=no/)
+  assert.match(CODE, /rev-parse --abbrev-ref HEAD[^\n]*\)" != "main"/)
+})
+
+test('🔴 un échec de mise à jour ne coûte PAS la nuit', () => {
+  const bloc = CODE.slice(CODE.indexOf('── mise à jour du code ──'), CODE.indexOf('── ouverture de la session'))
+  assert.ok(bloc.length > 0, 'le bloc de mise à jour doit précéder la session')
+  assert.ok(!/exit 1/.test(bloc), 'aucune sortie en erreur dans le bloc de mise à jour')
+  assert.match(bloc, /on produit avec \$AVANT/)
+})
+
+test('pas de `timeout` (absent de macOS) : les délais passent par ssh et git', () => {
+  const bloc = CODE.slice(CODE.indexOf('── mise à jour du code ──'), CODE.indexOf('── ouverture de la session'))
+  assert.ok(!/(^|\s)timeout\s/.test(bloc))
+  assert.match(bloc, /ConnectTimeout=\d+/)
+  assert.match(bloc, /BatchMode=yes/, 'launchd ne peut pas répondre à une question de ssh')
+})
+
+test('⭐ si le script lui-même a changé, la NOUVELLE version est relancée, sans reboucler', () => {
+  assert.match(CODE, /exec env NUIT_SANS_MAJ=1 bash "\$DEPOT\/scripts\/nuit-locale\.sh" "\$@"/)
+  assert.match(CODE, /\$\{NUIT_SANS_MAJ:-0\}" = 1/)
+})
+
+test('la mise à jour vient APRÈS la décision : un sondage de 15 min ne touche jamais au dépôt', () => {
+  assert.ok(CODE.indexOf('── mise à jour du code ──') > CODE.indexOf('--decision'))
+  assert.ok(CODE.indexOf('── mise à jour du code ──') > CODE.indexOf('caffeinate'))
+})
+
+test('de nouvelles dépendances passent par `npm ci`, jamais `npm install`', () => {
+  const bloc = CODE.slice(CODE.indexOf('── mise à jour du code ──'), CODE.indexOf('── ouverture de la session'))
+  assert.match(bloc, /npm ci/)
+  assert.ok(!/npm install/.test(bloc))
+})

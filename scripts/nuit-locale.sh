@@ -138,6 +138,47 @@ for outil in opusenc ffmpeg; do
 done
 echo "  node $(node --version) · $(sw_vers -productVersion 2>/dev/null)"
 
+# ── 0. Se mettre à jour AVANT de produire ────────────────────────────
+# 🔴 Le Mac ne récupérait JAMAIS le code fusionné : il produisait la radio avec la version posée
+# sur son disque (constaté le 14/09/2026 — les voix clonées branchées par les seuls identifiants
+# data-space, PR #26, ne pouvaient pas l'atteindre). On avance en AVANCE RAPIDE seulement : une copie
+# locale modifiée, une autre branche ou un historique divergent ne sont JAMAIS écrasés — on le dit,
+# et la nuit se fait avec la copie actuelle. Sans réseau non plus, la nuit ne s'arrête pas.
+# ⚠️ Pas de `timeout` : il n'existe pas sur macOS. Les délais passent par ssh et git eux-mêmes.
+# `NUIT_SANS_MAJ=1` saute l'étape (dépannage, et relance après une mise à jour du script).
+echo ""
+echo "── mise à jour du code ──"
+if [ "${NUIT_SANS_MAJ:-0}" = 1 ]; then
+  echo "  (sautée : NUIT_SANS_MAJ=1)"
+elif [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+  echo "  ⚠️ modifications locales non commitées — pas de mise à jour, on produit avec la copie actuelle"
+elif [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "main" ]; then
+  echo "  ⚠️ branche $(git rev-parse --abbrev-ref HEAD 2>/dev/null) — seule main avance d'elle-même"
+else
+  AVANT=$(git rev-parse --short HEAD)
+  if GIT_SSH_COMMAND="ssh -o ConnectTimeout=20 -o BatchMode=yes" \
+     git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 pull -q --ff-only origin main >/dev/null 2>&1; then
+    APRES=$(git rev-parse --short HEAD)
+    if [ "$AVANT" = "$APRES" ]; then
+      echo "  à jour ($APRES)"
+    else
+      echo "  mis à jour : $AVANT → $APRES"
+      # Des dépendances ont pu changer : `npm ci`, qui suit le verrou, jamais `npm install`.
+      if git diff --name-only "$AVANT" "$APRES" | grep -qx 'package-lock.json'; then
+        npm ci --no-audit --no-fund >/dev/null 2>&1 && echo "  dépendances réinstallées (npm ci)" || echo "  ⚠️ npm ci en échec"
+      fi
+      # Ce script-ci a changé : bash lit encore l'ANCIENNE version (déjà ouverte). On relance la
+      # nouvelle, sans refaire la mise à jour — même PID, donc `caffeinate -w` tient toujours.
+      if git diff --name-only "$AVANT" "$APRES" | grep -qx 'scripts/nuit-locale.sh'; then
+        echo "  le script de nuit a changé : relance avec la nouvelle version"
+        exec env NUIT_SANS_MAJ=1 bash "$DEPOT/scripts/nuit-locale.sh" "$@"
+      fi
+    fi
+  else
+    echo "  ⚠️ mise à jour impossible (réseau, clé ou historique divergent) — on produit avec $AVANT"
+  fi
+fi
+
 # ── 1. Contrôle de couture : les voix demandées existent-elles ? ──
 # Informatif : une voix manquante retombe sur Piper, ce n'est pas bloquant.
 # ── Annoncer la diffusion, AVANT tout le reste ───────────────────────
