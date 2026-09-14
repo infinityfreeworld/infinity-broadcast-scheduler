@@ -20,10 +20,10 @@
  *   elle attend seulement plus longtemps.
  */
 import 'dotenv/config'
-import { ouvrirSessionDiffusion, preparerAccesChatterbox, etatSession } from '../lib/chatterbox'
+import { ouvrirSessionDiffusion, preparerAccesChatterbox, etatSession, chatterboxBranche } from '../lib/chatterbox'
 
 async function main() {
-  if (!process.env.CHATTERBOX_TTS_URL && !process.env.DATASPACE_NOSTR_KEY) {
+  if (!chatterboxBranche()) {
     console.log('  · aucun service de voix clonée configuré — rien à ouvrir.')
     return
   }

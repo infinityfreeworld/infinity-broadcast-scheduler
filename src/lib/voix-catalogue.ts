@@ -10,6 +10,7 @@
  *   aussitôt sur le réseau — les cinq assertions passaient, et le fichier
  *   de test échouait quand même, quinze secondes plus tard.
  */
+import { baseChatterbox } from './chatterbox'
 
 /**
  * Le nom demandé au service — la SEULE chose qui compte.
@@ -31,7 +32,7 @@ export function nomDemande(voix: string): string {
  * toutes les vérifications au vert précisément là où rien ne marche.
  */
 export async function catalogueDistant(): Promise<Set<string>> {
-  const base = (process.env.CHATTERBOX_TTS_URL ?? 'https://data-space.world').replace(/\/+$/, '')
+  const base = baseChatterbox()
   const cle = process.env.DATASPACE_API_KEY ?? ''
   const res = await fetch(`${base}/api/v1/gpu/voix/catalogue`, {
     headers: cle ? { Authorization: `Bearer ${cle}` } : {},

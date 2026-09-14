@@ -34,7 +34,7 @@ import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../l
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
   ouvrirSessionDiffusion, preparerAccesChatterbox, ouvrirEcheanceClone,
-  isFallbackPiperEnabled, ChatterboxError,
+  isFallbackPiperEnabled, ChatterboxError, chatterboxBranche,
 } from '../lib/chatterbox'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
@@ -306,7 +306,7 @@ async function generateBroadcastBytes(opts: {
     // La synthèse est repoussée à la phase 2. Voir l'en-tête de la boucle
     // pour la raison — elle vient de l'hébergeur, pas d'un goût pour les
     // refactorisations.
-    const chatterboxVoice = (isGuestTurn && guestVoiceName && process.env.CHATTERBOX_TTS_URL)
+    const chatterboxVoice = (isGuestTurn && guestVoiceName && chatterboxBranche())
       ? guestVoiceName
       : getChatterboxVoiceForHost(station.id, host.id, language)
     if (chatterboxVoice) voixAttendues++
@@ -473,7 +473,7 @@ async function assurerConfigNostr(stationIds: string[]): Promise<void> {
   exportRadioPersonasToEnv(unifiees)
   exportGuestsToEnv(guests)
   exportHostPersonasToEnv(personas)
-  if (process.env.CHATTERBOX_TTS_URL) {
+  if (chatterboxBranche()) {
     exportHostVoiceMappingsToEnv(await fetchHostVoiceMappings())
   }
   console.log(`   ✓ ${Object.keys(unifiees.personas).length} persona(s) unifiée(s)`
@@ -599,7 +599,7 @@ async function main() {
   // Le Space HF peut être en cold start (sleep auto 15min). On le
   // réveille AVANT de commencer à synthétiser, pour éviter un long
   // timeout au 1er turn.
-  if (process.env.CHATTERBOX_TTS_URL) {
+  if (chatterboxBranche()) {
     // Leur station s'éteint après 10 min sans travail et met 15 à 30 min à
     // se rallumer. On l'annonce MAINTENANT, avant même d'avoir choisi la
     // voix témoin : ils chauffent pendant que nous préparons, et notre

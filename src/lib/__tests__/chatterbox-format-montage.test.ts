@@ -151,7 +151,10 @@ test("🔴 l'adresse data-space a un défaut — un secret vide ne doit pas tout
   // soirée où le service dort. Un secret oublié coûtait toutes les voix
   // de personnage, en silence.
   const code = codeSeul(readFileSync(SRC_CHATTERBOX, 'utf8'))
-  assert.match(code, /CHATTERBOX_TTS_URL \|\| 'https:\/\/data-space\.world'/)
+  // L'adresse passe par `baseChatterbox()`, éprouvée pour de vrai dans
+  // chatterbox-branche.test.ts (vide, Hugging Face, adresse propre).
+  assert.match(code, /url:\s+baseChatterbox\(\)/)
+  assert.match(code, /if \(!brut\) return DATASPACE/)
   assert.ok(
     !code.includes("throw new ChatterboxError('CHATTERBOX_TTS_URL non défini')"),
     "l'absence d'URL ne doit plus lever : elle a un défaut",
