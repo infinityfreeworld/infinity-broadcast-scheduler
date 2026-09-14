@@ -147,7 +147,26 @@ async function main() {
       // du temps » laisse passer l'image ratée à l'antenne).
       const indices = indicesConventionnels(s.imagePrompt)
       if (indices.length) console.log(`      ⚠️  plan ${i + 1} : scène conventionnelle RECADRÉE (${indices.join(', ')})`)
-      const img = await generateImage(habillerPrompt(s.imagePrompt), { ratio: '16:9', seed: 1000 + i })
+      // 🔴 UNE IMAGE QUI MANQUE NE DOIT PAS COÛTER L'ÉMISSION. Une exception ici faisait échouer
+      // tout le programme du soir. Depuis le 14/09/2026 la forge n'a plus de fournisseur de repli
+      // à filigrane (Pollinations imprimait « pollinations.ai » à l'écran) : un refus devient donc
+      // un peu plus probable. On retente UNE fois (autre graine), puis on reprend l'image du plan
+      // précédent — un plan qui se prolonge vaut mieux qu'un soir sans journal.
+      let img: Awaited<ReturnType<typeof generateImage>> | undefined
+      for (let essai = 1; essai <= 2 && !img; essai++) {
+        try {
+          img = await generateImage(habillerPrompt(s.imagePrompt), { ratio: '16:9', seed: 1000 + i + (essai - 1) * 97 })
+        } catch (err) {
+          console.warn(`      ⚠️  plan ${i + 1} : image refusée (essai ${essai}/2) — ${(err as Error).message.slice(0, 160)}`)
+        }
+      }
+      if (!img) {
+        const precedente = imageAssetIds[imageAssetIds.length - 1]
+        if (!precedente) throw new Error(`plan ${i + 1} : aucune image générée, et pas d'image précédente à reprendre`)
+        imageAssetIds.push(precedente)
+        console.warn(`      ↩️  plan ${i + 1} : reprend l'image du plan ${i} (aucun fournisseur n'a répondu)`)
+        continue
+      }
       imageAssetIds.push(img.id)
       console.log(`      plan ${i + 1} → asset ${img.id}`)
     }
