@@ -10,11 +10,60 @@
  *   ⚠️ Un choix fait dans l'admin (onglet « Voix Animateurs », kind 30095) passe TOUJOURS devant
  *   cette table : le fondateur doit « pouvoir remplacer les voix à tout moment ».
  *
- *   ⚠️ La table reste VIDE tant que les voix ne sont pas créées ET déposées au catalogue : une voix
- *   absente du catalogue rendrait `404 voice_not_found`, puis Piper — un échec qui ressemble à un
- *   réglage.
+ *   Remplie le 14/09/2026 : les 31 voix choisies par le fondateur à l'écoute (page « Voix des radios »,
+ *   db `radio/choix`), déposées au catalogue par le workflow « deposer-voix » (brouillon
+ *   `voix-inventees-2026-09-14`). Big Balls Radio, supprimée le même jour, n'y figure pas.
+ *
+ *   ⚠️ Une voix absente du catalogue rendrait `404 voice_not_found`, puis Piper — un échec qui ressemble
+ *   à un réglage : n'ajouter une ligne qu'APRÈS le dépôt de sa référence.
  */
-export const VOIX_INVENTEES: Readonly<Record<string, string>> = Object.freeze({})
+export const VOIX_INVENTEES: Readonly<Record<string, string>> = Object.freeze({
+  // WTF Radio
+  'wtf-radio:wtf-cyril':             'inv-wtf-cyril',
+  'wtf-radio:wtf-marina':            'inv-wtf-marina',
+  'wtf-radio:wtf-diogene':           'inv-wtf-diogene',
+  // Freeworld Radio
+  'freeworld-radio:fw-aurelien':     'inv-fw-aurelien',
+  'freeworld-radio:fw-leila':        'inv-fw-leila',
+  // Mind Control Radio
+  'mindctrl-radio:mc-anonyme':       'inv-mc-anonyme',
+  // H₂ Radio
+  'hydrogene-radio:h2-henri':        'inv-h2-henri',
+  'hydrogene-radio:h2-camille':      'inv-h2-camille',
+  // Ğ1 Libre
+  'g1-radio:g1-bernard':             'inv-g1-bernard',
+  'g1-radio:g1-marie':               'inv-g1-marie',
+  // Les Déglingos
+  'deglingos-radio:dg-doudou':       'inv-dg-doudou',
+  'deglingos-radio:dg-pat':          'inv-dg-pat',
+  'deglingos-radio:dg-leboss':       'inv-dg-leboss',
+  // Diginomad
+  'diginomad-radio:dn-salome':       'inv-dn-salome',
+  'diginomad-radio:dn-karim':        'inv-dn-karim',
+  // Cryptozor
+  'tech-radio:tk-iris':              'inv-tk-iris',
+  'tech-radio:tk-said':              'inv-tk-said',
+  // Radio Pirate
+  'pirate-radio:pi-hex':             'inv-pi-hex',
+  'pirate-radio:pi-gnu':             'inv-pi-gnu',
+  'pirate-radio:pi-zero':            'inv-pi-zero',
+  // Oasis FM
+  'oasis-fm:oa-lea':                 'inv-oa-lea',
+  'oasis-fm:oa-theo':                'inv-oa-theo',
+  'oasis-fm:oa-aicha':               'inv-oa-aicha',
+  // Free Press FM
+  'free-press-fm:fp-sarah':          'inv-fp-sarah',
+  'free-press-fm:fp-malik':          'inv-fp-malik',
+  // Voces Libres
+  'voces-libres:vl-carmen':          'inv-vl-carmen',
+  'voces-libres:vl-rafael':          'inv-vl-rafael',
+  // Свобода FM
+  'svoboda-fm:sv-anna':              'inv-sv-anna',
+  'svoboda-fm:sv-dmitri':            'inv-sv-dmitri',
+  // 自由之声
+  'zi-you-zhi-sheng:zy-mei':         'inv-zy-mei',
+  'zi-you-zhi-sheng:zy-jian':        'inv-zy-jian',
+})
 
 export function voixInventee(stationId: string, hostId: string): string | undefined {
   return VOIX_INVENTEES[`${stationId}:${hostId}`]
