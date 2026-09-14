@@ -34,7 +34,7 @@ FILTRE = {
     "rentable": {"eq": True}, "verified": {"eq": True}, "num_gpus": {"eq": 1}, "reliability2": {"gte": 0.97},
     "gpu_ram": {"gte": 23000, "lte": 50000}, "compute_cap": {"gte": 860, "lte": 890}, "cuda_max_good": {"gte": 12.4},
     "cpu_ram": {"gte": 64000}, "disk_space": {"gte": DISQUE}, "inet_down": {"gte": 500},
-    "type": "on-demand", "order": [["dph_total", "asc"]], "limit": 40,
+    "type": "on-demand", "order": [["dph_total", "asc"]], "limit": 100,   # large : le tri final est au coût TOTAL
 }
 FILTRE.update(json.loads(os.environ.get("USINE_FILTRE", "{}")))
 
@@ -81,6 +81,11 @@ def seuil_credit():
     return max(CREDIT_MIN, 5 * BUDGET)
 
 
+def pire_cas(o):
+    # Ce que CE travail peut coûter au pire sur cette offre : les heures, la bande passante, le disque.
+    return HEURES * o["dph_total"] + GO * (o.get("inet_down_cost") or 0) + DISQUE * (o.get("storage_cost") or 0) / 730 * HEURES
+
+
 cmd = sys.argv[1] if len(sys.argv) > 1 else "info"
 if cmd == "info":
     i = mienne()
@@ -110,10 +115,12 @@ elif cmd == "louer":
     EXCLUES = set(open(f).read().split()) if os.path.exists(f) else set()
     s, j = appel("/api/v0/bundles/?q=" + urllib.parse.quote(json.dumps(FILTRE)))
     offres = j.get("offers", []) if s == 200 else []
-    for o in offres:
+    # Classées par COÛT TOTAL, pas au tarif horaire : pour un petit travail, la bande passante pèse plus
+    # que l'heure (14/09/2026 : 0,18 $/h au Vietnam = 2,77 $ au pire, contre 0,56 $ à 0,24 $/h aux Pays-Bas).
+    for o in sorted(offres, key=lambda o: (pire_cas(o), o["dph_total"])):
         if str(o.get("machine_id")) in EXCLUES:
             continue   # hôte qui s'est déjà bloqué au démarrage
-        pire = HEURES * o["dph_total"] + GO * (o.get("inet_down_cost") or 0) + DISQUE * (o.get("storage_cost") or 0) / 730 * HEURES
+        pire = pire_cas(o)
         if pire > BUDGET:
             continue
         s, r = appel(f"/api/v0/asks/{o['id']}/", "PUT",

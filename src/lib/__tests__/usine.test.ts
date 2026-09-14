@@ -40,6 +40,21 @@ test('⭐ le crédit est lu AVANT de louer, et une lecture impossible REFUSE', (
   assert.match(VAST, /max\(CREDIT_MIN, 5 \* BUDGET\)/)
 })
 
+test('⭐ les offres sont classées au COÛT TOTAL (heures + bande passante + disque), pas au tarif horaire', () => {
+  // Les deux offres du 14/09/2026 : la moins chère à l'heure était la plus chère au total.
+  const debut = VAST.indexOf('def pire_cas(')
+  const def = VAST.slice(debut, VAST.indexOf('\n\n\n', debut))
+  const py = `HEURES, GO, DISQUE = 2.0, 60.0, 120\n${def}\n`
+    + `vietnam = {"dph_total": 0.182, "inet_down_cost": 0.04, "storage_cost": 0.1}\n`
+    + `pays_bas = {"dph_total": 0.243, "inet_down_cost": 0.001, "storage_cost": 0.1}\n`
+    + `print("ok" if pire_cas(pays_bas) < pire_cas(vietnam) else "ko")`
+  const r = spawnSync('python3', ['-c', py])
+  assert.equal(String(r.stdout).trim(), 'ok', String(r.stderr))
+  const louer = VAST.slice(VAST.indexOf('elif cmd == "louer":'), VAST.indexOf('elif cmd == "machine":'))
+  assert.match(louer, /for o in sorted\(offres, key=lambda o: \(pire_cas\(o\), o\["dph_total"\]\)\):/)
+  assert.match(louer, /pire = pire_cas\(o\)/, 'le budget se juge avec le MÊME calcul que le tri')
+})
+
 test('⭐ destruction en v1 PUIS v0, vérifiée sur une liste fraîche', () => {
   const det = VAST.slice(VAST.indexOf('elif cmd == "detruire":'))
   assert.ok(det.indexOf('/api/v1/instances/') < det.indexOf('/api/v0/instances/'))
