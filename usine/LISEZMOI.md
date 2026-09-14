@@ -20,6 +20,8 @@ les travaux lourds (personnages qui parlent, images, voix inventées, bientôt l
 - Une étiquette **par travail**, jamais « dataspace… » (réservée aux stations : `vast.py` la refuse).
 - Destruction en **v1 puis v0**, vérifiée sur une **liste fraîche** (le DELETE v1 rend toujours 404 : une
   machine a tourné 8 h 47 au lieu de 75 min le 11/09).
+- Offres classées au **coût total** (heures + bande passante + disque), jamais au seul tarif horaire : le
+  14/09, la moins chère à l'heure (0,18 $/h) coûtait 2,77 $ au pire, contre 0,56 $ pour une à 0,24 $/h.
 - Crédit Vast lu **avant** de louer : refus sous `max(10 $, 5 × pire cas)`. Le plancher de DATASPACE
   (1,5 $) ne prévient qu'au dernier moment.
 - La surveillance est tenue par le **hub**, jamais par un poste qui peut s'endormir.
