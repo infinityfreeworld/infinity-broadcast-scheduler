@@ -122,6 +122,9 @@ console.log('\n— La chaîne complète reste branchée —')
   chk('la piste est déposée dans la forge (pas chez un tiers)', /uploadMedia\(/.test(code) && !/pinata/i.test(code))
   chk('le mode --muet reste possible (repli)', /arg\('--muet'\)/.test(code))
   chk('le mode hors-ligne --plan ne synthétise rien', /!plan\s*&&\s*!muet/.test(code))
+  // ⭐ 14/09/2026 : une image refusée faisait échouer TOUT le programme du soir.
+  chk('⭐ une image refusée est retentée une fois', /for \(let essai = 1; essai <= 2 && !img; essai\+\+\)/.test(corps))
+  chk('⭐ puis le plan reprend l’image précédente, sans perdre l’émission', /imageAssetIds\.push\(precedente\)/.test(corps))
 
   const prog = buildProgram({ id: 'tv-jt-fr', name: 'JT' } as TvChannelConfig, conducteur, 0, undefined, {
     generator: 'ffmpeg-compose+llm+piper:fr_FR-tom-medium',
