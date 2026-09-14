@@ -64,39 +64,53 @@ DATASPACE, qui a vérifié le texte de son côté le 08/09/2026).
 
 1. La capacité `video` installe `Lightricks/LTX-Video` en affirmant
    « Apache-2.0 » : faux, le Hub le classe en licence communautaire. **Commentaire
-   corrigé le 08/09/2026** par la session DATASPACE ; la bascule vers Wan 2.2,
-   elle, attend la parole directe du fondateur (remplacer un moteur en production
-   est un changement substantiel) — et l'image de station, cf. §4.
+   corrigé le 08/09/2026** par la session DATASPACE. **Le fondateur a tranché le
+   11/09/2026** (backlog DATASPACE n°38) : bascule vers Wan 2.2 *après l'essai*,
+   dans cet ordre — (1) mesures de `Wan2.2-TI2V-5B`, (2) image de station
+   reconstruite avec les poids (cf. §4), (3) bascule de l'installeur `video`,
+   (4) retrait de LTX. **LTX reste en service d'ici là** pour le studio de la
+   forge. La TV, elle, n'obtient de clips animés que par `POST /api/v1/animate`,
+   fermée (503) tant que `VIDEO_STATIONS_WAN=1` n'est pas posé — et c'est la
+   session DATASPACE qui le pose, à l'étape 3, personne d'autre.
 2. `stabilityai/sdxl-turbo` (`license:other`, non commercial) n'est plus posé sur
    les nouvelles stations, mais **le chemin de repli l'utilise encore** pour les
    stations déjà installées. Sous doctrine stricte, ce reliquat doit disparaître.
 
 ## 4. Ce que ça coûte vraiment — et ce que ça impose au montage
 
-Chiffres relevés sur la fiche du modèle et les retours publics, **à confirmer par
-nos propres mesures** :
+**Mesuré le 10/09/2026** sur une A100 80 Go PCIe louée, avec le code officiel et
+`--offload_model True --convert_model_dtype` (résultats : `~/essai-s2v/resultats/`
+sur le poste de l'essai) :
 
-- **32,6 Go de poids** (dépôt de 49 Go). C'est le chiffre qui commande tout.
-- **24 Go de VRAM** suffisent avec `--offload_model True --convert_model_dtype
-  --t5_cpu` (au-delà de 80 Go, ces options sautent). Nos RTX 3090 passent ; une
-  3060 (12 Go) est hors jeu.
-- **Ordre de grandeur : plusieurs minutes de calcul pour quelques secondes de
-  plan.** La durée du clip suit celle de l'audio fourni.
+- **32,6 Go de poids** (dépôt de 49 Go). C'est le chiffre qui commande l'allumage.
+- **VRAM crête : 56,8 Go.** Une carte de 48 Go ne suffit pas, nos RTX 3090
+  (24 Go) non plus. ⚠️ Ce document annonçait « 24 Go suffisent » d'après des
+  retours publics : **c'était faux**. Le README officiel l'écrit en toutes
+  lettres — *« at least 80GB VRAM »*, même avec les options d'économie. En
+  pratique : A100 ou H100 de 80 Go. (`--t5_cpu` n'a pas été mesuré ; il ne
+  descendrait pas sous 48 Go.)
+- **61 min de calcul pour 9,3 s de voix** (sortie 960×640, 16 i/s, H.264 + AAC ;
+  2 segments de 40 étapes, 41 puis 46 s par étape), soit **~6,6 min de GPU par
+  seconde de plan**. La durée du clip suit celle de l'audio fourni.
+  `--sample_steps` permet de réduire les étapes : piste non mesurée.
 - S2V n'est **pas** dans diffusers : il faut le dépôt officiel `Wan-Video/Wan2.2`
   et `generate.py --task s2v-14B`.
 
 ### La conséquence de conception
 
-Animer un JT entier de trois minutes, c'est des heures de GPU par jour — sous le
-plafond mensuel, mais au prix de la radio, qui partage la même machine et le même
-budget (5 $/jour, 20 $/semaine, 35 $/mois).
+Au rythme mesuré, un JT entier de trois minutes animé demanderait **~20 h d'A100
+par jour** (~1 $/h constaté) : quatre fois le plafond quotidien, qui est partagé
+avec la radio (5 $/jour, 20 $/semaine, 35 $/mois). Même 30 s de plateau par jour,
+c'est ~3 h 20 de GPU.
 
 **On n'anime donc pas tout.** On fait ce que fait une vraie télévision :
 
 - le **plateau** est animé — lancement, transitions, échanges avec l'invité ;
 - les **sujets** restent des images fixes avec mouvement de caméra et voix-off,
   ce que la chaîne actuelle sait déjà faire pour quelques centimes ;
-- la voix, elle, est produite pour tous les plans (Piper, sur processeur).
+- la voix, elle, est produite pour tous les plans (Piper, sur processeur). Le
+  fondateur l'a jugée robotique le 11/09/2026 : les voix de la TV doivent passer
+  sur des **voix clonées** (Chatterbox, par les stations DATASPACE).
 
 Ce n'est pas un compromis de pauvreté : c'est la grammaire du journal télévisé.
 
@@ -116,18 +130,26 @@ session DATASPACE le 08/09/2026. Conséquence directe sur l'ordre des travaux :
 > le coût qui pique (0,0674 $/h) mais la latence — l'allumage passerait de 35 min à
 > plus du double, à chaque location.
 
+Pour S2V, le coût pique aussi : il faut une carte de 80 Go (~1 $/h), et chaque
+minute d'allumage y coûte ~15 fois plus cher que sur une RTX 3090.
+
 Tant que l'image n'est pas refaite, S2V reste un **essai manuel** sur machine
 louée, pas un service quotidien.
 
 ## 5. Protocole d'essai (à faire hors fenêtre radio, budget à surveiller)
 
-1. Louer une machine ≥ 24 Go, y installer le dépôt officiel Wan2.2 et les poids.
-2. Fournir **une photo de présentateur** (générée par la forge, donc à nous) et
-   **la piste de voix-off** déjà produite par `tv-voice.ts`.
-3. Mesurer, pour un plan de 5 s en 480p puis en 720p : minutes de calcul, VRAM
-   crête, coût réel, et surtout **la qualité de la synchronisation labiale en
-   français** — c'est là que ces modèles déçoivent le plus souvent.
-4. Décider seulement ensuite : industrialiser (image + capacité `s2v`) ou non.
+1. ✅ Louer une machine de 80 Go (pas « ≥ 24 Go » : cf. §4), y installer le dépôt
+   officiel Wan2.2 et les poids — fait le 10/09/2026, A100 80 Go, ~2 $ au total.
+2. ✅ Fournir **une photo de présentateur** et **la piste de voix-off** produite par
+   `tv-voice.ts`. ⚠️ La photo de l'essai est une photo de TEST : ne jamais la
+   publier. Celle de l'antenne sera générée par la forge, donc à nous.
+3. ✅ Mesurer minutes de calcul, VRAM crête et coût réel (cf. §4 ; un seul format
+   mesuré, 960×640). ⏳ **Reste le juge principal : la synchronisation labiale en
+   français**, c'est là que ces modèles déçoivent le plus souvent. La vidéo
+   attend le verdict du fondateur.
+4. ⏳ Décider seulement ensuite : industrialiser (image + capacité `s2v`) ou non.
+   À comparer avant de trancher : `MeiGen-AI/InfiniteTalk` et `MultiTalk` (même
+   licence, même famille Wan).
 
 Ne pas industrialiser avant d'avoir vu un plan sortir. Les capacités installées
 « au cas où » ont déjà coûté cher.
