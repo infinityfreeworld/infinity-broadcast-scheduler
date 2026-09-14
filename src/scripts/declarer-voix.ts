@@ -89,13 +89,16 @@ async function main() {
   }
 
   console.log('\n📇 Déclaration…\n')
+  // Le catalogue rend `<nom>.wav` (extension forcée) et notre client ajoute `.wav` s'il manque
+  // (chatterbox.ts) : c'est la MÊME voix. Seule une autre différence doit alarmer (14/09/2026).
+  const sansWav = (n: string) => n.replace(/\.wav$/i, '')
   const rendus: Array<[string, string]> = []
   const echecs: string[] = []
   for (const d of decls) {
     try {
       const nomRendu = await declarer(d, cle)
       rendus.push([d.nom, nomRendu])
-      const pareil = nomRendu === d.nom
+      const pareil = sansWav(nomRendu) === d.nom
       console.log(`   ✓ ${d.nom.padEnd(30)} → ${nomRendu}${pareil ? '' : '   ⚠️ NOM DIFFÉRENT'}`)
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err)
@@ -105,7 +108,7 @@ async function main() {
   }
 
   console.log(`\n${rendus.length} déclarée(s), ${echecs.length} échec(s)`)
-  const differents = rendus.filter(([envoye, rendu]) => envoye !== rendu)
+  const differents = rendus.filter(([envoye, rendu]) => envoye !== sansWav(rendu))
   if (differents.length > 0) {
     console.log(`\n🔴 ${differents.length} nom(s) normalisé(s) DIFFÉREMMENT — la synthèse doit`)
     console.log(`   demander le nom de DROITE, sinon 404 voice_not_found :\n`)
