@@ -26,11 +26,12 @@
  *     tsx src/scripts/declarer-voix.ts <cids.json> --executer
  *
  *   Le fichier JSON est celui rendu par `envoyer-voix.ts` : { "<nom>.wav": "<cid>" }.
- *   Exige DATASPACE_API_KEY.
+ *   Exige un jeton data-space : DATASPACE_API_KEY, ou DATASPACE_NOSTR_KEY (jeton dérivé, ne périme pas).
  */
 
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
+import { jetonDataspace } from '../lib/dataspace-jeton'
 
 const URL_CATALOGUE = 'https://data-space.world/api/v1/gpu/voix/catalogue'
 
@@ -67,8 +68,6 @@ async function main() {
     process.exit(1)
   }
   const executer = process.argv.includes('--executer')
-  const cle = process.env.DATASPACE_API_KEY ?? ''
-
   const brut = JSON.parse(readFileSync(fichier, 'utf8')) as Record<string, string>
   // Les clés du manifeste portent l'extension (`ranouna.wav`) ; le catalogue
   // reçoit le nom NU, et c'est lui qui décide de la forme finale.
@@ -83,8 +82,9 @@ async function main() {
     console.log('\n· Mode à blanc. Relancer avec --executer pour déclarer.')
     return
   }
+  const cle = await jetonDataspace()
   if (!cle) {
-    console.error('\n❌ DATASPACE_API_KEY manquante — rien déclaré.')
+    console.error('\n❌ Aucun jeton data-space (DATASPACE_NOSTR_KEY ou DATASPACE_API_KEY) — rien déclaré.')
     process.exit(1)
   }
 

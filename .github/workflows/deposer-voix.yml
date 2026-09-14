@@ -1,0 +1,63 @@
+name: Déposer des voix au catalogue data-space
+
+# 📇 Dépose des voix au catalogue data-space du GÉNÉRATEUR — sur demande seulement.
+#
+# Les voix INVENTÉES des animateurs (décision du fondateur, 14/09/2026) doivent être au catalogue
+# AVANT d'entrer dans `VOIX_INVENTEES` : une voix absente rend 404 voice_not_found, puis Piper.
+# Le dépôt part d'ici parce que la clé du générateur (DATASPACE_NOSTR_KEY) y vit en secret : il ne
+# faut ni le Mac allumé, ni une clé d'API qui périme.
+#
+# Les fichiers arrivent par un BROUILLON de release — ce dépôt est PUBLIC, un brouillon ne l'est pas :
+#   gh release create <tag> --draft --title "<tag>" voix/*.wav
+#   gh workflow run deposer-voix.yml -f version=<tag>
+# Supprimer le brouillon une fois les voix déclarées.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag du brouillon de release qui porte les .wav (ex. voix-inventees-2026-09-14)'
+        required: true
+
+permissions:
+  contents: write   # les brouillons de release ne se lisent qu'avec le droit d'écriture
+
+jobs:
+  deposer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # Par l'API, pas `gh release download` : un brouillon n'a pas de tag publié, et la recherche
+      # par tag ne le trouve pas. La liste des releases, elle, le montre à qui peut écrire.
+      - name: Voix du brouillon
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION:  ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p voix
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" \
+            --jq ".[] | select(.tag_name == env.VERSION) | .assets[] | select(.name | endswith(\".wav\")) | [.url, .name] | @tsv" > fichiers.tsv
+          test -s fichiers.tsv || { echo "brouillon « $VERSION » introuvable ou sans .wav"; exit 1; }
+          while IFS=$'\t' read -r url nom; do
+            gh api -H 'Accept: application/octet-stream' "$url" > "voix/$nom"
+          done < fichiers.tsv
+          ls -l voix
+
+      - name: Envoi (épinglé chez data-space)
+        env:
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY }}
+        run: npx tsx src/scripts/envoyer-voix.ts voix --executer --json cids.json
+
+      - name: Déclaration au catalogue
+        env:
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY }}
+        run: npx tsx src/scripts/declarer-voix.ts cids.json --executer
