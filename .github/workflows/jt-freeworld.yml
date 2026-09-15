@@ -41,6 +41,11 @@ on:
         type: boolean
         required: false
         default: false
+      essai:
+        description: 'commande : écrire le conducteur SANS le publier (à lire dans l’artefact)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -134,9 +139,12 @@ jobs:
           FORCER_REGENERATION: ${{ github.event.inputs.forcer == 'true' && '1' || '' }}
           # Par l'environnement, jamais interpolée dans le script : le script vérifie son format.
           DATE_JT:             ${{ github.event.inputs.date }}
+          # Essai : le vrai rédacteur écrit, RIEN ne part sur les relais — le conducteur se lit dans l'artefact.
+          ESSAI:               ${{ github.event.inputs.essai }}
         run: |
           ARGS=(--sortie commande-jt.json)
           if [ -n "${DATE_JT:-}" ]; then ARGS+=(--date "$DATE_JT"); fi
+          if [ "${ESSAI:-}" = "true" ]; then ARGS+=(--dry-run); fi
           npm run jt:commande -- "${ARGS[@]}"
 
       # Le conducteur du jour, lisible sans relais (il est de toute façon public sur NOSTR).

@@ -136,12 +136,14 @@ test('⭐ une date mal formée ou piégée est refusée', () => {
   assert.deepEqual(erreursDe(avec(jt => { jt.date = '2028-02-29' })), [], 'un 29 février bissextile existe')
 })
 
-test('⭐ un à dix sujets — onze, zéro, ou pas de liste : refusé', () => {
+test('⭐ un à SUJETS_MAX sujets — un de plus, zéro, ou pas de liste : refusé', () => {
+  // Borne relue dans planif.py (12 depuis le 15/09) : le test la suit au lieu de la figer.
   const copies = (n: number) => Array.from({ length: n }, () => structuredClone(EXEMPLE.sujets[0]))
-  refuse(avec(jt => { jt.sujets = [] }), /il faut 1 à 10 sujets \(0 reçus\)/)
-  refuse(avec(jt => { jt.sujets = copies(11) }), /il faut 1 à 10 sujets \(11 reçus\)/)
-  refuse(avec(jt => { jt.sujets = 'beaucoup' }), /il faut 1 à 10 sujets/)
-  assert.deepEqual(erreursDe(avec(jt => { jt.sujets = copies(10) })), [])
+  const borne = `il faut 1 à ${J.SUJETS_MAX} sujets`
+  refuse(avec(jt => { jt.sujets = [] }), new RegExp(`${borne} \\(0 reçus\\)`))
+  refuse(avec(jt => { jt.sujets = copies(J.SUJETS_MAX + 1) }), new RegExp(`${borne} \\(${J.SUJETS_MAX + 1} reçus\\)`))
+  refuse(avec(jt => { jt.sujets = 'beaucoup' }), new RegExp(borne))
+  assert.deepEqual(erreursDe(avec(jt => { jt.sujets = copies(J.SUJETS_MAX) })), [])
 })
 
 test('⭐ le Journal entier est borné (budget GPU du hub), et JT_MINUTES le resserre', () => {
@@ -215,7 +217,7 @@ test('⭐ même verdict que planif.py, le vrai, sur les mêmes commandes', () =>
     ['un reporter inconnu', avec(jt => { jt.sujets[0].reporter = 'personne' }), false],
     ['le présentateur en invité', avec(jt => { jt.sujets[1].interview.invite = 'iggy' }), false],
     ['une date piégée', avec(jt => { jt.date = '../../etc' }), false],
-    ['onze sujets', avec(jt => { jt.sujets = Array.from({ length: 11 }, () => structuredClone(EXEMPLE.sujets[0])) }), false],
+    ['un sujet de trop', avec(jt => { jt.sujets = Array.from({ length: J.SUJETS_MAX + 1 }, () => structuredClone(EXEMPLE.sujets[0])) }), false],
     ['un sommaire vide', avec(jt => { jt.sommaire = '  ' }), false],
   ]
   for (const [quoi, jt, attendu] of cas) {
