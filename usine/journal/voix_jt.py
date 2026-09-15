@@ -16,6 +16,9 @@ suivent ce son-là : le retoucher après le montage les décalerait.
      propre (0,28 s, 0,40 s après « ? » et « ! »).
   3. RAPPORT : resultats/voix/rapport.jsonl, une ligne par réplique (durée, phrases, essais, pauses nettoyées, bruit
      restant, mots de travers, « douteux ») ; l'usine alerte sur ce qui reste douteux.
+  4. ROBUSTESSE (2e essai réel, 15/09 : un sommaire de plus de 30 s réécouté d'un bloc a fait planter Whisper, et avec lui
+     les 26 voix) : la réplique n'est plus réécoutée d'un bloc, l'écoute ne fait jamais tomber une voix, et une réplique
+     qui plante ne fait sauter QUE son plan. Éprouvé hors GPU par voix_simulee.py (Chatterbox, Whisper et torch simulés).
 
   repliques.json : [{"cle": "s01-lancement", "texte": "…", "voix": "entrees/refs/iggy.wav", "exa": 0.5, "cfg": 0.45}]
 """
@@ -92,10 +95,17 @@ def bruit_restant(wav, sr):
 
 
 def ecouter(wav, texte):
-    """Whisper réécoute : (taux de mots de travers, dernier mot entendu ?) — (None, None) sans Whisper."""
+    """Whisper réécoute : (taux de mots de travers, dernier mot entendu ?) — (None, None) sans Whisper ou s'il échoue :
+    l'écoute conseille, elle ne fait jamais tomber une voix. Au-delà de 30 s, Whisper exige le mode « horodaté »."""
     if ecoute is None:
         return None, None
-    lu = ecoute({"raw": wav.reshape(-1).cpu().numpy(), "sampling_rate": tts.sr}, generate_kwargs={"language": "french"})["text"]
+    son = wav.reshape(-1).cpu().numpy()
+    try:
+        lu = ecoute({"raw": son, "sampling_rate": tts.sr}, return_timestamps=len(son) > 28 * tts.sr,
+                    generate_kwargs={"language": "french"})["text"]
+    except Exception as e:
+        print("écoute Whisper en échec, garde de durée seule :", str(e)[:160], flush=True)
+        return None, None
     ref, entendu = mots(texte), mots(lu)
     return ecart(texte, lu), (not ref or ref[-1] in entendu[-3:])
 
@@ -127,28 +137,35 @@ def dire(phrase, r):
 
 ratees = []
 rapport = open("resultats/voix/rapport.jsonl", "a", encoding="utf-8")
-for r in A_FAIRE:
-    morceaux, bilan, echec = [], [], False
+
+
+def noter(ligne):
+    rapport.write(json.dumps(ligne, ensure_ascii=False) + "\n")
+    rapport.flush()
+
+
+def faire(r):
+    morceaux, bilan = [], []
     liste = phrases(r["texte"])
     for k, ph in enumerate(liste):
         p = dire(ph, r)
         bilan.append(p)
         if p["note"] >= 10:
-            echec = True
-            break
+            ratees.append(r["cle"])
+            print(f"🔴 voix {r['cle']} : une phrase reste emballée ou coupée après 5 essais — son plan sautera", flush=True)
+            noter({"cle": r["cle"], "ok": False, "douteux": True})
+            return
         morceaux.append(p["son"])
         if k < len(liste) - 1:   # la pause entre deux phrases : propre, et plus longue après une question ou une exclamation
             morceaux.append(torch.zeros(1, int((0.40 if ph.rstrip().endswith(("?", "!")) else 0.28) * tts.sr)))
-    if echec:
-        ratees.append(r["cle"])
-        print(f"🔴 voix {r['cle']} : une phrase reste emballée ou coupée après 5 essais — son plan sautera", flush=True)
-        rapport.write(json.dumps({"cle": r["cle"], "ok": False, "douteux": True}, ensure_ascii=False) + "\n"); rapport.flush()
-        continue
     ligne = torch.cat(morceaux, dim=1)
     d = ligne.shape[-1] / tts.sr
     attendu = len(mots(r["texte"])) * 0.36
     reste = bruit_restant(ligne, tts.sr)
-    faux, _ = ecouter(ligne, r["texte"])
+    # Le taux de la réplique : celui de ses phrases, pondéré par leurs mots — plus de réécoute d'un bloc (au-delà de 30 s,
+    # c'est ce qui a fait tomber les 26 voix du 2e essai réel).
+    notes = [(p["faux"], len(mots(ph))) for p, ph in zip(bilan, liste) if p["faux"] is not None]
+    faux = sum(f * n for f, n in notes) / max(1, sum(n for _, n in notes)) if notes else None
     fins = sum(1 for p in bilan if p.get("fin") is False)   # phrases gardées malgré une fin avalée (5 essais ratés)
     douteux = (faux is not None and faux > 0.15) or fins > 0 or reste > 0.3 or not 0.6 <= d / max(attendu, 0.8) <= 1.5
     note = {"cle": r["cle"], "ok": True, "duree": round(d, 2), "attendu": round(attendu, 2), "phrases": len(liste),
@@ -157,8 +174,17 @@ for r in A_FAIRE:
             "mots_de_travers": None if faux is None else round(faux, 2), "fins_avalees": fins, "douteux": douteux}
     print(f"voix {r['cle']} : {d:.1f} s pour {attendu:.1f} attendues, {len(liste)} phrase(s), essais {note['essais']}, "
           f"{note['pauses_nettoyees']} pause(s) nettoyée(s), bruit restant {reste} s{' — DOUTEUX' if douteux else ''}", flush=True)
-    rapport.write(json.dumps(note, ensure_ascii=False) + "\n"); rapport.flush()
+    noter(note)
     partiel = f"resultats/voix/.{r['cle']}.wav"   # renommé seulement une fois écrit en entier (reprise sûre)
     ta.save(partiel, ligne, tts.sr)
     os.replace(partiel, f"resultats/voix/{r['cle']}.wav")
+
+
+for r in A_FAIRE:
+    try:   # une réplique qui plante ne fait plus tomber les autres : son plan seul sautera
+        faire(r)
+    except Exception as e:
+        ratees.append(r["cle"])
+        print(f"🔴 voix {r['cle']} : {type(e).__name__} : {str(e)[:200]} — son plan sautera", flush=True)
+        noter({"cle": r["cle"], "ok": False, "douteux": True, "erreur": f"{type(e).__name__} : {str(e)[:200]}"})
 print(f"voix : fini, {len(ratees)} ratée(s) {ratees}", flush=True)
