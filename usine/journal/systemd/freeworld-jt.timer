@@ -1,0 +1,10 @@
+[Unit]
+Description=Le Journal de FREEWORLD TV — chaque matin, après la commande du générateur (05:00 UTC)
+
+[Timer]
+OnCalendar=*-*-* 05:10:00 UTC
+# Un hub redémarré en pleine matinée relance la journée (jt-du-jour.sh reprend là où elle en était).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

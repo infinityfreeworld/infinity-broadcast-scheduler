@@ -43,7 +43,38 @@ test('les scripts du hub et de la machine louée sont syntaxiquement valides', (
     const r = spawnSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', join(J, f)])
     assert.equal(r.status, 0, `${f} : ${r.stderr}`)
   }
-  assert.equal(spawnSync('bash', ['-n', join(J, 'travail.sh')]).status, 0)
+  for (const f of ['travail.sh', 'jt-du-jour.sh', 'purge.sh']) assert.equal(spawnSync('bash', ['-n', join(J, f)]).status, 0, f)
+  const n = spawnSync(process.execPath, ['--check', join(J, 'nostr-jt.mjs')], { encoding: 'utf8' })
+  assert.equal(n.status, 0, n.stderr)
+})
+
+test('⭐ la commande n’est acceptée que SIGNÉE par le générateur ; la clé de l’usine reste sur le hub', () => {
+  const n = lire('nostr-jt.mjs')
+  assert.match(n, /authors: \[GENERATEUR\]/)
+  assert.match(n, /e\.pubkey === GENERATEUR && verifyEvent\(e\)/, 'un relais peut servir n’importe quoi : seule la signature compte')
+  assert.match(n, /mode: 0o600/)
+  assert.match(lire('../../scripts/veille-diffusion.mjs'), new RegExp(n.match(/const GENERATEUR = '([0-9a-f]{64})'/)![1]),
+    'la même clé que celle que surveille la veille du matin')
+})
+
+test('⭐ la journée du hub : rien sans commande signée, montage BORNÉ, clé de la forge jamais en argument, pause possible', () => {
+  const j = lire('jt-du-jour.sh')
+  // Sur le CODE : l'en-tête raconte les étapes dans l'ordre, et l'ordre des commentaires ne prouve rien.
+  const code = j.split('\n').filter(l => !/^\s*#/.test(l)).join('\n')
+  assert.match(j, /\[ -f "\$ICI\/PAUSE" \]/, 'le fondateur garde la main')
+  assert.ok(code.indexOf('nostr-jt.mjs" commande') < code.indexOf('planif.py'), 'rien ne se fabrique sans commande signée')
+  assert.match(j, /USINE_INTERRUPTIBLE=1 USINE_REPRISES=/)
+  assert.match(j, /-p CPUQuota=200% -p MemoryMax=2G/, 'condition DATASPACE : un vrai cgroup, pas nice seul')
+  assert.match(j, /-H @"\$HDR"/, 'la clé de service passe par un fichier 600, jamais par la ligne de commande')
+  assert.ok(!/Bearer \$CLE|-H "Authorization/.test(j))
+})
+
+test('la rétention tient la promesse faite à DATASPACE : travail 2 jours, vidéos de la forge 3 jours', () => {
+  const p = lire('purge.sh')
+  assert.match(p, /JT_GARDE_JOURS:-1\} days/, 'aujourd’hui et hier')
+  assert.match(p, /JT_GARDE_FORGE:-3\}/)
+  assert.match(p, /-X DELETE -H @"\$HDR"/)
+  assert.match(lire('systemd/freeworld-jt-purge.timer'), /OnCalendar=/, 'un VRAI timer, pas une intention')
 })
 
 test('⭐ la commande d’exemple devient un travail d’usine complet', () => {

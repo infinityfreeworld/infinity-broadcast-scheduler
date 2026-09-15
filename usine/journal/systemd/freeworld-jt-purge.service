@@ -1,0 +1,8 @@
+[Unit]
+Description=Le Journal de FREEWORLD TV — rétention (dossiers de travail 2 jours, vidéos de la forge 3 jours)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /root/usine/journal/purge.sh
+Nice=19
+MemoryMax=128M
