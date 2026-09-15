@@ -7,7 +7,9 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const lire = (f: string) => readFileSync(new URL(`../../../usine/${f}`, import.meta.url), 'utf8')
@@ -124,4 +126,27 @@ test('⭐ reprise : au fil de l’eau, les déjà-faits rapportés AVANT le lanc
 test('⭐ modèles : Hugging Face d’abord, ModelScope en secours', () => {
   assert.ok(TELE.indexOf('hf download') < TELE.indexOf('modelscope download'))
   assert.match(TELE, /return 1/)
+})
+
+test('⭐ plusieurs cartes : chaque offre est jugée au coût du TRAVAIL (l’animation se partage), et une machine ne dépasse jamais son budget', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'usine-estimer-'))
+  writeFileSync(join(dir, 'reglages.json'), '{"vastApiKey": ""}')
+  // Une carte seule à 1,69 $/h (Émirats, 15/09/2026) contre une machine à DEUX cartes à 2,20 $/h.
+  writeFileSync(join(dir, 'offres.json'), JSON.stringify([
+    { id: 1, gpu_name: 'H100 PCIE', num_gpus: 1, dph_total: 1.69, min_bid: 1.47, inet_down_cost: 0.0026, storage_cost: 0.1, geolocation: 'AE' },
+    { id: 2, gpu_name: 'H100 PCIE', num_gpus: 2, dph_total: 2.2, min_bid: 1.91, inet_down_cost: 0.0026, storage_cost: 0.1, geolocation: 'GB' },
+  ]))
+  const estimer = (env: Record<string, string>) => spawnSync('python3', [new URL('../../../usine/vast.py', import.meta.url).pathname, 'estimer'], {
+    encoding: 'utf8',
+    env: { ...process.env, USINE_ETIQUETTE: 'usine-test', USINE_REGLAGES: join(dir, 'reglages.json'), USINE_OFFRES: join(dir, 'offres.json'),
+      USINE_INTERRUPTIBLE: '1', USINE_BUDGET: '9', USINE_HEURES: '3.6', USINE_GO: '150', USINE_DISQUE: '300', ...env },
+  })
+  const partage = estimer({ USINE_ANIM_H: '2.36', USINE_FIXE_H: '0.6' })
+  assert.match(partage.stdout.split('\n')[0], /^2 H100 PCIE 2x .* 1\.78h /, partage.stdout + partage.stderr)
+  const seul = estimer({})
+  assert.match(seul.stdout.split('\n')[0], /^1 H100 PCIE 1x /, 'sans part partagée, la carte seule reste la moins chère au total')
+  // … et le coût RÉEL d'une machine (tarif × durée) l'arrête avant son budget, même avant l'échéance.
+  assert.match(ORCH, /depasse\(\) \{ python3 -c/)
+  const suivi = ORCH.slice(ORCH.indexOf('issue=termine; perdu=0'))
+  assert.ok(suivi.indexOf('if depasse; then') > 0 && suivi.indexOf('BUDGET de la machine atteint') > 0)
 })

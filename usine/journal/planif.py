@@ -168,7 +168,7 @@ def main(jt_chemin, dossier):
             shutil.copyfile(os.path.join(FICHIERS, p["image_ouverture"]), os.path.join(e, "persos", f"{qui}-ouverture.png"))
     for nom, contenu in (("repliques", repliques), ("images", images), ("plans", plans)):
         json.dump(contenu, open(os.path.join(e, f"{nom}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    for f in ("voix_jt.py", "nettoyage.py", "images_jt.py", "lc_lot.py", "restant.py"):
+    for f in ("voix_jt.py", "nettoyage.py", "images_jt.py", "lc_lot.py", "restant.py", "animer.sh"):
         shutil.copyfile(os.path.join(ICI, f), os.path.join(e, f))
     shutil.copyfile(os.path.join(ICI, "travail.sh"), os.path.join(dossier, "travail.sh"))
     json.dump({"date": jt["date"], "deroule": deroule, "personnages": {q: {"nom": DISTRIBUTION[q]["nom"], "role": DISTRIBUTION[q]["role"]}

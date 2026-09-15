@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -44,7 +44,7 @@ test('les scripts du hub et de la machine louée sont syntaxiquement valides', (
     const r = spawnSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', join(J, f)])
     assert.equal(r.status, 0, `${f} : ${r.stderr}`)
   }
-  for (const f of ['travail.sh', 'jt-du-jour.sh', 'purge.sh']) assert.equal(spawnSync('bash', ['-n', join(J, f)]).status, 0, f)
+  for (const f of ['travail.sh', 'animer.sh', 'jt-du-jour.sh', 'purge.sh']) assert.equal(spawnSync('bash', ['-n', join(J, f)]).status, 0, f)
   const n = spawnSync(process.execPath, ['--check', join(J, 'nostr-jt.mjs')], { encoding: 'utf8' })
   assert.equal(n.status, 0, n.stderr)
 })
@@ -114,7 +114,7 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   const verif = lire('images_jt.py')
   for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
   assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit"\)/, 'chaque faute d’image alerte')
-  for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py']) {
+  for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py', 'entrees/animer.sh']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }
 })
@@ -178,6 +178,56 @@ test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà f
   assert.match(lot, /continue {3}# REPRISE/)
   assert.match(lot, /os\.replace\(partiel \+ "\.mp4"/, 'un plan n’apparaît qu’ENTIÈREMENT écrit')
   assert.match(lire('travail.sh'), /touch "\$RES\/FINI"/)
+})
+
+test('⭐ plusieurs cartes : des lots d’égale durée de voix, et animer.sh lance UN lc_lot.py PAR CARTE (hors GPU)', () => {
+  const S = mkdtempSync(join(tmpdir(), 'jt-animer-'))
+  for (const d of ['entrees', 'resultats/voix', 'resultats/images', 'resultats/clips', 'LongCat-Video', 'bin']) mkdirSync(join(S, d), { recursive: true })
+  // Un .wav flottant (comme ceux de torchaudio : le module wave ne les lit pas), à 100 Hz pour rester petit.
+  const wav = (s: number) => {
+    const n = Math.round(s * 100) * 4, b = Buffer.alloc(44 + n)
+    b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16)
+    b.writeUInt16LE(3, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(100, 24); b.writeUInt32LE(400, 28); b.writeUInt16LE(4, 32)
+    b.writeUInt16LE(32, 34); b.write('data', 36); b.writeUInt32LE(n, 40)
+    return b
+  }
+  const durees: Record<string, number> = { a: 30, b: 12, c: 11, d: 10, e: 8, z: 5 }
+  const plans = Object.keys(durees).map(cle => ({ cle, image: `resultats/images/${cle}.png`, voix: [`resultats/voix/${cle}.wav`] }))
+  plans.push({ cle: 'x', image: 'resultats/images/x.png', voix: ['resultats/voix/x-absente.wav'] })   // voix ratée : impossible
+  for (const [cle, s] of Object.entries(durees)) { writeFileSync(join(S, `resultats/voix/${cle}.wav`), wav(s)); writeFileSync(join(S, `resultats/images/${cle}.png`), 'PNG') }
+  writeFileSync(join(S, 'resultats/images/x.png'), 'PNG')
+  writeFileSync(join(S, 'resultats/clips/z.mp4'), '')   // déjà rendu par une machine précédente
+  writeFileSync(join(S, 'entrees/plans.json'), JSON.stringify(plans))
+  copyFileSync(join(J, 'restant.py'), join(S, 'restant.py'))
+  assert.equal(spawnSync('python3', ['restant.py', 'lots', '2'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '2')
+  const lot = (k: number) => JSON.parse(readFileSync(join(S, `entrees/lots/lot-${k}.json`), 'utf8')).map((p: { cle: string }) => p.cle)
+  const somme = (k: number) => lot(k).reduce((t: number, c: string) => t + durees[c], 0)
+  assert.deepEqual([...lot(0), ...lot(1)].sort(), ['a', 'b', 'c', 'd', 'e'], 'chaque plan à faire dans UN lot ; ni le rendu, ni l’impossible')
+  assert.ok(Math.abs(somme(0) - somme(1)) <= 12, `lots équilibrés : ${somme(0)} s et ${somme(1)} s`)
+  assert.equal(spawnSync('python3', ['restant.py', 'lots', '8'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '5', 'jamais plus de lots que de plans')
+  // Deux cartes simulées : nvidia-smi et torchrun factices ; le faux torchrun « rend » les plans de son lot.
+  writeFileSync(join(S, 'bin/nvidia-smi'), '#!/bin/bash\necho "GPU 0: H100 (UUID: a)"\necho "GPU 1: H100 (UUID: b)"\n')
+  writeFileSync(join(S, 'bin/python3.10'), '#!/bin/bash\nexec python3 "$@"\n')
+  writeFileSync(join(S, 'bin/torchrun'), [
+    '#!/bin/bash', 'lot=; sortie=',
+    'while [ $# -gt 0 ]; do case "$1" in --lot) lot=$2; shift;; --sortie) sortie=$2; shift;; esac; shift; done',
+    'echo "carte=$CUDA_VISIBLE_DEVICES tmp=$LOT_TMP lot=$(basename "$lot")" >> "$sortie/../appels.txt"',
+    'python3 -c "import json,os,sys; [open(os.path.join(sys.argv[2], p[\'cle\'] + \'.mp4\'), \'w\').close() for p in json.load(open(sys.argv[1]))]" "$lot" "$sortie"',
+  ].join('\n') + '\n')
+  for (const f of ['nvidia-smi', 'python3.10', 'torchrun']) chmodSync(join(S, 'bin', f), 0o755)
+  const r = spawnSync('bash', [join(J, 'animer.sh'), S, join(S, 'poids')],
+    { encoding: 'utf8', env: { ...process.env, PATH: `${join(S, 'bin')}:${process.env.PATH}`, ANIMER_ESPACEMENT: '0' } })
+  assert.equal(r.status, 0, r.stderr)
+  for (const cle of ['a', 'b', 'c', 'd', 'e']) assert.ok(existsSync(join(S, `resultats/clips/${cle}.mp4`)), `${cle} rendu`)
+  const appels = readFileSync(join(S, 'resultats/appels.txt'), 'utf8').trim().split('\n').sort()
+  assert.deepEqual(appels, ['carte=0 tmp=./audio_temp_file_0 lot=lot-0.json', 'carte=1 tmp=./audio_temp_file_1 lot=lot-1.json'],
+    'un processus par carte, chacun son dossier temporaire')
+  assert.match(readFileSync(join(S, 'resultats/journal.txt'), 'utf8'), /sur 2 carte\(s\)/)
+  // Le câblage : travail.sh passe la main à animer.sh, lc_lot.py prend son dossier temporaire, jt-du-jour.sh partage l'animation.
+  assert.match(lire('travail.sh'), /bash entrees\/animer\.sh "\$S" "\$W"/)
+  assert.match(lire('lc_lot.py'), /os\.environ\.get\("LOT_TMP", "\.\/audio_temp_file"\)/)
+  assert.match(lire('jt-du-jour.sh'), /USINE_ANIM_H="\$ANIM" USINE_FIXE_H="\$FIXE"/)
+  assert.match(lire('jt-du-jour.sh'), /"num_gpus":\{"gte":1,"lte":4\}/)
 })
 
 test('⭐ restant.py compte ce qui reste — un plan sans voix n’est pas « à faire »', () => {

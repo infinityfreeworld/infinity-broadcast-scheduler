@@ -1,7 +1,8 @@
 #!/bin/bash
-# 🎬 USINE — LE JOURNAL DE FREEWORLD TV, sur la machine louée (carte de 80 Go : H100 / A100 / H200).
-#   1) les voix (Chatterbox 0.1.7) et les images (Qwen-Image-Edit-2511) EN MÊME TEMPS : ~6 + 58 Go tiennent sur 80 ;
-#   2) tous les plans LongCat-Video-Avatar 1.5, modèle chargé UNE seule fois (lc_lot.py, décision du fondateur).
+# 🎬 USINE — LE JOURNAL DE FREEWORLD TV, sur la machine louée (1 à 4 cartes de 80 Go : H100 / H200).
+#   1) les voix (Chatterbox 0.1.7) et les images (Qwen-Image-Edit-2511) EN MÊME TEMPS sur la 1re carte : ~6 + 58 Go tiennent sur 80 ;
+#   2) tous les plans LongCat-Video-Avatar 1.5 sur TOUTES les cartes (animer.sh) : un lot par carte, modèle chargé une fois
+#      par carte (lc_lot.py, décision du fondateur).
 # Entrées (préparées sur le hub par planif.py) : entrees/{repliques,images,plans}.json, refs/, persos/, et les scripts.
 #
 # REPRISE (machines interruptibles, fondateur 15/09/2026) : l'orchestre rapporte dans resultats/ tout ce que les
@@ -62,20 +63,13 @@ PL=; PV=; PI=
 [ -n "$PV$PI" ] && wait $PV $PI
 journal "voix et images : $(python3.10 restant.py voix) voix et $(python3.10 restant.py images) image(s) manquent encore"
 
-# ── Tous les plans, modèle chargé une fois ; une 2e passe reprend ceux qui ont échoué (hoquet, mémoire) ──
+# ── Tous les plans, sur TOUTES les cartes (animer.sh : un lot et un modèle par carte ; une 2e passe reprend les échecs) ──
 RP=$(python3.10 restant.py plans)
 if [ "$RP" != 0 ]; then
   [ -n "$PL" ] && wait $PL
   while [ ! -f $W/.fini-lc ]; do sleep 20; done
-  . /opt/venv/lc/bin/activate && cp lc_lot.py LongCat-Video/ && cd $S/LongCat-Video
-  for passe in 1 2; do
-    t=$(date +%s)
-    timeout 43200 torchrun --nproc_per_node=1 lc_lot.py --checkpoint_dir=$W/lc/LongCat-Video-Avatar-1.5 --lot $S/entrees/plans.json \
-      --racine $S --sortie $RES/clips < /dev/null >> "$RES/lot.log" 2>&1
-    cd $S; RP=$(python3.10 restant.py plans); cd $S/LongCat-Video
-    journal "lot, passe $passe : $(( $(date +%s) - t )) s, $RP plan(s) encore à rendre"
-    [ "$RP" = 0 ] && break
-  done
+  . /opt/venv/lc/bin/activate && cp lc_lot.py LongCat-Video/
+  bash entrees/animer.sh "$S" "$W"
   cd $S; deactivate
 fi
 journal "plans : $(grep -h '"ok": false' $RES/clips/lot.jsonl 2>/dev/null | tail -5 | cut -c1-160 | tr '\n' ' ')"

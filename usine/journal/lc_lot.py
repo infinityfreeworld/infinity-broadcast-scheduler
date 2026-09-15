@@ -83,7 +83,8 @@ def charger(args, rang):
     whisper = os.path.join(args.checkpoint_dir, "whisper-large-v3")
     audio_encoder = get_audio_encoder(whisper, MODEL_TYPE).to(rang)
     audio_feature_extractor = get_audio_feature_extractor(whisper, MODEL_TYPE)
-    tmp = Path("./audio_temp_file"); tmp.mkdir(exist_ok=True)
+    # Un dossier par carte : animer.sh lance un lc_lot.py par carte, tous depuis le même dépôt LongCat-Video.
+    tmp = Path(os.environ.get("LOT_TMP", "./audio_temp_file")); tmp.mkdir(exist_ok=True)
     separateur_onnx = os.path.join(args.checkpoint_dir, "vocal_separator/Kim_Vocal_2.onnx")
     separateur = Separator(output_dir=tmp / "vocals", output_single_stem="vocals", model_file_dir=os.path.dirname(separateur_onnx))
     separateur.load_model(os.path.basename(separateur_onnx))
