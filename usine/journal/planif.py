@@ -19,7 +19,7 @@ DISTRIBUTION = json.load(open(os.path.join(ICI, "distribution.json"), encoding="
 FICHIERS = os.environ.get("JT_DISTRIBUTION", "/root/usine/journal/distribution")   # voix et photos : hub seulement
 MOTS_MAX_REPLIQUE = 80     # ~30 s de parole : au-delà, LongCat dérive (le 15/09, la caméra avançait déjà à 20 s)
 MOTS_MAX_JOURNAL = 2600    # ~17 min : le budget GPU du jour
-SUJETS_MAX = 12            # 15/09 : à 10, un Journal de 15 min était hors d'atteinte (~12,7 min au plus)
+SUJETS_MAX = 14            # 15/09 : un vrai JT, c'est 10 à 13 sujets d'une minute ; à 10, 15 min étaient hors d'atteinte
 
 IGGY = ("A news anchor with a human body in a navy blue suit, light blue shirt and striped tie, and the head of a realistic green iguana "
         "with a spiky crest and orange eyes, sits behind a long light wood news desk in a TV studio with indoor trees and a living "

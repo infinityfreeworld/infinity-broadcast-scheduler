@@ -44,7 +44,7 @@ export const MODELE_JT_DEFAUT = 'claude-sonnet-5'
 // ── Les bornes de planif.py (relues par le test dans le fichier Python) ─
 export const MOTS_MAX_REPLIQUE = 80      // ~30 s de parole : au-delà, LongCat dérive
 export const MOTS_MAX_JOURNAL = 2600     // ~17 min : le budget GPU du jour
-export const SUJETS_MAX = 12   // 15/09 : à 10, un Journal de 15 min était hors d'atteinte (~12,7 min au plus)
+export const SUJETS_MAX = 14   // 15/09 : un vrai JT, c'est 10 à 13 sujets d'une minute ; à 10, 15 min étaient hors d'atteinte
 export const MOTS_MAX = {
   sommaire: 120,
   lancement: MOTS_MAX_REPLIQUE,
@@ -141,6 +141,12 @@ export const clesDe = (d: Distribution, emploi: Emploi): string[] => Object.keys
 
 /** Emmanuel Cramon : une fois au plus par Journal (fondateur). */
 const INVITES_UNE_FOIS = ['cramon']
+/**
+ * La VARIÉTÉ (2e essai réel, 15/09/2026) : Gaston invité trois fois et Rick sur quatre sujets dans le même Journal.
+ * Un autre invité revient deux fois au plus ; un reporter couvre trois sujets au plus (cinq reporters : quinze sujets).
+ */
+export const INVITATIONS_MAX = 2
+export const REPORTAGES_MAX = 3
 
 // ── Les garde-fous ─────────────────────────────────────────────────────
 /**
@@ -223,12 +229,14 @@ export function validerCommande(jt: unknown, distribution: Distribution, { motsM
     erreurs.push(`il faut 1 à ${SUJETS_MAX} sujets${Array.isArray(sujets) ? ` (${sujets.length} reçus)` : ''}`)
   }
   const invitations = new Map<string, number>()
+  const reportages = new Map<string, number>()
   ;(Array.isArray(sujets) ? sujets : []).forEach((s: unknown, i: number) => {
     const c = `sujet ${i + 1}`
     if (!estObjet(s)) { erreurs.push(`${c} mal formé`); return }
     texte(s.titre, `${c} : titre`, MOTS_MAX.titre)
     const rep = personnage(distribution, s.reporter, 'reporter')
     if (!rep) erreurs.push(`${c} : reporter : « ${String(s.reporter).slice(0, 40)} » n'est pas un reporter de la distribution`)
+    else reportages.set(s.reporter as string, (reportages.get(s.reporter as string) ?? 0) + 1)
     texte(s.lieu, `${c} : lieu`, MOTS_MAX.lieu)
     const lancement = replique(s.lancement, `${c} : lancement`, MOTS_MAX.lancement)
     if (rep && lancement && !nomme(lancement, rep.nom)) erreurs.push(`${c} : le lancement doit passer la parole à ${rep.nom} en le nommant`)
@@ -251,6 +259,14 @@ export function validerCommande(jt: unknown, distribution: Distribution, { motsM
   for (const cle of INVITES_UNE_FOIS) {
     const n = invitations.get(cle) ?? 0
     if (n > 1) erreurs.push(`${personnage(distribution, cle, 'invite')?.nom ?? cle} est invité ${n} fois : une fois au plus par Journal`)
+  }
+  for (const [cle, n] of invitations) {
+    if (!INVITES_UNE_FOIS.includes(cle) && n > INVITATIONS_MAX) {
+      erreurs.push(`${personnage(distribution, cle, 'invite')?.nom ?? cle} est invité ${n} fois : ${INVITATIONS_MAX} fois au plus par Journal — varie les invités`)
+    }
+  }
+  for (const [cle, n] of reportages) {
+    if (n > REPORTAGES_MAX) erreurs.push(`${personnage(distribution, cle, 'reporter')?.nom ?? cle} couvre ${n} sujets : ${REPORTAGES_MAX} au plus — varie les reporters`)
   }
   if (total > plafond) erreurs.push(`${total} mots au total (plus de ${plafond})`)
   for (const t of termesInterdits(JSON.stringify(jt))) erreurs.push(`terme interdit : « ${t} » — garde-fou du Journal (tropes complotistes)`)
@@ -336,14 +352,14 @@ Reporters — "reporter" reçoit la clé entre guillemets ; choisis-les par affi
 Invités — "invite" :
 - "gaston" — Gaston Lardon, éleveur de cochons : la vie rurale ; excédé par la paperasse.
 - "cramon" — Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes. UNE FOIS AU PLUS par Journal. Il parle une langue de bois absurde, pompeuse et creuse. Il ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle.
-Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'autre.
+Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'autre — trois sujets au plus chacun.
 
 ═══ LA DURÉE ═══
-- Entre huit et onze sujets ; une interview dans environ un tiers d'entre eux.
+- Entre dix et treize sujets, comme un vrai journal télévisé. Trois interviews au plus (Gaston deux fois au plus, Cramon une fois au plus) ; trois sujets au plus par reporter : varie-les.
 - Le message du jour donne l'objectif de mots. Les PLAFONDS passent avant l'objectif : un Journal un peu court vaut mieux qu'un Journal refusé.
 - Comment l'usine compte : un mot = une suite de lettres ou de chiffres. « l'eau » compte DEUX mots, « aujourd'hui » deux, « quatre-vingt-dix » trois.
 - Plafonds ABSOLUS, au-delà c'est le refus : sommaire ${MOTS_MAX.sommaire} mots · lancement ${MOTS_MAX.lancement} · terrain ${MOTS_MAX.terrain} · question ${MOTS_MAX.question} · réponse ${MOTS_MAX.reponse} · au revoir ${MOTS_MAX.au_revoir} · titre ${MOTS_MAX.titre} · lieu ${MOTS_MAX.lieu} · décor ${MOTS_MAX.decor} · ${SUJETS_MAX} sujets · ${MOTS_MAX_JOURNAL} mots au total.
-- Garde de la marge ; vise : sommaire 70 à 100 mots, lancement 40 à 65, terrain 55 à 70, question 15 à 30, réponse 30 à 50, au revoir 25 à 45.
+- Vise le HAUT de ces fourchettes, sans jamais dépasser les plafonds : sommaire 90 à 115 mots, lancement 62 à 76, terrain 66 à 78, question 22 à 36, réponse 42 à 56, au revoir 35 à 55. Le 15/09, des répliques trop courtes ont donné un Journal de neuf minutes au lieu de quinze.
 - Les nombres s'écrivent EN TOUTES LETTRES (« deux cents », « dix-sept heures ») : le Journal est lu par des voix de synthèse. Ni chiffres, ni abréviations, ni émojis.
 
 ═══ LA LIGNE ÉDITORIALE (décisions du fondateur) ═══

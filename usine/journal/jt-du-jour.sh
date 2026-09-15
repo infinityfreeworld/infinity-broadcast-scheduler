@@ -48,15 +48,19 @@ fi
 
 # ── 2) Le travail d'usine (les résultats d'un passage précédent du même jour sont gardés : reprise) ──
 python3 "$ICI/planif.py" "$J/jt.json" "$T" >> "$J/ETAT" 2>&1 || echec "commande refusée par le planificateur" "$(tail -1 "$J/ETAT")"
-read -r MOTS HEURES BM BT <<<"$(python3 - "$T" "$BUDGET_JOUR_MAX" <<'PY'
-import json, math, sys
+read -r MOTS HEURES BM BT ECH <<<"$(python3 - "$T" "$BUDGET_JOUR_MAX" <<'PY'
+import json, sys
 reps = json.load(open(f"{sys.argv[1]}/entrees/repliques.json", encoding="utf-8"))
 mots = sum(len(r["texte"].split()) for r in reps)
-# 0,36 s de parole par mot (Chatterbox) × ~31 s de calcul H100 par seconde de vidéo (mesuré le 15/09), + installation.
-heures = math.ceil(mots * 0.36 * 31 / 3600 * 1.25 + 0.75)
-machine = round(heures * 0.85 + 1.5, 1)          # enchère ≤ 0,85 $/h, plus bande passante et disque
+# Heures de carte : 0,36 s de parole par mot (Chatterbox) × ~31 s de calcul H100 par seconde de vidéo (15/09), marge
+# 25 %, + ~35 min d'installation et de téléchargements — au dixième d'heure : arrondi à l'heure, le 1er essai réel
+# (15/09) se croyait à 2 h et n'entrait plus dans son budget.
+heures = max(1.0, round(mots * 0.36 * 31 / 3600 * 1.25 + 0.6, 1))
+# Le pire cas d'une machine : jusqu'à 1,8 $/h (enchère H100 du 15/09 après-midi : 1,54 $/h), + ~1 $ de bande passante et
+# de disque. ⚠️ Le moins cher à l'heure (0,76 $/h) facturait 0,038 $/Go : 5,66 $ rien que pour télécharger les modèles.
+machine = round(heures * 1.8 + 1.0, 1)
 total = min(float(sys.argv[2]), round(machine * 1.6, 1))
-print(mots, heures, min(machine, total), total)
+print(mots, heures, min(machine, total), total, int(heures * 60 + 60))
 PY
 )"
 journal "travail : $MOTS mots, ~$HEURES h de carte, budget $BM \$ par machine et $BT \$ au plus pour la journée"
@@ -65,7 +69,7 @@ journal "travail : $MOTS mots, ~$HEURES h de carte, budget $BM \$ par machine et
 for essai in 1 2 3; do
   USINE_DOSSIER="$T" USINE_ETIQUETTE="usine-jt$SUFFIXE-$DATE" USINE_INTERRUPTIBLE=1 USINE_REPRISES=4 \
   USINE_BUDGET="$BM" USINE_BUDGET_TOTAL="$BT" USINE_HEURES="$HEURES" USINE_GO=150 USINE_DISQUE=300 \
-  USINE_ECHEANCE_MIN=$(( HEURES * 60 + 60 )) USINE_ECHEANCE_TOTALE_MIN=${JT_ECHEANCE_TOTALE_MIN:-720} USINE_FILTRE="$FILTRE" \
+  USINE_ECHEANCE_MIN="$ECH" USINE_ECHEANCE_TOTALE_MIN=${JT_ECHEANCE_TOTALE_MIN:-720} USINE_FILTRE="$FILTRE" \
     bash "$ICI/../orchestre.sh" >> "$J/usine.log" 2>&1
   [ -f "$T/resultats/FINI" ] && break
   grep -q "ABANDON : pas de location\|ABANDON : 3 hôtes" "$T/ETAT" 2>/dev/null || break   # une autre fin : ne pas insister
