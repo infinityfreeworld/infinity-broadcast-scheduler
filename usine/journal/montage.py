@@ -84,20 +84,35 @@ def lisse(expr, registre=0):
     return f"(st({registre},clip({expr},0,1));ld({registre})*ld({registre})*(3-2*ld({registre})))"
 
 
+def cadrage(style, p, ax):
+    """(zoom, x) d'une « caméra » pour une progression p (expression de 0 à 1) : 0 avance, 1 recule (finit au cadrage
+    d'origine), 2 glisse, 3 gros plan sur le visage."""
+    if style == 0:
+        return f"(1+0.14*{p})", f"{ax}"
+    if style == 1:
+        return f"(1.14-0.14*{p})", f"{ax}"
+    if style == 2:
+        return "1.14", f"clip({ax}-0.3+0.6*{p},0,1)"
+    return f"(1.26+0.04*{p})", f"{ax}"
+
+
 def mouvement(d, geste, ancre, serre=True):
-    """La caméra virtuelle d'un plan de d secondes. geste : 0 avancer, 1 reculer (finit au cadrage d'origine), 2 glisser.
-    Un plan long (plus de 12 s) passe en son milieu par un second cadrage, plus serré sur le visage : deux « caméras »."""
-    p = lisse(f"on/{max(1, round(d * FPS))}")
+    """La caméra virtuelle d'un plan de d secondes (fondateur, 15/09 : « les angles de vue manquent de dynamisme »). Un plan
+    court fait UN mouvement franc ; au-delà de 7 s, le cadrage change toutes les ~4,5 s, coupe franche comme en régie à
+    plusieurs caméras — le gros plan sur le visage alterne avec le mouvement du plan, qui revient toujours en DERNIER (un
+    lancement finit ainsi au cadrage d'où part le fond du duplex)."""
+    n = max(1, round(d * FPS))
     ax, ay = ancre
-    if geste % 3 == 0:
-        z, x = f"1+0.08*{p}", f"{ax}"
-    elif geste % 3 == 1:
-        z, x = f"1.08-0.08*{p}", f"{ax}"
+    if not serre or d < 7:
+        z, x = cadrage(geste % 3, lisse(f"on/{n}"), ax)
     else:
-        z, x = "1.1", f"clip({ax}-0.2+0.4*{p},0,1)"
-    if serre and d > 12:
-        t1, t2 = round(d * 0.4 * FPS), round(d * 0.7 * FPS)
-        z, x = f"if(between(on,{t1},{t2}),1.22,{z})", f"if(between(on,{t1},{t2}),{ax},{x})"
+        k = max(2, round(d / 4.5))
+        bornes = [round(i * n / k) for i in range(k + 1)]
+        z = x = None
+        for i in reversed(range(k)):
+            a, b = bornes[i], bornes[i + 1]
+            zi, xi = cadrage(3 if (k - 1 - i) % 2 else geste % 3, lisse(f"(on-{a})/{max(1, b - a)}"), ax)
+            z, x = (zi, xi) if z is None else (f"if(lt(on,{b}),{zi},{z})", f"if(lt(on,{b}),{xi},{x})")
     return f"{AGRANDI},zoompan=z='{z}':x='({x})*(iw-iw/zoom)':y='{ay}*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
 
 
@@ -113,7 +128,8 @@ def interview(clip, sortie, dq, bandeaux=""):
     (0,28 → 0,72 ne bougeait que de 6 % : invisible sur le rejeu du 15/09)."""
     d = duree(clip)
     x = f"(0.1+0.8*{lisse(f'(on/{FPS}-{dq:.2f})/0.8')})"
-    f = (f"[0:v]{PLEIN},{AGRANDI},zoompan=z='1.18':x='{x}*(iw-iw/zoom)':y='0.35*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
+    z = f"(1.18+0.12*{lisse(f'(on/{FPS}-{dq + 2.5:.2f})/0.6')})"   # 2,5 s après le début de la réponse : gros plan sur l'invité
+    f = (f"[0:v]{PLEIN},{AGRANDI},zoompan=z='{z}':x='{x}*(iw-iw/zoom)':y='0.35*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
          f"{',' + bandeaux if bandeaux else ''}[v];{voix('0:a', d)}")
     ff("-i", clip, "-filter_complex", f, "-map", "[v]", "-map", "[a]", *V, *A, sortie)
 
@@ -262,6 +278,23 @@ def main(dossier):
         morceaux.append(f)
         t += duree(f)
 
+    def suite(cles, base, ancre, geste_final=None):
+        """Les parties suivantes d'une réplique longue (planif.py) : chacune son plan et son mouvement de caméra — la coupe
+        franche entre deux parties est un changement de caméra. Rend le dernier clip monté (ou None)."""
+        nonlocal geste
+        dernier = None
+        for j, cle in enumerate(cles, 2):
+            c = clip(cle)
+            if not c:
+                manquants.append(cle)
+                continue
+            geste += 1
+            g = geste_final if geste_final is not None and j == len(cles) + 1 else geste % 3
+            plan(c, f"{base}-p{j}.mp4", "", g, ancre)
+            ajoute(f"{base}-p{j}.mp4")
+            dernier = c
+        return dernier
+
     for i, seq in enumerate(m["deroule"]):
         base = f"{TMP}/{i:02d}"
         if seq["type"] == "ouverture":
@@ -272,6 +305,7 @@ def main(dossier):
             else:
                 manquants.append(seq["plan"]); generique_seul(f"{base}.mp4")
             ajoute(f"{base}.mp4", "Le sommaire")
+            suite(seq.get("suite", []), base, VISAGE_IGGY)
         elif seq["type"] == "sujet":
             lance, terrain, itw = clip(seq["lancement"]), clip(seq["terrain"]), clip(seq["interview"]) if seq.get("interview") else None
             manquants += [k for k, c in ((seq["lancement"], lance), (seq["terrain"], terrain)) if not c]
@@ -279,24 +313,44 @@ def main(dossier):
                 manquants.append(seq["interview"])
             rep = gens[seq["reporter"]]
             titre = seq["titre"]
-            if lance:   # Iggy lance : la caméra RECULE, pour finir au cadrage d'où part le fond du duplex
+            fin_lance = lance
+            if lance:   # Iggy lance : la caméra RECULE en dernier, pour finir au cadrage d'où part le fond du duplex
                 plan(lance, f"{base}-a.mp4", texte(titre, "64", "h-120", 36, quand=(0.6, min(5.0, duree(lance)))), 1, VISAGE_IGGY)
                 ajoute(f"{base}-a.mp4", titre); titre = None
+                fin_lance = suite(seq.get("lancement_suite", []), f"{base}-a", VISAGE_IGGY, geste_final=1) or lance
             if terrain:
                 geste += 1
                 brut = f"{base}-b0.mp4"
-                if lance:
-                    duplex(terrain, brut, fond_vivant(lance, f"{base}-fond.mp4"), rep["nom"], seq["lieu"], 2 * (geste % 2))
+                if fin_lance:
+                    duplex(terrain, brut, fond_vivant(fin_lance, f"{base}-fond.mp4"), rep["nom"], seq["lieu"], 2 * (geste % 2))
                 else:   # sans lancement, le reporter prend l'antenne en plein écran
                     plan(terrain, brut, bandeau(rep["nom"], seq["lieu"], 0.5, min(5.5, duree(terrain))), 2 * (geste % 2))
                 image = fichier("images", seq["coupe"], "png") if seq.get("coupe") and seq["coupe"] not in signalees else None
-                d = duree(brut)
-                debut = max(6.0 if lance else 3.0, 0.45 * d)
-                if image and debut + 3.5 <= d - 1.0:
-                    inserer_coupe(brut, image, f"{base}-b.mp4", debut)
-                else:
+                suites = [(k, clip(k)) for k in seq.get("terrain_suite", [])]
+                manquants += [k for k, c in suites if not c]
+                suites = [(k, c) for k, c in suites if c]
+                if suites:
+                    # Le reportage continue sous un AUTRE angle (planif.py) ; le plan de coupe ouvre la 2e partie : il cache la
+                    # jonction, et la voix du reporter continue dessous.
                     os.replace(brut, f"{base}-b.mp4")
-                ajoute(f"{base}-b.mp4", titre); titre = None
+                    ajoute(f"{base}-b.mp4", titre); titre = None
+                    for j, (k, c) in enumerate(suites, 2):
+                        geste += 1
+                        piece = f"{base}-b{j}0.mp4"
+                        plan(c, piece, "", geste % 3, VISAGE_TERRAIN)
+                        if j == 2 and image and duree(piece) >= 5.0:
+                            inserer_coupe(piece, image, f"{base}-b{j}.mp4", 0.0)
+                        else:
+                            os.replace(piece, f"{base}-b{j}.mp4")
+                        ajoute(f"{base}-b{j}.mp4")
+                else:
+                    d = duree(brut)
+                    debut = max(6.0 if fin_lance else 3.0, 0.45 * d)
+                    if image and debut + 3.5 <= d - 1.0:
+                        inserer_coupe(brut, image, f"{base}-b.mp4", debut)
+                    else:
+                        os.replace(brut, f"{base}-b.mp4")
+                    ajoute(f"{base}-b.mp4", titre); titre = None
             if itw:
                 dq = duree(os.path.join(dossier, "resultats", "voix", f"{seq['interview'][:3]}-question.wav"))
                 inv = gens[seq["invite"]]
@@ -307,6 +361,7 @@ def main(dossier):
             c = clip(seq["plan"])
             if c:
                 plan(c, f"{base}.mp4", "", 0, VISAGE_IGGY); ajoute(f"{base}.mp4", "À demain")
+                suite(seq.get("suite", []), base, VISAGE_IGGY)
             else:
                 manquants.append(seq["plan"])
             generique_seul(f"{base}-g.mp4"); ajoute(f"{base}-g.mp4")

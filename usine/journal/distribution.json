@@ -23,7 +23,7 @@
   "gaston": {"nom": "Gaston Lardon", "role": "Éleveur de Bipèdes", "emplois": ["invite"], "voix": "gaston.wav", "image": "gaston.png",
              "exa": 0.8, "cfg": 0.3, "qui": "pig farmer",
              "description": "a pig farmer in blue overalls and green rubber boots, with a pink snout"},
-  "cramon": {"nom": "Emmanuel Cramon", "role": "Président des moutons jaunes", "emplois": ["invite"], "voix": "cramon.wav", "image": "cramon.png",
+  "cramon": {"nom": "Emmanuel Cramon", "role": "Président de la République", "emplois": ["invite"], "voix": "cramon.wav", "image": "cramon.png",
              "exa": 0.8, "cfg": 0.3, "qui": "grey wolf politician",
              "description": "a grey wolf politician in a dark suit with a white sheepskin cape and a shepherd's crook"}
 }
