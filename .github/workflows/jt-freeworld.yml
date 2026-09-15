@@ -50,6 +50,10 @@ on:
         description: 'commande : consigne du rédacteur en chef (un thème imposé, ex. « un sujet sur le FLH »)'
         required: false
         default: ''
+      minutes:
+        description: 'commande : durée visée en minutes pour CE lancement (vide = la variable JT_MINUTES, sinon 15)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -138,7 +142,8 @@ jobs:
           NOSTR_PRIVATE_KEY:   ${{ secrets.NOSTR_PRIVATE_KEY }}
           # Vide = le défaut du code (claude-sonnet-5).
           ANTHROPIC_MODEL_JT:  ${{ vars.ANTHROPIC_MODEL_JT || '' }}
-          JT_MINUTES:          ${{ vars.JT_MINUTES || '' }}
+          # Un essai choisit sa durée au lancement (ex. 5) ; le quotidien suit la variable du dépôt.
+          JT_MINUTES:          ${{ github.event.inputs.minutes || vars.JT_MINUTES || '' }}
           NOSTR_RELAYS:        ${{ vars.NOSTR_RELAYS || '' }}
           FORCER_REGENERATION: ${{ github.event.inputs.forcer == 'true' && '1' || '' }}
           # Par l'environnement, jamais interpolée dans le script : le script vérifie son format.
