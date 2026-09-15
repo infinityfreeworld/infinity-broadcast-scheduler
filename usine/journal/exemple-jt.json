@@ -1,0 +1,30 @@
+{
+  "date": "2026-09-16",
+  "sommaire": "Bonsoir, et sssoyez les bienvenus dans le Journal de Freeworld TV. Au sommaire ce soir : au port, les filets fantômes deviennent des bancs publics. Et à la ferme, la brigade vétérinaire rend visite à Gaston Lardon, avec trois formulaires et beaucoup d'appétit.",
+  "sujets": [
+    {
+      "titre": "Les filets fantômes deviennent des bancs",
+      "lancement": "Premier sujet, une bonne nouvelle venue de la mer. Des filets abandonnés, qui piégeaient les poissons depuis des années, reprennent enfin du service. Oscar, vous êtes en direct du port ?",
+      "reporter": "oscar",
+      "lieu": "En direct du port",
+      "decor": "a fishing harbour with white boats and piles of old green fishing nets on the quay, daylight",
+      "terrain": "Oui Iggy ! Ici, les phoques et les goélands ont repêché plus de deux cents filets fantômes cette semaine. Ils sont lavés, tressés, et deviennent des bancs publics tout le long du quai. Les mouettes ont déjà réservé les meilleures places. Bravo, bravo !",
+      "interview": null
+    },
+    {
+      "titre": "La brigade vétérinaire chez Gaston",
+      "lancement": "À la campagne maintenant, où l'administration ne dort jamais. Ce matin, la brigade vétérinaire de l'UERSS s'est invitée chez Gaston Lardon, éleveur depuis trente ans. Rick était sur place.",
+      "reporter": "rick",
+      "lieu": "À la ferme de Gaston Lardon",
+      "decor": "a farmyard in the French countryside with a wooden barn and hay bales, overcast morning",
+      "terrain": "Iggy, la brigade est arrivée à sept heures, avec un tampon, un mètre ruban et un formulaire de quarante pages. Ils ont compté les poules, les nuages, et même les brins de paille. Monsieur Lardon, lui, n'a pas l'air ravi.",
+      "interview": {
+        "invite": "gaston",
+        "question": "Monsieur Lardon, qu'avez-vous à dire à la brigade vétérinaire ?",
+        "reponse": "Ils m'ont tamponné trois formulaires, compté mes bottes, et ils sont repartis avec mes croissants ! Moi, je veux juste qu'on me laisse travailler !",
+        "decor": "inside a rustic wooden barn with hay bales"
+      }
+    }
+  ],
+  "au_revoir": "C'est tout pour ce soir. Merci de nous avoir suivis, et à demain, sur Freeworld TV."
+}

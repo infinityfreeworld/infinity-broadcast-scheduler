@@ -1,0 +1,9 @@
+[Unit]
+Description=Le Journal de FREEWORLD TV — rétention quotidienne
+
+[Timer]
+OnCalendar=*-*-* 04:40:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

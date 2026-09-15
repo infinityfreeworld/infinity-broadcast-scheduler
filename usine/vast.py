@@ -27,7 +27,9 @@ BUDGET = float(os.environ.get("USINE_BUDGET", "3"))          # pire cas autoris�
 HEURES = float(os.environ.get("USINE_HEURES", "2"))          # durée maximale facturable
 GO = float(os.environ.get("USINE_GO", "60"))                 # Go téléchargés (frais de bande)
 DISQUE = int(os.environ.get("USINE_DISQUE", "120"))          # Go de disque
-CREDIT_MIN = float(os.environ.get("USINE_CREDIT_MIN", "10")) # ne jamais descendre sous ce crédit
+# Ne jamais descendre sous ce crédit. 20 $ et non 10 (condition de la session DATASPACE, 15/09/2026) : le compte
+# Vast est PARTAGÉ avec les stations des clients payants ; si le solde est juste, c'est l'usine qui attend.
+CREDIT_MIN = float(os.environ.get("USINE_CREDIT_MIN", "20"))
 # Filtre par défaut : une carte de 24-48 Go Ampere/Ada (compute 8.6-8.9 ; Blackwell 12.0 n'a pas de
 # noyaux dans torch 2.4-2.6). USINE_FILTRE (JSON) surcharge clé par clé, ex. {"gpu_ram": {"gte": 79000}}.
 FILTRE = {
@@ -37,6 +39,13 @@ FILTRE = {
     "type": "on-demand", "order": [["dph_total", "asc"]], "limit": 100,   # large : le tri final est au coût TOTAL
 }
 FILTRE.update(json.loads(os.environ.get("USINE_FILTRE", "{}")))
+# Machines INTERRUPTIBLES (fondateur, 15/09/2026 : « oui, si ça ne nuit pas à la qualité ») : même carte, même
+# modèle, même résultat ; seul risque, le loueur reprend la machine — l'orchestre repart alors sur une autre
+# (USINE_REPRISES). 3 à 4 fois moins cher : le 15/09, H100 SXM à 0,65 $/h en enchère contre 1,94 $/h à la demande.
+INTERRUPTIBLE = os.environ.get("USINE_INTERRUPTIBLE", "") == "1"
+MARGE = float(os.environ.get("USINE_ENCHERE_MARGE", "0.15"))   # au-dessus de l'enchère minimale : moins souvent évincé
+if INTERRUPTIBLE:
+    FILTRE["type"] = "bid"
 
 
 def appel(chemin, methode="GET", corps=None):
@@ -86,6 +95,11 @@ def pire_cas(o):
     return HEURES * o["dph_total"] + GO * (o.get("inet_down_cost") or 0) + DISQUE * (o.get("storage_cost") or 0) / 730 * HEURES
 
 
+def enchere(o):
+    # Notre offre pour une machine interruptible : l'enchère minimale du moment, plus une marge.
+    return round((o.get("min_bid") or o["dph_total"]) * (1 + MARGE) + 0.005, 3)
+
+
 cmd = sys.argv[1] if len(sys.argv) > 1 else "info"
 if cmd == "info":
     i = mienne()
@@ -115,6 +129,11 @@ elif cmd == "louer":
     EXCLUES = set(open(f).read().split()) if os.path.exists(f) else set()
     s, j = appel("/api/v0/bundles/?q=" + urllib.parse.quote(json.dumps(FILTRE)))
     offres = j.get("offers", []) if s == 200 else []
+    if INTERRUPTIBLE:
+        # Le tri et le budget jugent le prix que l'on PROPOSE : la carte à notre enchère, le reste (disque…) inchangé.
+        for o in offres:
+            o["_enchere"] = enchere(o)
+            o["dph_total"] = o["dph_total"] - o["min_bid"] + o["_enchere"] if o.get("min_bid") else o["_enchere"]
     # Classées par COÛT TOTAL, pas au tarif horaire : pour un petit travail, la bande passante pèse plus
     # que l'heure (14/09/2026 : 0,18 $/h au Vietnam = 2,77 $ au pire, contre 0,56 $ à 0,24 $/h aux Pays-Bas).
     for o in sorted(offres, key=lambda o: (pire_cas(o), o["dph_total"])):
@@ -123,10 +142,13 @@ elif cmd == "louer":
         pire = pire_cas(o)
         if pire > BUDGET:
             continue
-        s, r = appel(f"/api/v0/asks/{o['id']}/", "PUT",
-                     {"image": IMAGE, "disk": DISQUE, "runtype": "ssh", "label": ETIQ, "target_state": "running"})
+        corps = {"image": IMAGE, "disk": DISQUE, "runtype": "ssh", "label": ETIQ, "target_state": "running"}
+        if INTERRUPTIBLE:
+            corps["price"] = o["_enchere"]   # un prix dans la location = une machine interruptible (vast-cli --bid_price)
+        s, r = appel(f"/api/v0/asks/{o['id']}/", "PUT", corps)
         if s == 200 and (r.get("success") or r.get("new_contract")):
             print("LOUEE", o["id"], r.get("new_contract"), o.get("gpu_name"), f"{o['dph_total']:.3f}$/h",
+                  "INTERRUPTIBLE" if INTERRUPTIBLE else "à la demande",
                   o.get("geolocation"), f"pire={pire:.2f}$", f"credit={c:.2f}$"); sys.exit(0)
         print("REFUSEE", o["id"], s, str(r)[:80])
     print("RIEN", len(offres), "offre(s)"); sys.exit(2)
