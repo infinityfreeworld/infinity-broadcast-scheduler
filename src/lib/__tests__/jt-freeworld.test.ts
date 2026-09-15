@@ -272,6 +272,15 @@ test('⭐ les fermes n’élèvent QUE des Bipèdes : poules, vaches laitières,
     'un cochon citoyen, oui')
 })
 
+test('⭐ pas de didascalies (tout est LU), ni mots qui font dessiner du texte — les défauts du 2e essai réel (15/09)', () => {
+  refuse(avec(jt => { jt.sujets[0].terrain = 'O-oui Iggy ! *sursaute* Un bruit au loin.' }), /« \*sursaute\* » — pas de didascalie/)
+  refuse(avec(jt => { jt.au_revoir = '[rires] À demain, sur Freeworld TV.' }), /au revoir : « \[rires\] »/)
+  assert.deepEqual(erreursDe(avec(jt => { jt.sujets[0].terrain = 'O-oui Iggy ! Oh, un bruit au loin... Pardon.' })), [], 'le tic DIT avec des mots, oui')
+  refuse(avec(jt => { jt.sujets[1].coupe = 'a storefront from across the street, protest signs blurred in the foreground' }), /« signs » — ni texte/)
+  refuse(avec(jt => { jt.sujets[1].coupe = 'a misty mountain trail finish line area' }), /« finish line » — ni texte/)
+  refuse(avec(jt => { jt.sujets[0].decor = 'a fast-food counter with a menu board' }), /« menu » — ni texte/)
+})
+
 test('⭐ la consigne du rédacteur en chef (un thème imposé) passe EN TÊTE du message du jour, bornée, par l’environnement', () => {
   const m = J.messageDuJour({ date: DATE, minutes: 5, matiere: '', consigne: '  Un sujet sur le FLH,\n les activistes végans.  ' })
   assert.match(m, /^LA CONSIGNE DU RÉDACTEUR EN CHEF pour ce Journal — à suivre, toujours dans les règles et les garde-fous : Un sujet sur le FLH, les activistes végans\.$/m)
@@ -356,6 +365,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Entre dix et treize sujets, comme un vrai journal télévisé\. Trois interviews au plus/, 'le format'],
     [/trois sujets au plus par reporter : varie-les/, 'la variété des reporters'],
     [/EN TOUTES LETTRES/, 'les nombres en lettres'], [/« l'eau » compte DEUX mots/, 'le compte de l’usine'],
+    [/Aucune didascalie, ni \*entre astérisques\*, ni \[entre crochets\] : TOUT le texte est lu à voix haute/, 'pas de didascalies'],
     [/MAJORITAIREMENT des nouvelles POSITIVES des DERNIÈRES 24 HEURES/, 'le positif du jour'],
     [/un sujet plus ancien est permis/, 'les sujets anciens'],
     [/ton DOUX et HUMORISTIQUE, en évoquant des SOLUTIONS/, 'l’anxiogène adouci'],
