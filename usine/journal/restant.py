@@ -5,7 +5,7 @@ Une machine interruptible reprise en pleine nuit est remplacée ; l'orchestre ra
 suivante. Sans ce compte, elle réinstallerait Chatterbox et retéléchargerait 58 Go de Qwen-Image-Edit pour rien.
 Un plan dont une entrée manque (voix ratée 5 fois, image absente) n'est plus « à faire » : il est impossible.
 
-  python3 restant.py voix|images|plans      (depuis le dossier du travail)
+  python3 restant.py voix|images|plans|plans-tous      (depuis le dossier du travail)
 """
 import json, os, sys
 
@@ -24,5 +24,10 @@ elif quoi == "plans":
         if all(os.path.exists(c) for c in [p["image"], *p["voix"]]):
             n += 1
     print(n)
+elif quoi == "plans-tous":
+    # Les plans pas encore rendus, faisables ou non : c'est CE compte qui décide, au départ, d'installer LongCat — au
+    # départ d'une machine neuve, aucune voix n'existe encore, donc aucun plan n'est « faisable » (essai du 15/09).
+    liste = json.load(open("entrees/plans.json", encoding="utf-8"))
+    print(sum(not os.path.exists(f"resultats/clips/{p['cle']}.mp4") for p in liste))
 else:
     sys.exit(f"inconnu : {quoi} (voix | images | plans)")

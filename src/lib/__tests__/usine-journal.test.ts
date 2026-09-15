@@ -138,6 +138,10 @@ test('⭐ restant.py compte ce qui reste — un plan sans voix n’est pas « à
   assert.equal(compte('voix'), '8')
   assert.equal(compte('images'), '3')
   assert.equal(compte('plans'), '0', 'aucune voix encore : aucun plan n’est faisable')
+  // … mais sept plans restent à rendre : c'est CE compte qui décide d'installer LongCat. Le 1er essai réel (15/09) a
+  // décidé sur « plans » (0 sur une machine neuve), sauté l'installation, et l'a attendue pour toujours.
+  assert.equal(compte('plans-tous'), '7')
+  assert.match(lire('travail.sh'), /RP=\$\(python3\.10 restant\.py plans-tous\)/)
   mkdirSync(join(dossier, 'resultats/voix'), { recursive: true })
   writeFileSync(join(dossier, 'resultats/voix/ouverture.wav'), 'RIFF')
   assert.equal(compte('voix'), '7')
