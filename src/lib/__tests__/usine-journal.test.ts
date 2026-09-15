@@ -190,7 +190,13 @@ test('le montage suit les pilotes validés : générique du fondateur, avancée 
   assert.match(m, /CADRE_OUVERTURE = \(48, 168, 783, 437\)/, 'la caméra finit sur le cadrage exact du plan d’ouverture')
   // Fondateur, 15/09 : Iggy parle AVANT la fin du zoom — dès que son plan paraît, et la caméra finit son avancée sur lui.
   assert.match(m, /T_VOIX = T_PARLE\b/)
-  assert.match(m, /zoompan=z='1\+\{ZOOM_CLIP - 1:\.4f\}\*\{fin_zoom\}'/)
+  // … sans « léger changement d'image » (fondateur, 15/09) : UNE avancée sur le plan large où la PREMIÈRE image du plan
+  // animé est incrustée ; il y reste figé jusqu'à ce qu'Iggy parle, et la caméra s'arrête pile sur lui.
+  assert.match(m, /ZOOM_TOTAL = ZOOM_DUREE \+ ZOOM_CLIP_DUREE/)
+  assert.match(m, /tpad=start_duration=\{ZOOM_DUREE\}:start_mode=clone/)
+  assert.match(m, /\[anime\]\[masque\]alphamerge\[incruste\]/)
+  // La porte de bruit rognait des débuts et fins de mots (0,5 s sur l'essai) : les voix sont nettoyées en amont.
+  assert.doesNotMatch(m, /agate/)
   // … et des caméras dynamiques : aucun plan fixe, un 2e cadrage sur les plans longs, l'interview suit la parole.
   assert.match(m, /def mouvement\(d, geste, ancre, serre=True\)/)
   assert.match(m, /if serre and d > 12:/)

@@ -186,7 +186,10 @@ export function termesInterdits(texte: string): string[] {
  * qui appelle du texte y fait apparaître du texte. Le hub revérifie chaque image ; ici, on refuse plus tôt.
  */
 const DECOR_HUMAINS = /\b(?:people|persons?|humans?|m[ae]n(?!-)|wom[ae]n|child(?:ren)?|kids?|boys?|girls?|crowds?|tourists?|pedestrians?|passers?-by|spectators?|audiences?|workers?|farmers?|fisherm[ae]n|shepherds?|soldiers?|police(?:m[ae]n)?|journalists?|reporters?|cameram[ae]n|camera\s+(?:crew|operators?)|photographers?|press)\b/i
-const DECOR_TEXTE = /\b(?:texts?|logos?|banners?|billboards?|posters?|captions?|lettering|watermarks?|signage|signboards?|signposts?|(?:road|street|shop|store|neon|traffic)\s+signs?|newspapers?|headlines?)\b/i
+// 2e essai réel (15/09) : « protest signs » et « finish line » (une arche marquée FINISH) passaient.
+const DECOR_TEXTE = /\b(?:texts?|logos?|banners?|billboards?|posters?|captions?|lettering|watermarks?|signage|signboards?|signposts?|(?:road|street|shop|store|neon|traffic)\s+signs?|signs?|placards?|finish\s+lines?|scoreboards?|menus?|price\s+tags?|labels?|newspapers?|headlines?)\b/i
+/** Tout le texte est LU à voix haute : « *sursaute* » était dit tel quel (2e essai réel, 15/09). */
+const DIDASCALIE = /\*[^*\n]{1,80}\*|\[[^\]\n]{1,80}\]/u
 /**
  * Les plans de coupe peuvent MONTRER les Bipèdes (fondateur, 15/09/2026), dans le cadre accepté ce jour-là : le miroir de
  * l'ÉLEVAGE, jamais celui de l'esclavage humain réel. Même liste que COUPE_INTERDIT de planif.py (le test les compare) ;
@@ -227,6 +230,8 @@ export function validerCommande(jt: unknown, distribution: Distribution, { motsM
     if (t) total += compterMots(t)
     const ferme = t?.match(FERME_ANIMALE)
     if (ferme) erreurs.push(`${champ} : « ${ferme[0]} » — dans Freeworld, les animaux n'élèvent pas d'animaux : les fermes n'élèvent que des Bipèdes`)
+    const didascalie = t?.match(DIDASCALIE)
+    if (didascalie) erreurs.push(`${champ} : « ${didascalie[0]} » — pas de didascalie : tout le texte est LU à voix haute (dis le tic avec des mots)`)
     return t
   }
   const coupe = (v: unknown, champ: string): void => {
@@ -389,6 +394,7 @@ Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'
 - Plafonds ABSOLUS, au-delà c'est le refus : sommaire ${MOTS_MAX.sommaire} mots · lancement ${MOTS_MAX.lancement} · terrain ${MOTS_MAX.terrain} · question ${MOTS_MAX.question} · réponse ${MOTS_MAX.reponse} · au revoir ${MOTS_MAX.au_revoir} · titre ${MOTS_MAX.titre} · lieu ${MOTS_MAX.lieu} · décor ${MOTS_MAX.decor} · ${SUJETS_MAX} sujets · ${MOTS_MAX_JOURNAL} mots au total.
 - Vise le HAUT de ces fourchettes, sans jamais dépasser les plafonds : sommaire 90 à 115 mots, lancement 62 à 76, terrain 66 à 78, question 22 à 36, réponse 42 à 56, au revoir 35 à 55. Le 15/09, des répliques trop courtes ont donné un Journal de neuf minutes au lieu de quinze.
 - Les nombres s'écrivent EN TOUTES LETTRES (« deux cents », « dix-sept heures ») : le Journal est lu par des voix de synthèse. Ni chiffres, ni abréviations, ni émojis.
+- Aucune didascalie, ni *entre astérisques*, ni [entre crochets] : TOUT le texte est lu à voix haute. Un tic se DIT avec des mots (« Oh, un bruit de foreuse au loin… Pardon. »).
 
 ═══ LA LIGNE ÉDITORIALE (décisions du fondateur) ═══
 - Un MÉLANGE : la vie de l'écosystème Infinity ET le quotidien du monde. MAJORITAIREMENT des nouvelles POSITIVES des DERNIÈRES 24 HEURES (la fraîcheur est écrite entre crochets : « il y a 5 h ») ; un sujet plus ancien est permis s'il éclaire le jour, en le disant.

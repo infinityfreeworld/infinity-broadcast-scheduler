@@ -28,22 +28,26 @@ V = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-maxrate", "3M", "-b
 A = ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
 PLEIN = f"scale={W}:-2:flags=lanczos,crop={W}:{H},setsar=1,fps={FPS}"
 AGRANDI = f"scale={W * 3 // 2}:{H * 3 // 2}:flags=lanczos"   # ×1,5 : la marge de précision des mouvements de caméra
-# Entre les phrases, Chatterbox laissait des souffles : ils sont retirés AVANT l'animation (nettoyage.py) ; cette porte
-# de bruit n'est plus qu'une sécurité. Rien n'est coupé : les lèvres restent calées.
-VOIX_PROPRE = "highpass=f=70,agate=threshold=0.01:ratio=8:attack=3:release=150:range=0.01:knee=2"
+# Entre les phrases, Chatterbox laissait des souffles : ils sont remplacés AVANT l'animation (nettoyage.py) par de VRAIS
+# silences. La porte de bruit qui les masquait au montage est retirée : mesurée sur l'essai du 15/09, elle rognait 0,5 s
+# d'attaques et de fins de mots, jusqu'à 60 ms d'un coup (« des mots coupés », le fondateur). Reste le passe-haut.
+VOIX_PROPRE = "highpass=f=70"
 # Le générique : image jusqu'à 16,4 s ; dès 15 s, fondu d'opacité vers la caméra du Journal (consigne du fondateur).
 G_BASCULE, G_NOIR = 15.0, 16.4
-# L'ouverture (fondateur, 15/09 : Iggy doit parler AVANT la fin du zoom). Son plan animé part d'un cadrage un peu plus
-# LARGE que le plan moyen (crop B′ 48, 168, 783, 437 du plan large) : la caméra avance sur le plateau jusqu'à ce cadrage,
-# fond vers Iggy qui PARLE déjà, puis finit son avancée SUR lui (× 783/681, retour au plan moyen) pendant ses premiers mots.
-# LongCat garde le centre de l'image (SSIM 0,93) et PLEIN rogne 2,5 % en hauteur : la fin de l'avancée tombe pile.
+# L'ouverture (fondateur, 15/09 : Iggy parle AVANT la fin du zoom — puis « on voit le léger changement d'image » au fondu
+# de la photo vers le plan animé : LongCat ne rend jamais tout à fait la même image). UN SEUL mouvement de caméra, de 4,2 s,
+# sur un COMPOSITE : le plan large, avec la PREMIÈRE image du plan animé incrustée à sa place (bords fondus). Le plan animé
+# y reste figé jusqu'à T_VOIX, puis joue — Iggy parle à mi-course — et la caméra s'arrête pile sur son cadrage : le plan
+# animé seul prend alors le relais sur des pixels identiques. Ce plan part d'un cadrage un peu plus LARGE que le plan moyen
+# (CADRE_OUVERTURE, crop 48, 168, 783, 437 du plan large) ; montage.json peut en donner un autre (« cadre_ouverture »)
+# pour remonter un plan plus ancien. LongCat garde le centre de l'image (SSIM 0,93) et PLEIN rogne 2,5 % en hauteur.
 CADRE_OUVERTURE = (48, 168, 783, 437)
-ZOOM_DUREE, FONDU = 2.2, 0.4
-T_PARLE = G_BASCULE + ZOOM_DUREE   # le plan qui parle entre en fondu…
-T_VOIX = T_PARLE                   # … et Iggy parle dès cet instant, pendant que la caméra avance encore
-ZOOM_CLIP, ZOOM_CLIP_DUREE = 783 / 681, 2.0
-VISAGE_OUVERTURE = (0.424, 0.227)   # le visage d'Iggy dans le plan d'ouverture (après recadrage LongCat et PLEIN)
-VISAGE_IGGY = (0.424, 0.228)        # … et dans son plan moyen habituel
+ZOOM_DUREE, ZOOM_CLIP_DUREE = 2.2, 2.0    # la caméra avance 2,2 s avant qu'Iggy parle, et 2 s encore sous ses premiers mots
+T_PARLE = G_BASCULE + ZOOM_DUREE          # Iggy s'anime et parle…
+T_VOIX = T_PARLE
+ZOOM_TOTAL = ZOOM_DUREE + ZOOM_CLIP_DUREE  # … et la caméra s'arrête sur lui
+RACCORD = 0.3                             # relais composite → plan animé seul : la même image, un fondu de sécurité
+VISAGE_IGGY = (0.424, 0.228)        # le visage d'Iggy dans son plan moyen habituel
 VISAGE_TERRAIN = (0.5, 0.33)        # un reporter est au centre, le visage dans le tiers haut
 MUSIQUE_SOUS_VOIX = 0.7            # la traîne du générique décroît d'elle-même ; ≈ l'écart voix/musique du pilote 2 validé
 TMP = None   # les pièces du montage : main() les range DANS le dossier du jour, que purge.sh efface à J+2
@@ -161,44 +165,54 @@ def inserer_coupe(piece, image, sortie, debut, d=3.5):
        "-map", "[v]", "-map", "0:a", "-c:a", "copy", *V, sortie)
 
 
-def camera_large():
-    """zoompan qui part du plan large entier (ramené au 16:9) et finit sur le cadrage d'ouverture d'Iggy."""
-    x, y, w, _ = CADRE_OUVERTURE
+def geometrie_ouverture(cadre):
+    """Où tombe le plan animé d'ouverture dans le plan large agrandi ×2 (le « canevas » de la caméra) : sa place (x, y,
+    largeur, hauteur, en pixels pairs), le zoom de fin qui le cadre EXACTEMENT comme PLEIN, et le point fixe du zoom."""
+    x, y, w, _ = cadre
     k = w / 1376
-    garde_lc = 768 * 832 / 480
-    rogne = 768 * (1 - 720 / (480 * W / 832)) / 2
-    x0, y0, fw = x + (1376 - garde_lc) / 2 * k, y + rogne * k, garde_lc * k
-    lx, dx = 1365, 5
-    s = 2 * W / lx
-    z_fin = lx / fw
-    ax = (x0 - dx) * s / (2 * W - 2 * W / z_fin)
-    ay = y0 * s / (2 * H - 2 * H / z_fin)
-    return (f"crop={lx}:768:{dx}:0,scale={2 * W}:{2 * H}:flags=lanczos,"
-            f"zoompan=z='pow({z_fin:.5f},{lisse(f'on/{ZOOM_DUREE * FPS:.0f}')})':x='{ax:.5f}*(iw-iw/zoom)':y='{ay:.5f}*(ih-ih/zoom)'"
-            f":d=1:s={W}x{H}:fps={FPS}")
+    garde_lc = 768 * 832 / 480                          # LongCat garde le centre : 1376×768 → 1331×768 → 832×480
+    rogne = (1 - 720 / (480 * W / 832)) / 2               # PLEIN rogne 1,25 % en haut et en bas
+    lx, dx = 1365, 5                                     # le plan large ramené au 16:9
+    sx, sy = 2 * W / lx, 2 * H / 768
+    pair = lambda v: int(round(v / 2)) * 2
+    px, py = pair((x + (1376 - garde_lc) / 2 * k - dx) * sx), pair(y * sy)
+    pl, ph = pair(garde_lc * k * sx), pair(768 * k * sy)
+    z_fin = 2 * W / pl
+    return px, py, pl, ph, z_fin, px / (2 * W - pl), (py + rogne * ph) / (2 * H - 2 * H / z_fin)
 
 
-def ouverture(clip, sortie, bandeaux=""):
-    """Générique → fondu d'opacité (15 s) vers le plan LARGE → la caméra avance → fondu vers Iggy qui PARLE, cadré un peu
-    plus large → la caméra finit son avancée sur lui pendant ses premiers mots ; la musique en fondu sous sa voix."""
+def ouverture(clip, sortie, bandeaux="", cadre=CADRE_OUVERTURE):
+    """Générique → fondu d'opacité (15 s) vers le plan LARGE → UNE avancée continue de la caméra (4,2 s) sur le composite
+    (plan large + première image du plan animé, bords fondus) ; à mi-course, Iggy s'anime et PARLE ; la caméra s'arrête
+    pile sur son cadrage, où le plan animé seul prend le relais. La musique en fondu sous sa voix."""
     d = duree(clip)
     total = T_PARLE + d
     b, n = G_BASCULE, G_NOIR
     baisse = T_VOIX - 0.6
     vol = (f"if(lt(t,{baisse:.2f}),1,if(lt(t,{T_VOIX:.2f}),"
            f"1-{1 - MUSIQUE_SOUS_VOIX:.2f}*(t-{baisse:.2f})/{T_VOIX - baisse:.2f},{MUSIQUE_SOUS_VOIX}))")
-    ax, ay = VISAGE_OUVERTURE
-    fin_zoom = lisse(f"on/{round(ZOOM_CLIP_DUREE * FPS)}")
+    px, py, pl, ph, z_fin, ax, ay = geometrie_ouverture(cadre)
+    cam = ZOOM_TOTAL + RACCORD + 0.2
+    masque = f"{TMP}/masque-ouverture.png"   # 1 au centre, 0 au bord, sur 5 % de la hauteur : l'incrustation ne se voit pas
+    ff("-f", "lavfi", "-i", f"color=c=black:s={pl}x{ph}:d=0.04", "-vf",
+       f"format=gray,geq=lum='255*clip(min(min(X,W-1-X),min(Y,H-1-Y))/{max(2, round(0.05 * ph))},0,1)'", "-frames:v", "1", masque)
     f = (f"[0:v]scale={W}:{H}:flags=lanczos,fps={FPS},setsar=1,tpad=stop_mode=clone:stop_duration={total:.2f},format=yuv420p[gen];"
-         f"[1:v]{camera_large()},setsar=1,format=yuva420p,fade=t=in:st=0:d={n - b:.2f}:alpha=1,setpts=PTS+{b}/TB[cam];"
-         f"[2:v]{PLEIN},{AGRANDI},zoompan=z='1+{ZOOM_CLIP - 1:.4f}*{fin_zoom}':x='{ax}*(iw-iw/zoom)':y='{ay}*(ih-ih/zoom)'"
-         f":d=1:s={W}x{H}:fps={FPS},format=yuva420p,fade=t=in:st=0:d={FONDU}:alpha=1,setpts=PTS+{T_PARLE:.2f}/TB[parle];"
+         f"[1:v]crop=1365:768:5:0,scale={2 * W}:{2 * H}:flags=lanczos,setsar=1,fps={FPS}[large];"
+         f"[2:v]fps={FPS},scale={pl}:{ph}:flags=lanczos,setsar=1,tpad=start_duration={ZOOM_DUREE}:start_mode=clone,"
+         f"trim=duration={cam:.2f},setpts=PTS-STARTPTS,format=yuva420p[anime];"
+         f"[4:v]format=gray,fps={FPS}[masque];[anime][masque]alphamerge[incruste];"
+         f"[large][incruste]overlay={px}:{py}:eof_action=repeat,format=yuv420p,"
+         f"zoompan=z='pow({z_fin:.5f},{lisse(f'on/{round(ZOOM_TOTAL * FPS)}')})':x='{ax:.5f}*(iw-iw/zoom)':y='{ay:.5f}*(ih-ih/zoom)'"
+         f":d=1:s={W}x{H}:fps={FPS},setsar=1,format=yuva420p,fade=t=in:st=0:d={n - b:.2f}:alpha=1,setpts=PTS+{b}/TB[cam];"
+         f"[3:v]{PLEIN},trim=start={ZOOM_CLIP_DUREE},setpts=PTS-STARTPTS,format=yuva420p,"
+         f"fade=t=in:st=0:d={RACCORD}:alpha=1,setpts=PTS+{b + ZOOM_TOTAL:.2f}/TB[parle];"
          f"[gen][cam]overlay=0:0:eof_action=pass[g];[g][parle]overlay=0:0:eof_action=pass,format=yuv420p"
          f"{',' + bandeaux if bandeaux else ''}[v];"
          f"[0:a]aresample=48000,volume='{vol}':eval=frame[mus];"
          f"[2:a]aresample=48000,{VOIX_PROPRE},afade=t=out:st={max(0.0, d - 0.12):.2f}:d=0.12,adelay={int(T_VOIX * 1000)}:all=1[voix];"
          f"[mus][voix]amix=inputs=2:duration=longest:normalize=0[a]")
-    ff("-i", GENERIQUE, "-loop", "1", "-framerate", str(FPS), "-t", f"{ZOOM_DUREE + FONDU + 0.3:.2f}", "-i", LARGE, "-i", clip,
+    ff("-i", GENERIQUE, "-loop", "1", "-framerate", str(FPS), "-t", f"{cam:.2f}", "-i", LARGE, "-i", clip, "-i", clip,
+       "-loop", "1", "-framerate", str(FPS), "-t", f"{cam:.2f}", "-i", masque,
        "-filter_complex", f, "-map", "[v]", "-map", "[a]", "-t", f"{total:.2f}", *V, *A, sortie)
 
 
@@ -248,7 +262,8 @@ def main(dossier):
         if seq["type"] == "ouverture":
             c = clip(seq["plan"])
             if c:
-                ouverture(c, f"{base}.mp4", bandeau(gens["iggy"]["nom"], gens["iggy"]["role"], T_VOIX + 1.2, T_VOIX + 6.5))
+                ouverture(c, f"{base}.mp4", bandeau(gens["iggy"]["nom"], gens["iggy"]["role"], T_VOIX + 1.2, T_VOIX + 6.5),
+                          tuple(m.get("cadre_ouverture", CADRE_OUVERTURE)))
             else:
                 manquants.append(seq["plan"]); generique_seul(f"{base}.mp4")
             ajoute(f"{base}.mp4", "Le sommaire")
