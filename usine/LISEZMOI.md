@@ -48,6 +48,30 @@ carte, le même modèle, le même résultat — seul risque, le loueur reprend l
 - Contrat de `travail.sh` : sauter ce qui existe déjà dans `resultats/`, écrire sous un nom commençant par
   un point puis renommer (un fichier tronqué n'est jamais pris pour fini), et poser `resultats/FINI` à la fin.
 
+## Le Journal de FREEWORLD TV (`journal/`, 15/09/2026)
+
+Le fondateur veut un JT quotidien d'environ 15 minutes, présenté par Iggy Varan (tête de lézard) avec des
+journalistes-animaux, fabriqué seul même si les postes A et B sont éteints. **GitHub est le cerveau** (le texte
+du jour et la publication : c'est lui qui a les clés), **le hub est l'usine** (machines louées et montage). Ils se
+parlent par des messages NOSTR SIGNÉS (kind 30078) : aucune clé ne voyage, aucun accès nouveau n'est ouvert.
+
+| Heure (UTC) | Qui | Quoi |
+|---|---|---|
+| 05:00 | générateur | écrit la commande du jour (LLM) et la publie, signée (`freeworld-jt:commande:<date>`) |
+| 05:10 → ~17:00 | hub (`freeworld-jt.timer`) | `jt-du-jour.sh` : commande vérifiée → `planif.py` → `orchestre.sh` interruptible → `montage.py` (unité bornée) → forge → résultat signé |
+| 19:30 (et 22:30) | générateur | relit le résultat, vérifie la clé de l'usine, publie le programme sur le canal 1 |
+| 20:00 | daily-tv | ne refait pas le canal 1 s'il porte déjà le Journal ; sinon le JT en images le tient (jamais vide) |
+
+- Sur la machine louée : voix (Chatterbox, gardes de durée et d'écoute Whisper) et images (Qwen-Image-Edit, règle
+  des humains vérifiée par Qwen2.5-VL) EN MÊME TEMPS, puis tous les plans LongCat avec le modèle chargé une fois.
+- Sur le hub, hors dépôt : `journal/distribution/` (voix inventées et photos du casting), `journal/habillage/`
+  (`generique.mp4` du fondateur, `plateau-large.png`), `journal/cle-usine.hex` (root, 600 ; `node nostr-jt.mjs cle`
+  affiche la clé publique à déclarer au générateur, variable `JT_USINE_PUBKEY`), `journal/jours/<date>/`.
+- **Pause** : `touch /root/usine/journal/PAUSE` — plus rien ne part jusqu'à ce qu'on l'efface.
+- **Rétention** (`freeworld-jt-purge.timer`, condition DATASPACE : disque à 85 %) : dossiers de travail 2 jours,
+  vidéos déposées sur la forge 3 jours (fichier ET épinglage IPFS retirés).
+- Montage : `systemd-run -p CPUQuota=200% -p MemoryMax=2G -p Nice=19 -p IOWeight=20 -p PrivateTmp=yes` (vrai cgroup).
+
 ## Mesures qui ont servi à la concevoir (14/09/2026)
 
 | Travail | Machine | Durée | Coût |

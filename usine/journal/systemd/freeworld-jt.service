@@ -1,0 +1,13 @@
+[Unit]
+Description=Le Journal de FREEWORLD TV — la journée de l'usine (commande, machines louées, montage, résultat)
+Documentation=file:///root/usine/LISEZMOI.md
+After=network-online.target weareforger.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /root/usine/journal/jt-du-jour.sh
+# L'orchestre peut tenir 12 h ; le montage a sa PROPRE unité bornée (CPUQuota=200 %, MemoryMax=2G).
+RuntimeMaxSec=16h
+Nice=10
+MemoryMax=512M
