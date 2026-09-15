@@ -20,7 +20,9 @@ apt-get update -qq && apt-get install -y -qq --no-install-recommends python3.10 
   libgl1 libglib2.0-0 libsndfile1 libsamplerate0 sox curl ca-certificates rsync >/dev/null 2>&1 && journal "apt ok"
 curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; export PATH="$HOME/.local/bin:$PATH"
 cp entrees/*.py .
-RV=$(python3.10 restant.py voix); RI=$(python3.10 restant.py images); RP=$(python3.10 restant.py plans)
+# « plans-tous » et non « plans » : sur une machine neuve, aucune voix n'existe encore, donc aucun plan n'est faisable — le
+# 1er essai réel (15/09) a sauté l'installation de LongCat et l'a attendue pour toujours (rattrapé à la main sur la machine).
+RV=$(python3.10 restant.py voix); RI=$(python3.10 restant.py images); RP=$(python3.10 restant.py plans-tous)
 journal "à faire : $RV voix, $RI image(s), $RP plan(s) (le reste vient des machines précédentes)"
 
 # ── Poids LongCat (en fond, retentés) ──
