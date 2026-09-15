@@ -9,8 +9,8 @@ essai : 13 s de pauses NON silencieuses sur 98 s de voix (souffles, marmonnement
 bruit du montage laisse passer), et une réplique de 15 s dite en 27 s. Tout se corrige ICI, avant l'animation — les lèvres
 suivent ce son-là : le retoucher après le montage les décalerait.
   1. PHRASE PAR PHRASE : Chatterbox s'emballe bien moins sur une phrase courte. Chaque phrase a ses gardes — la durée
-     (0,5 à 1,6 fois l'attendu, mesurée APRÈS nettoyage) et l'écoute (Whisper : au plus un mot sur quatre de travers) —,
-     5 essais, le meilleur gardé.
+     (0,5 à 1,6 fois l'attendu, mesurée APRÈS nettoyage) et l'écoute (Whisper : au plus UN mot de travers par tranche de
+     dix, et le DERNIER mot bien entendu : « des mots et paroles coupés », fondateur, 15/09) —, 5 essais, le meilleur gardé.
   2. NETTOYAGE (nettoyage.py, numpy seul, éprouvé sur les voix réelles du 1er essai) : silences de tête et de queue coupés ;
      toute pause de plus de 0,18 s devient un VRAI silence, de 0,30 s au plus ; les phrases sont recollées avec une pause
      propre (0,28 s, 0,40 s après « ? » et « ! »).
@@ -92,15 +92,22 @@ def bruit_restant(wav, sr):
 
 
 def ecouter(wav, texte):
+    """Whisper réécoute : (taux de mots de travers, dernier mot entendu ?) — (None, None) sans Whisper."""
     if ecoute is None:
-        return None
+        return None, None
     lu = ecoute({"raw": wav.reshape(-1).cpu().numpy(), "sampling_rate": tts.sr}, generate_kwargs={"language": "french"})["text"]
-    return ecart(texte, lu)
+    ref, entendu = mots(texte), mots(lu)
+    return ecart(texte, lu), (not ref or ref[-1] in entendu[-3:])
 
 
 def dire(phrase, r):
-    """Une phrase : 5 essais au plus, le meilleur gardé. Rend un dict (son, note, essais, nettoyées, retiré, faux)."""
-    cible = max(0.8, len(mots(phrase)) * 0.36)
+    """Une phrase : 5 essais au plus, le meilleur gardé. Rend un dict (son, note, essais, nettoyées, retiré, faux, fin).
+    Acceptée : durée plausible, au plus un mot de travers par tranche de dix, et le DERNIER mot entendu — une fin avalée
+    (par Chatterbox ou par le nettoyage) s'entend comme un mot coupé. L'ancienne tolérance (un mot sur quatre) laissait
+    passer trois mots perdus dans une phrase de douze."""
+    n = len(mots(phrase))
+    cible = max(0.8, n * 0.36)
+    permis = max(1, n // 10) / max(1, n)
     meilleur = None
     for essai in range(1, 6):
         torch.manual_seed(100 * essai + len(phrase))
@@ -109,11 +116,11 @@ def dire(phrase, r):
         son, nettoyees, retire = nettoyer(brut, tts.sr)
         d = son.shape[-1] / tts.sr
         bonne = 0.5 <= d / cible <= 1.6
-        faux = ecouter(son, phrase) if bonne else None
-        note = (0 if bonne else 10) + (faux or 0) + 0.1 * abs(math.log(max(d, 0.01) / cible))
+        faux, fin = ecouter(son, phrase) if bonne else (None, None)
+        note = (0 if bonne else 10) + (faux or 0) + (0.5 if fin is False else 0) + 0.1 * abs(math.log(max(d, 0.01) / cible))
         if meilleur is None or note < meilleur["note"]:
-            meilleur = {"son": son, "note": note, "essais": essai, "nettoyees": nettoyees, "retire": retire, "faux": faux}
-        if bonne and (faux is None or faux <= 0.25):
+            meilleur = {"son": son, "note": note, "essais": essai, "nettoyees": nettoyees, "retire": retire, "faux": faux, "fin": fin}
+        if bonne and (faux is None or (faux <= permis + 1e-9 and fin)):
             break
     return meilleur
 
@@ -141,12 +148,13 @@ for r in A_FAIRE:
     d = ligne.shape[-1] / tts.sr
     attendu = len(mots(r["texte"])) * 0.36
     reste = bruit_restant(ligne, tts.sr)
-    faux = ecouter(ligne, r["texte"])
-    douteux = (faux is not None and faux > 0.25) or reste > 0.3 or not 0.6 <= d / max(attendu, 0.8) <= 1.5
+    faux, _ = ecouter(ligne, r["texte"])
+    fins = sum(1 for p in bilan if p.get("fin") is False)   # phrases gardées malgré une fin avalée (5 essais ratés)
+    douteux = (faux is not None and faux > 0.15) or fins > 0 or reste > 0.3 or not 0.6 <= d / max(attendu, 0.8) <= 1.5
     note = {"cle": r["cle"], "ok": True, "duree": round(d, 2), "attendu": round(attendu, 2), "phrases": len(liste),
             "essais": [p["essais"] for p in bilan], "pauses_nettoyees": sum(p["nettoyees"] for p in bilan),
             "secondes_retirees": round(sum(p["retire"] for p in bilan), 2), "bruit_restant": reste,
-            "mots_de_travers": None if faux is None else round(faux, 2), "douteux": douteux}
+            "mots_de_travers": None if faux is None else round(faux, 2), "fins_avalees": fins, "douteux": douteux}
     print(f"voix {r['cle']} : {d:.1f} s pour {attendu:.1f} attendues, {len(liste)} phrase(s), essais {note['essais']}, "
           f"{note['pauses_nettoyees']} pause(s) nettoyée(s), bruit restant {reste} s{' — DOUTEUX' if douteux else ''}", flush=True)
     rapport.write(json.dumps(note, ensure_ascii=False) + "\n"); rapport.flush()
