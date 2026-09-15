@@ -69,6 +69,15 @@ test('⭐ la journée du hub : rien sans commande signée, montage BORNÉ, clé 
   assert.ok(!/Bearer \$CLE|-H "Authorization/.test(j))
 })
 
+test('⭐ un ESSAI ne publie jamais rien : commande posée à la main, résultat gardé sur le hub, étiquette à part', () => {
+  const code = lire('jt-du-jour.sh').split('\n').filter(l => !/^\s*#/.test(l)).join('\n')
+  const publie = code.indexOf('nostr-jt.mjs" resultat')
+  const garde = code.lastIndexOf('if [ "$ESSAI" = 1 ]', publie)
+  assert.ok(garde !== -1 && code.slice(garde, publie).includes('else'), 'la publication n’existe que dans la branche « pas un essai »')
+  assert.match(code, /USINE_ETIQUETTE="usine-jt\$SUFFIXE-\$DATE"/, 'un essai ne détruit jamais la machine du vrai Journal')
+  assert.match(lire('purge.sh'), /\(-essai\)\?\$/, 'les essais sont purgés comme les vrais jours')
+})
+
 test('la rétention tient la promesse faite à DATASPACE : travail 2 jours, vidéos de la forge 3 jours', () => {
   const p = lire('purge.sh')
   assert.match(p, /JT_GARDE_JOURS:-1\} days/, 'aujourd’hui et hier')
