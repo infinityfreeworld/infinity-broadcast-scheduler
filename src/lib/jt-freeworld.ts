@@ -44,7 +44,7 @@ export const MODELE_JT_DEFAUT = 'claude-sonnet-5'
 // ── Les bornes de planif.py (relues par le test dans le fichier Python) ─
 export const MOTS_MAX_REPLIQUE = 80      // ~30 s de parole : au-delà, LongCat dérive
 export const MOTS_MAX_JOURNAL = 2600     // ~17 min : le budget GPU du jour
-export const SUJETS_MAX = 10
+export const SUJETS_MAX = 12   // 15/09 : à 10, un Journal de 15 min était hors d'atteinte (~12,7 min au plus)
 export const MOTS_MAX = {
   sommaire: 120,
   lancement: MOTS_MAX_REPLIQUE,
@@ -338,7 +338,7 @@ Invités — "invite" :
 Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'autre.
 
 ═══ LA DURÉE ═══
-- Entre six et neuf sujets ; une interview dans environ un tiers d'entre eux.
+- Entre huit et onze sujets ; une interview dans environ un tiers d'entre eux.
 - Le message du jour donne l'objectif de mots. Les PLAFONDS passent avant l'objectif : un Journal un peu court vaut mieux qu'un Journal refusé.
 - Comment l'usine compte : un mot = une suite de lettres ou de chiffres. « l'eau » compte DEUX mots, « aujourd'hui » deux, « quatre-vingt-dix » trois.
 - Plafonds ABSOLUS, au-delà c'est le refus : sommaire ${MOTS_MAX.sommaire} mots · lancement ${MOTS_MAX.lancement} · terrain ${MOTS_MAX.terrain} · question ${MOTS_MAX.question} · réponse ${MOTS_MAX.reponse} · au revoir ${MOTS_MAX.au_revoir} · titre ${MOTS_MAX.titre} · lieu ${MOTS_MAX.lieu} · décor ${MOTS_MAX.decor} · ${SUJETS_MAX} sujets · ${MOTS_MAX_JOURNAL} mots au total.

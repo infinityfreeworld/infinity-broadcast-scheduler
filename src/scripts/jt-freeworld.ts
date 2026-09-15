@@ -69,7 +69,7 @@ function afficherErreurs(titre: string, erreurs: string[]): void {
 /**
  * La matière du Journal : les briques du JT en images (generate-tv-program), mêmes sources, même tri de
  * fraîcheur, même ordre (le RÉEL d'Infinity, sa présentation si l'activité manque, puis le monde) — mais
- * davantage de nouvelles, pour six à neuf sujets au lieu de quatre.
+ * davantage de nouvelles, pour huit à onze sujets au lieu de quatre.
  */
 async function rassemblerMatiere(): Promise<string> {
   const canal = findChannel(CANAL_JT)

@@ -259,7 +259,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes/, 'Cramon'],
     [/UNE FOIS AU PLUS par Journal/, 'Cramon une fois'], [/langue de bois absurde/, 'la langue de bois'],
     [/ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle/, 'aucune déclaration réelle'],
-    [/Entre six et neuf sujets ; une interview dans environ un tiers/, 'le format'],
+    [/Entre huit et onze sujets ; une interview dans environ un tiers/, 'le format'],
     [/EN TOUTES LETTRES/, 'les nombres en lettres'], [/« l'eau » compte DEUX mots/, 'le compte de l’usine'],
     [/MAJORITAIREMENT des nouvelles POSITIVES des DERNIÈRES 24 HEURES/, 'le positif du jour'],
     [/un sujet plus ancien est permis/, 'les sujets anciens'],
