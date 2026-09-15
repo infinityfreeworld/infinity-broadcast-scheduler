@@ -67,12 +67,19 @@ class TTS:
         return T(np.concatenate(morceaux)[None, :])
 
 
+# Comme le vrai Whisper du 2e essai réel (15/09) : il écrit les sigles et les noms à sa façon.
+A_SA_FACON = {"NAW": "Nao", "UERSS": "U.R.S.S.", "sssoyez": "soyez", "Machuman": "Mac Human"}
+
+
 def pipeline(*_, **__):
     def ecoute(entree, return_timestamps=False, generate_kwargs=None):
         if len(entree["raw"]) > 30 * entree["sampling_rate"] and not return_timestamps:   # comme le vrai Whisper
             raise ValueError("You have passed more than 3000 mel input features (> 30 seconds) which automatically "
                              "enables long-form generation which requires the model to predict timestamp tokens.")
-        return {"text": DERNIER["texte"]}
+        texte = DERNIER["texte"]
+        for juste, entendu in A_SA_FACON.items():
+            texte = texte.replace(juste, entendu)
+        return {"text": texte}
     return ecoute
 
 
@@ -91,6 +98,9 @@ REPLIQUES = [
     {"cle": "s01-lancement", "texte": "Premier sujet ce soir, devant un Machuman. Pistache, vous êtes sur place ?",
      "voix": "x.wav", "exa": 0.6, "cfg": 0.35},
     {"cle": "s02-question", "texte": "Monsieur Lardon, que craignez-vous pour vos Bipèdes ?", "voix": "x.wav", "exa": 0.6, "cfg": 0.35},
+    # les sigles que Whisper écrit à sa façon ne sont pas des mots perdus : ni nouvel essai, ni fausse alerte
+    {"cle": "s03-terrain", "texte": "Oui Iggy ! Le NAW a dépêché trois moutons bleus. L'UERSS réclame un formulaire, sous "
+     "l'œil nerveux du NAW.", "voix": "x.wav", "exa": 0.6, "cfg": 0.35},
 ]
 
 dossier = tempfile.mkdtemp(prefix="voix-simulee-")
@@ -110,8 +120,10 @@ sorties = sorted(f for f in os.listdir("resultats/voix") if f.endswith(".wav")) 
 rapport = [json.loads(ligne) for ligne in open("resultats/voix/rapport.jsonl")] if os.path.exists("resultats/voix/rapport.jsonl") else []
 os.chdir("/")
 shutil.rmtree(dossier, ignore_errors=True)
-bon = plantage is None and len(sorties) == len(REPLIQUES) and all(r.get("ok") for r in rapport)
+bon = (plantage is None and len(sorties) == len(REPLIQUES)
+       and all(r.get("ok") and not r.get("douteux") and set(r.get("essais", [1])) == {1} for r in rapport))
 print(("✅" if bon else "🔴") + f" voix_jt.py simulé : {len(sorties)}/{len(REPLIQUES)} voix"
       + (f" · PLANTAGE {plantage}" if plantage else "")
-      + " · " + "; ".join(f"{r['cle']} {r.get('duree', '?')} s ok={r.get('ok')} douteux={r.get('douteux')}" for r in rapport))
+      + " · " + "; ".join(f"{r['cle']} {r.get('duree', '?')} s ok={r.get('ok')} douteux={r.get('douteux')} essais={r.get('essais')}"
+                          for r in rapport))
 sys.exit(0 if bon else 1)

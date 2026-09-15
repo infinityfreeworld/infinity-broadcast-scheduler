@@ -9,8 +9,9 @@ essai : 13 s de pauses NON silencieuses sur 98 s de voix (souffles, marmonnement
 bruit du montage laisse passer), et une réplique de 15 s dite en 27 s. Tout se corrige ICI, avant l'animation — les lèvres
 suivent ce son-là : le retoucher après le montage les décalerait.
   1. PHRASE PAR PHRASE : Chatterbox s'emballe bien moins sur une phrase courte. Chaque phrase a ses gardes — la durée
-     (0,5 à 1,6 fois l'attendu, mesurée APRÈS nettoyage) et l'écoute (Whisper : au plus UN mot de travers par tranche de
-     dix, et le DERNIER mot bien entendu : « des mots et paroles coupés », fondateur, 15/09) —, 5 essais, le meilleur gardé.
+     (0,5 à 1,6 fois l'attendu, mesurée APRÈS nettoyage) et l'écoute (Whisper : au plus UN mot PERDU par tranche de dix, et
+     le DERNIER mot bien entendu : « des mots et paroles coupés », fondateur, 15/09 ; les sigles et noms de Freeworld, que
+     Whisper écrit à sa façon — « NAW » → « Nao » —, ne comptent pas) —, 5 essais, le meilleur gardé.
   2. NETTOYAGE (nettoyage.py, numpy seul, éprouvé sur les voix réelles du 1er essai) : silences de tête et de queue coupés ;
      toute pause de plus de 0,18 s devient un VRAI silence, de 0,30 s au plus ; les phrases sont recollées avec une pause
      propre (0,28 s, 0,40 s après « ? » et « ! »).
@@ -23,6 +24,7 @@ suivent ce son-là : le retoucher après le montage les décalerait.
   repliques.json : [{"cle": "s01-lancement", "texte": "…", "voix": "entrees/refs/iggy.wav", "exa": 0.5, "cfg": 0.45}]
 """
 import json, math, os, re, sys, time, unicodedata
+from collections import Counter
 
 import torch
 import torchaudio as ta
@@ -60,15 +62,16 @@ def mots(t):
     return re.findall(r"[a-z0-9]+", "".join(c for c in t if not unicodedata.combining(c)))
 
 
-def ecart(ref, lu):
-    """Taux de mots de travers (distance d'édition sur les mots)."""
-    a, b = mots(ref), mots(lu)
-    d = list(range(len(b) + 1))
-    for i, x in enumerate(a, 1):
-        p, d[0] = d[0], i
-        for j, y in enumerate(b, 1):
-            p, d[j] = d[j], min(d[j] + 1, d[j - 1] + 1, p + (x != y))
-    return d[len(b)] / max(1, len(a))
+# Des mots que Whisper écrit à sa façon — sigles, noms propres de Freeworld, le S étiré d'Iggy : ce ne sont pas des mots
+# perdus. 2e essai réel (15/09) : « … sous l'œil nerveux du NAW. », jamais « entendu » en fin de phrase, a coûté 5 essais
+# et une fausse alerte ; « L'UERSS » lu « U.R.S.S. » comptait pour quatre mots de travers.
+NOMS = {"iggy", "varan", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "lardon", "emmanuel", "cramon", "freeworld",
+        "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez"}
+
+
+def souples(texte):
+    """Les mots de la phrase que Whisper a le droit d'écrire autrement : les sigles (NAW, UERSS, TV…) et les noms de Freeworld."""
+    return NOMS | {s.lower() for s in re.findall(r"\b[A-ZÉÈ]{2,6}\b", texte)}
 
 
 def phrases(texte):
@@ -95,8 +98,10 @@ def bruit_restant(wav, sr):
 
 
 def ecouter(wav, texte):
-    """Whisper réécoute : (taux de mots de travers, dernier mot entendu ?) — (None, None) sans Whisper ou s'il échoue :
-    l'écoute conseille, elle ne fait jamais tomber une voix. Au-delà de 30 s, Whisper exige le mode « horodaté »."""
+    """Whisper réécoute : (part des mots PERDUS, dernier mot entendu ?) — (None, None) sans Whisper ou s'il échoue :
+    l'écoute conseille, elle ne fait jamais tomber une voix. Au-delà de 30 s, Whisper exige le mode « horodaté ».
+    Un mot perdu = un mot du texte (hors sigles et noms de Freeworld) qu'on ne retrouve pas dans ce que Whisper a entendu :
+    c'est ce qui s'entend comme « un mot coupé » ; la façon dont Whisper orthographie un nom ne compte plus."""
     if ecoute is None:
         return None, None
     son = wav.reshape(-1).cpu().numpy()
@@ -106,8 +111,16 @@ def ecouter(wav, texte):
     except Exception as e:
         print("écoute Whisper en échec, garde de durée seule :", str(e)[:160], flush=True)
         return None, None
-    ref, entendu = mots(texte), mots(lu)
-    return ecart(texte, lu), (not ref or ref[-1] in entendu[-3:])
+    tolere = souples(texte)
+    attendus = [m for m in mots(texte) if m not in tolere]
+    entendu = mots(lu)
+    reste, perdus = Counter(entendu), 0
+    for m in attendus:
+        if reste[m]:
+            reste[m] -= 1
+        else:
+            perdus += 1
+    return perdus / max(1, len(attendus)), (not attendus or attendus[-1] in entendu[-4:])
 
 
 def dire(phrase, r):
@@ -115,8 +128,8 @@ def dire(phrase, r):
     Acceptée : durée plausible, au plus un mot de travers par tranche de dix, et le DERNIER mot entendu — une fin avalée
     (par Chatterbox ou par le nettoyage) s'entend comme un mot coupé. L'ancienne tolérance (un mot sur quatre) laissait
     passer trois mots perdus dans une phrase de douze."""
-    n = len(mots(phrase))
-    cible = max(0.8, n * 0.36)
+    n = len([m for m in mots(phrase) if m not in souples(phrase)])   # comptés comme dans ecouter()
+    cible = max(0.8, len(mots(phrase)) * 0.36)
     permis = max(1, n // 10) / max(1, n)
     meilleur = None
     for essai in range(1, 6):
