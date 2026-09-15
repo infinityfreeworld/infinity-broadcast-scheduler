@@ -38,10 +38,10 @@ import { dTagsPublies } from '../lib/deja-diffuse'
 import { publishTvProgram, tvProgramEventTemplate } from '../lib/tv-nostr'
 import type { RadioStation } from '../lib/types'
 import {
-  CANAL_JT, KIND_DONNEES_APP, MODELE_JT_DEFAUT,
+  CANAL_JT, ESSAIS_REDACTION, KIND_DONNEES_APP, MODELE_JT_DEFAUT,
   commandeEventTemplate, consigneConducteur, dCommande, dResultat, dateValide, estObjet, filtreResultat,
-  lireDistribution, lireExemple, lireResultat, messageCorrection, messageDuJour, minutesJT, motsCommande,
-  normaliserCommande, objectifMots, plafondMots, programmeDuResultat, validerCommande,
+  lireDistribution, lireExemple, lireResultat, messageAllonger, messageCorrection, messageDuJour, minutesJT, motsCommande,
+  normaliserCommande, objectifMots, plafondMots, prochaineEtape, programmeDuResultat, seuilLongueur, validerCommande,
   type CommandeJT, type Distribution, type EvenementNostr,
 } from '../lib/jt-freeworld'
 
@@ -86,32 +86,54 @@ async function rassemblerMatiere(): Promise<string> {
   return [ecosysteme && `L'écosystème Infinity :\n${ecosysteme}`, monde && `Le quotidien du monde :\n${monde}`].filter(Boolean).join('\n\n')
 }
 
-/** Le rédacteur écrit ; l'usine relit. Refusé → UNE seconde chance, avec les erreurs telles quelles. */
+/**
+ * Le rédacteur écrit ; l'usine relit. Refusé → il corrige, avec les erreurs telles quelles ; accepté mais TROP COURT →
+ * il étoffe (1er essai réel, 15/09 : un jet coupé au plafond de jetons, puis un second, prudent, de 1 000 mots — 6 min
+ * au lieu de 15). Trois essais au plus ; au dernier, un Journal court mais valide part quand même.
+ */
 async function rediger(p: {
   apiKey: string; model: string; date: string; minutes: number; distribution: Distribution; matiere: string
 }): Promise<CommandeJT> {
   const systemPrompt = consigneConducteur(lireExemple())
+  const objectif = objectifMots(p.minutes)
   const messages: LLMMessage[] = [{ role: 'user', content: messageDuJour({ date: p.date, minutes: p.minutes, matiere: p.matiere }) }]
   let erreurs: string[] = []
-  for (let essai = 1; essai <= 2; essai++) {
-    console.log(`\n   ✍️  Rédaction — ${p.model}, essai ${essai}/2…`)
-    // 16 000 jetons : la réflexion du modèle compte dedans, et c'est le plus haut qu'accepte le SDK sans flux.
-    const resp = await callAnthropic({ apiKey: p.apiKey, model: p.model, systemPrompt, messages, maxTokens: 16_000, temperature: 0.8 })
-    console.log(`      ${resp.inputTokens} jetons lus, ${resp.outputTokens} écrits`)
-    let brut: unknown = null
-    try {
-      brut = extractJson(resp.text)
-      // La date est la NÔTRE (celle du d-tag), jamais celle que le rédacteur aurait recopiée de travers.
-      if (estObjet(brut)) brut = { ...brut, date: p.date }
-      erreurs = validerCommande(brut, p.distribution, { motsMax: plafondMots(p.minutes) })
-    } catch (err) {
-      erreurs = [`réponse illisible — ${(err as Error).message}`]
+  for (let essai = 1; essai <= ESSAIS_REDACTION; essai++) {
+    console.log(`\n   ✍️  Rédaction — ${p.model}, essai ${essai}/${ESSAIS_REDACTION}…`)
+    // En FLUX, 32 000 jetons : la réflexion du modèle compte dedans — à 16 000, le 1er jet du 15/09 a été coupé net.
+    const resp = await callAnthropic({ apiKey: p.apiKey, model: p.model, systemPrompt, messages, maxTokens: 32_000, flux: true, temperature: 0.8 })
+    console.log(`      ${resp.inputTokens} jetons lus, ${resp.outputTokens} écrits${resp.stopReason === 'max_tokens' ? ' — COUPÉ au plafond' : ''}`)
+    let jt: CommandeJT | null = null
+    if (resp.stopReason === 'max_tokens') {
+      erreurs = ['réponse coupée au plafond de jetons : le conducteur est incomplet — renvoie-le en entier, plus sobrement']
+    } else {
+      try {
+        let brut = extractJson(resp.text)
+        // La date est la NÔTRE (celle du d-tag), jamais celle que le rédacteur aurait recopiée de travers.
+        if (estObjet(brut)) brut = { ...brut, date: p.date }
+        erreurs = validerCommande(brut, p.distribution, { motsMax: plafondMots(p.minutes) })
+        if (!erreurs.length) jt = normaliserCommande(brut as CommandeJT)
+      } catch (err) {
+        erreurs = [`réponse illisible — ${(err as Error).message}`]
+      }
     }
-    if (!erreurs.length) return normaliserCommande(brut as CommandeJT)
-    afficherErreurs(`conducteur refusé à l'essai ${essai}`, erreurs)
-    messages.push({ role: 'assistant', content: resp.text || '(réponse vide)' }, { role: 'user', content: messageCorrection(erreurs) })
+    const mots = jt ? motsCommande(jt) : 0
+    const etape = prochaineEtape({ erreurs, mots, objectif, essai })
+    if (etape === 'accepter') {
+      if (mots < seuilLongueur(objectif)) console.warn(`   ⚠ Journal court : ${mots} mots pour ~${objectif} visés — il part quand même (dernier essai)`)
+      return jt as CommandeJT
+    }
+    if (etape === 'abandonner') { afficherErreurs(`conducteur refusé au dernier essai`, erreurs); break }
+    messages.push({ role: 'assistant', content: resp.text || '(réponse vide)' })
+    if (etape === 'allonger') {
+      console.warn(`   📏 trop court : ${mots} mots pour ~${objectif} visés — le rédacteur étoffe`)
+      messages.push({ role: 'user', content: messageAllonger(mots, objectif, plafondMots(p.minutes)) })
+    } else {
+      afficherErreurs(`conducteur refusé à l'essai ${essai}`, erreurs)
+      messages.push({ role: 'user', content: messageCorrection(erreurs) })
+    }
   }
-  throw new Error(`conducteur refusé deux fois (${erreurs.length} erreur(s)) — aucune commande publiée ; le JT en images de 20 h UTC restera à l'antenne.`)
+  throw new Error(`conducteur refusé ${ESSAIS_REDACTION} fois (${erreurs.length} erreur(s)) — aucune commande publiée ; le JT en images de 20 h UTC restera à l'antenne.`)
 }
 
 async function commande(): Promise<void> {

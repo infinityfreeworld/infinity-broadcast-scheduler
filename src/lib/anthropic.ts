@@ -18,12 +18,14 @@ export interface LLMCallOpts {
   messages:      LLMMessage[]
   maxTokens?:    number                  // défaut 400 (3 phrases courtes)
   temperature?:  number                  // défaut 0.85 (vivant) — jamais envoyée aux modèles qui la refusent
+  flux?:         boolean                 // en flux : seule voie pour une LONGUE rédaction (cf. callAnthropic)
 }
 
 export interface LLMResponse {
   text:         string
   inputTokens:  number
   outputTokens: number
+  stopReason?:  string | null            // « max_tokens » = réponse COUPÉE au plafond : le texte est incomplet
 }
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
@@ -67,13 +69,16 @@ export async function callAnthropic(opts: LLMCallOpts): Promise<LLMResponse> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const resp = await client.messages.create({
+      const params = {
         model,
         system:      opts.systemPrompt,
         messages:    opts.messages,
         max_tokens:  opts.maxTokens ?? 400,
         ...(accepteTemperature(model) ? { temperature: opts.temperature ?? 0.85 } : {}),
-      })
+      }
+      // Sans flux, le SDK refuse les requêtes trop longues (au-delà de ~21 000 jetons de sortie) ; or la réflexion
+      // du modèle compte dans ce plafond. Le 15/09/2026, le 1er conducteur du Journal a été coupé net à 16 000.
+      const resp = opts.flux ? await client.messages.stream(params).finalMessage() : await client.messages.create(params)
 
       const text = resp.content
         .map(b => (b.type === 'text' ? b.text : ''))
@@ -84,6 +89,7 @@ export async function callAnthropic(opts: LLMCallOpts): Promise<LLMResponse> {
         text,
         inputTokens:  resp.usage.input_tokens,
         outputTokens: resp.usage.output_tokens,
+        stopReason:   resp.stop_reason,
       }
     } catch (err) {
       lastErr = err

@@ -146,6 +146,28 @@ test('⭐ un à SUJETS_MAX sujets — un de plus, zéro, ou pas de liste : refus
   assert.deepEqual(erreursDe(avec(jt => { jt.sujets = copies(J.SUJETS_MAX) })), [])
 })
 
+test('⭐ la rédaction : corriger une erreur, ÉTOFFER un Journal trop court, renoncer seulement au dernier essai', () => {
+  const o = J.objectifMots(15)
+  assert.equal(J.prochaineEtape({ erreurs: ['x'], mots: 0, objectif: o, essai: 1 }), 'corriger')
+  assert.equal(J.prochaineEtape({ erreurs: ['x'], mots: 0, objectif: o, essai: J.ESSAIS_REDACTION }), 'abandonner')
+  assert.equal(J.prochaineEtape({ erreurs: [], mots: 1000, objectif: o, essai: 1 }), 'allonger', '15/09 : 1 000 mots pour 2 250 visés')
+  assert.equal(J.prochaineEtape({ erreurs: [], mots: 1000, objectif: o, essai: J.ESSAIS_REDACTION }), 'accepter',
+    'au dernier essai, un Journal court mais valide part quand même')
+  assert.equal(J.prochaineEtape({ erreurs: [], mots: J.seuilLongueur(o), objectif: o, essai: 1 }), 'accepter')
+  const m = J.messageAllonger(1000, o, J.plafondMots(15))
+  assert.match(m, new RegExp(`1000 mots pour environ ${o}`))
+  assert.match(m, new RegExp(`jamais dépasser ${J.plafondMots(15)}`))
+  assert.match(J.messageDuJour({ date: DATE, minutes: 15, matiere: '' }), new RegExp(`au moins ${J.seuilLongueur(o)}`))
+})
+
+test('⭐ la réponse du rédacteur n’est plus coupée : en flux, 32 000 jetons, et une réponse coupée est redemandée', () => {
+  const s = lire('src/scripts/jt-freeworld.ts')
+  assert.match(s, /maxTokens: 32_000, flux: true/)
+  assert.match(s, /resp\.stopReason === 'max_tokens'/)
+  assert.match(lire('src/lib/anthropic.ts'), /opts\.flux \? await client\.messages\.stream\(params\)\.finalMessage\(\)/)
+  assert.match(J.CONSIGNE_CONDUCTEUR, /JAMAIS de guillemets droits/, 'un guillemet droit oublié casse le JSON')
+})
+
 test('⭐ le Journal entier est borné (budget GPU du hub), et JT_MINUTES le resserre', () => {
   const plein = avec(jt => { jt.sujets = Array.from({ length: 10 }, sujetPlein) })
   refuse(plein, /mots au total \(plus de 2600\)/)
