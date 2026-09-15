@@ -40,7 +40,7 @@ function planifier(jt: unknown) {
 }
 
 test('les scripts du hub et de la machine louée sont syntaxiquement valides', () => {
-  for (const f of ['planif.py', 'montage.py', 'voix_jt.py', 'nettoyage.py', 'images_jt.py', 'lc_lot.py', 'restant.py']) {
+  for (const f of ['planif.py', 'montage.py', 'voix_jt.py', 'voix_simulee.py', 'nettoyage.py', 'images_jt.py', 'lc_lot.py', 'restant.py']) {
     const r = spawnSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', join(J, f)])
     assert.equal(r.status, 0, `${f} : ${r.stderr}`)
   }
@@ -161,6 +161,16 @@ test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà f
   assert.match(lire('voix_jt.py'), /permis = max\(1, n \/\/ 10\) \/ max\(1, n\)/)
   assert.match(lire('voix_jt.py'), /ref\[-1\] in entendu\[-3:\]/)
   assert.match(lire('voix_jt.py'), /"fins_avalees": fins, "douteux": douteux/)
+  // 2e essai réel (15/09) : un sommaire de plus de 30 s réécouté d'un bloc a fait planter Whisper — et les 26 voix avec.
+  const vj = lire('voix_jt.py')
+  assert.doesNotMatch(vj, /ecouter\(ligne/, 'plus de réécoute de la réplique entière')
+  assert.match(vj, /return_timestamps=len\(son\) > 28 \* tts\.sr/)
+  assert.match(vj, /except Exception as e:\n\s+ratees\.append\(r\["cle"\]\)/, 'une réplique qui plante ne fait sauter que son plan')
+  // … et voix_simulee.py le rejoue hors GPU (Chatterbox, Whisper et torch simulés) là où il y a numpy — sur le hub.
+  if (spawnSync('python3', ['-c', 'import numpy']).status === 0) {
+    const sim = spawnSync('python3', [join(J, 'voix_simulee.py'), J], { encoding: 'utf8' })
+    assert.equal(sim.status, 0, sim.stdout + sim.stderr)
+  }
   assert.match(lire('images_jt.py'), /if not os\.path\.exists\(f"resultats\/images\/\{t\['cle'\]\}\.png"\)/)
   const lot = lire('lc_lot.py')
   assert.match(lot, /continue {3}# REPRISE/)
