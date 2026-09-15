@@ -315,6 +315,7 @@ Tu réponds UNIQUEMENT par un objet JSON valide — pas de texte autour, pas de 
   "au_revoir": "…"
 }
 "interview" vaut null quand le sujet n'en a pas ; le "decor" d'une interview est facultatif (sinon, celui du sujet sert).
+Dans les textes, JAMAIS de guillemets droits (") : cite avec « ». Un guillemet droit oublié casse le JSON — et le Journal avec.
 
 ═══ LE DÉROULÉ ═══
 - Iggy Varan présente, depuis le plateau : un présentateur à tête de lézard, posé, pince-sans-rire, qui étire parfois ses S (« sssoyez les bienvenus ») — une ou deux fois par Journal, pas à chaque phrase.
@@ -393,7 +394,7 @@ export function messageDuJour({ date, minutes, matiere }: { date: string; minute
   const jours = joursAvantBascule(date)
   return [
     `Le Journal du ${date} — écris cette date telle quelle dans "date".`,
-    `Durée visée : ${minutes} minutes de Journal, soit environ ${objectifMots(minutes)} mots au total ; plafond absolu : ${plafondMots(minutes)} mots.`,
+    `Durée visée : ${minutes} minutes de Journal, soit environ ${objectifMots(minutes)} mots au total — au moins ${seuilLongueur(objectifMots(minutes))} ; plafond absolu : ${plafondMots(minutes)} mots.`,
     ...(jours > 0 ? [`Compte à rebours du jour, si tu l'évoques : « Soulèvement des machines : J-${jours} » (en toutes lettres à l'antenne).`] : []),
     '',
     matiere.trim()
@@ -409,6 +410,37 @@ export function messageCorrection(erreurs: string[]): string {
     ...erreurs.map(e => `- ${e}`),
     '',
     "Corrige CHACUN de ces points sans rien abîmer d'autre, et renvoie le conducteur COMPLET — JSON seul, sans markdown.",
+  ].join('\n')
+}
+
+// ── La longueur ────────────────────────────────────────────────────────
+/**
+ * Le 15/09/2026, 1er essai réel : un premier jet coupé au plafond de jetons, puis un second, prudent, de 1 000 mots —
+ * 6 minutes au lieu de 15. Un conducteur VALIDE mais trop court se fait donc étoffer, tant qu'il reste un essai ; au
+ * dernier, il part quand même : un Journal court vaut mieux qu'un soir sans Journal.
+ */
+export const ESSAIS_REDACTION = 3
+export const PART_MINIMALE = 0.8
+export const seuilLongueur = (objectif: number): number => Math.round(objectif * PART_MINIMALE)
+
+export type EtapeRedaction = 'accepter' | 'corriger' | 'allonger' | 'abandonner'
+
+/** Après un jet du rédacteur : l'accepter, le faire corriger, le faire étoffer, ou renoncer (dernier essai refusé). */
+export function prochaineEtape({ erreurs, mots, objectif, essai, essais = ESSAIS_REDACTION }: {
+  erreurs: string[]; mots: number; objectif: number; essai: number; essais?: number
+}): EtapeRedaction {
+  const dernier = essai >= essais
+  if (erreurs.length) return dernier ? 'abandonner' : 'corriger'
+  if (mots < seuilLongueur(objectif) && !dernier) return 'allonger'
+  return 'accepter'
+}
+
+/** La relance d'un conducteur accepté mais trop court. */
+export function messageAllonger(mots: number, objectif: number, plafond: number): string {
+  return [
+    `Le conducteur est ACCEPTÉ, mais TROP COURT : ${mots} mots pour environ ${objectif} visés — le Journal ne durerait qu'environ ${Math.round(mots * 0.36 / 60)} minutes de parole.`,
+    `Allonge-le jusqu'à ${seuilLongueur(objectif)} mots au moins, sans jamais dépasser ${plafond} : ajoute un ou deux sujets (onze au plus), donne une interview à un sujet de plus, et étoffe les répliques SOUS leurs plafonds (vise le haut des fourchettes).`,
+    "Garde tout ce qui est bon : les mêmes règles s'appliquent. Renvoie le conducteur COMPLET — JSON seul, sans markdown.",
   ].join('\n')
 }
 
