@@ -1,0 +1,10 @@
+[Unit]
+Description=Usine — observatoire des prix des cartes Vast (lecture seule, aucune location)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /root/usine/observatoire.py
+Nice=19
+CPUQuota=20%
+MemoryMax=200M
+TimeoutStartSec=180

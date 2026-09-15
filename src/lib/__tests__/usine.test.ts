@@ -150,3 +150,26 @@ test('⭐ plusieurs cartes : chaque offre est jugée au coût du TRAVAIL (l’an
   const suivi = ORCH.slice(ORCH.indexOf('issue=termine; perdu=0'))
   assert.ok(suivi.indexOf('if depasse; then') > 0 && suivi.indexOf('BUDGET de la machine atteint') > 0)
 })
+
+test('⭐ l’observatoire des prix : LECTURE SEULE, une ligne par relevé, le Journal de 15 min au meilleur nombre de cartes', () => {
+  const OBS = lire('observatoire.py')
+  assert.ok(!/"PUT"|\/asks\/|DELETE/.test(OBS), 'l’observatoire ne loue ni ne détruit jamais rien')
+  const dir = mkdtempSync(join(tmpdir(), 'usine-obs-'))
+  writeFileSync(join(dir, 'offres.json'), JSON.stringify([
+    { type: 'bid', gpu_name: 'H100 PCIE', num_gpus: 1, gpu_ram: 81559, dph_total: 1.69, min_bid: 1.47, inet_down_cost: 0.0026, geolocation: 'AE' },
+    { type: 'bid', gpu_name: 'H100 PCIE', num_gpus: 4, gpu_ram: 81559, dph_total: 1.6, min_bid: 1.39, inet_down_cost: 0.0026, geolocation: 'GB' },
+    { type: 'bid', gpu_name: 'RTX 6000Ada', num_gpus: 1, gpu_ram: 49140, dph_total: 0.39, min_bid: 0.34, inet_down_cost: 0.01, geolocation: 'US' },
+  ]))
+  const env = { ...process.env, OBS_OFFRES: join(dir, 'offres.json'), OBS_FICHIER: join(dir, 'obs.jsonl') }
+  const chemin = new URL('../../../usine/observatoire.py', import.meta.url).pathname
+  for (let i = 0; i < 2; i++) assert.equal(spawnSync('python3', [chemin], { env, encoding: 'utf8' }).status, 0)
+  const lignes = readFileSync(join(dir, 'obs.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+  assert.equal(lignes.length, 2, 'une ligne par relevé, les précédentes gardées')
+  assert.equal(lignes[0].cat['h100x4-bid'].n, 4)
+  assert.ok(lignes[0].cat['h100x4-bid'].journal15 < lignes[0].cat['h100x1-bid'].journal15, '4 cartes à 0,40 $/h battent une carte à 1,69 $/h')
+  assert.ok(lignes[0].cat['48go-bid'].carte > 0 && lignes[0].cat['48go-bid'].journal15 === undefined, 'vitesse inconnue : le prix seul')
+  const r = spawnSync('python3', [chemin, 'resume'], { env, encoding: 'utf8' })
+  assert.match(r.stdout, /2 relevé\(s\)/)
+  assert.match(r.stdout, /par heure UTC/)
+  assert.match(lire('systemd/usine-observatoire.timer'), /OnCalendar=hourly/)
+})
