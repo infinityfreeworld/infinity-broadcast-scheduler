@@ -23,7 +23,8 @@ FORGE=${JT_FORGE:-http://127.0.0.1:5400}
 ATTENTE_FIN=${JT_ATTENTE_FIN:-09:00}
 LOCATION_FIN=${JT_LOCATION_FIN:-11:00}         # après, une machine louée finirait trop tard pour le soir
 BUDGET_JOUR_MAX=${JT_BUDGET_JOUR_MAX:-12}
-FILTRE=${JT_FILTRE:-'{"gpu_ram":{"gte":79000},"compute_cap":{"gte":900,"lte":900},"cpu_ram":{"gte":128000}}'}
+# 1 à 4 cartes : vast.py juge chaque offre au coût du TRAVAIL (une machine à N cartes anime N fois plus vite, cf. animer.sh).
+FILTRE=${JT_FILTRE:-'{"gpu_ram":{"gte":79000},"compute_cap":{"gte":900,"lte":900},"cpu_ram":{"gte":128000},"num_gpus":{"gte":1,"lte":4}}'}
 journal() { echo "$(date -u +%FT%TZ) $*" | tee -a "$J/ETAT"; }
 alerte() { [ -x "$ALERTE" ] && "$ALERTE" "$1" "$2" "${3:-default}" >/dev/null 2>&1 || true; }
 echec() { journal "🔴 $1"; alerte "Journal Freeworld $DATE$SUFFIXE : $1" "${2:-Voir $J/ETAT sur le hub.}" "${3:-default}"; exit 1; }
@@ -48,7 +49,7 @@ fi
 
 # ── 2) Le travail d'usine (les résultats d'un passage précédent du même jour sont gardés : reprise) ──
 python3 "$ICI/planif.py" "$J/jt.json" "$T" >> "$J/ETAT" 2>&1 || echec "commande refusée par le planificateur" "$(tail -1 "$J/ETAT")"
-read -r MOTS HEURES BM BT ECH <<<"$(python3 - "$T" "$BUDGET_JOUR_MAX" <<'PY'
+read -r MOTS HEURES BM BT ECH ANIM FIXE <<<"$(python3 - "$T" "$BUDGET_JOUR_MAX" <<'PY'
 import json, sys
 reps = json.load(open(f"{sys.argv[1]}/entrees/repliques.json", encoding="utf-8"))
 mots = sum(len(r["texte"].split()) for r in reps)
@@ -60,15 +61,18 @@ heures = max(1.0, round(mots * 0.36 * 31 / 3600 * 1.25 + 0.6, 1))
 # de disque. ⚠️ Le moins cher à l'heure (0,76 $/h) facturait 0,038 $/Go : 5,66 $ rien que pour télécharger les modèles.
 machine = round(heures * 1.8 + 1.0, 1)
 total = min(float(sys.argv[2]), round(machine * 1.6, 1))
-print(mots, heures, min(machine, total), total, int(heures * 60 + 60))
+# Une machine à N cartes (vast.py, animer.sh) : la part qui se PARTAGE entre les cartes — l'animation — et celle qui ne se
+# partage pas — installation, voix, images : elle compte FIXE + ANIM / N heures. Le budget reste celui d'une carte seule.
+anim = round(mots * 0.36 * 31 / 3600 * 1.25, 2)
+print(mots, heures, min(machine, total), total, int(heures * 60 + 60), anim, 0.6)
 PY
 )"
-journal "travail : $MOTS mots, ~$HEURES h de carte, budget $BM \$ par machine et $BT \$ au plus pour la journée"
+journal "travail : $MOTS mots, ~$HEURES h de carte (dont $ANIM h d'animation, partagées entre les cartes), budget $BM \$ par machine et $BT \$ au plus pour la journée"
 
 # ── 3) La fabrication, sur machines interruptibles ──
 for essai in 1 2 3; do
   USINE_DOSSIER="$T" USINE_ETIQUETTE="usine-jt$SUFFIXE-$DATE" USINE_INTERRUPTIBLE=1 USINE_REPRISES=4 \
-  USINE_BUDGET="$BM" USINE_BUDGET_TOTAL="$BT" USINE_HEURES="$HEURES" USINE_GO=150 USINE_DISQUE=300 \
+  USINE_BUDGET="$BM" USINE_BUDGET_TOTAL="$BT" USINE_HEURES="$HEURES" USINE_ANIM_H="$ANIM" USINE_FIXE_H="$FIXE" USINE_GO=150 USINE_DISQUE=300 \
   USINE_ECHEANCE_MIN="$ECH" USINE_ECHEANCE_TOTALE_MIN=${JT_ECHEANCE_TOTALE_MIN:-720} USINE_FILTRE="$FILTRE" \
     bash "$ICI/../orchestre.sh" >> "$J/usine.log" 2>&1
   [ -f "$T/resultats/FINI" ] && break

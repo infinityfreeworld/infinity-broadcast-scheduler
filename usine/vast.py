@@ -46,6 +46,15 @@ INTERRUPTIBLE = os.environ.get("USINE_INTERRUPTIBLE", "") == "1"
 MARGE = float(os.environ.get("USINE_ENCHERE_MARGE", "0.15"))   # au-dessus de l'enchère minimale : moins souvent évincé
 if INTERRUPTIBLE:
     FILTRE["type"] = "bid"
+# Machines à PLUSIEURS cartes (15/09/2026 : 4 H100 en enchère à 0,40 $/h la carte, contre 1,69 $/h la carte seule) : le
+# travail en fait tourner une par carte (animer.sh du Journal). Une offre à N cartes compte USINE_FIXE_H + USINE_ANIM_H / N
+# heures — installation, voix et images ne se partagent pas, l'animation si. Sans USINE_ANIM_H : USINE_HEURES, comme avant.
+ANIM_H = float(os.environ.get("USINE_ANIM_H", "0"))
+FIXE_H = float(os.environ.get("USINE_FIXE_H", "0.6"))
+
+
+def heures_offre(o):
+    return round(FIXE_H + ANIM_H / max(1, int(o.get("num_gpus") or 1)), 2) if ANIM_H > 0 else HEURES
 
 
 def appel(chemin, methode="GET", corps=None):
@@ -91,8 +100,10 @@ def seuil_credit():
 
 
 def pire_cas(o):
-    # Ce que CE travail peut coûter au pire sur cette offre : les heures, la bande passante, le disque.
-    return HEURES * o["dph_total"] + GO * (o.get("inet_down_cost") or 0) + DISQUE * (o.get("storage_cost") or 0) / 730 * HEURES
+    # Ce que CE travail peut coûter au pire sur cette offre : ses heures (plus de cartes, moins d'heures : o["_heures"]),
+    # la bande passante, le disque.
+    h = o.get("_heures") or HEURES
+    return h * o["dph_total"] + GO * (o.get("inet_down_cost") or 0) + DISQUE * (o.get("storage_cost") or 0) / 730 * h
 
 
 def enchere(o):
@@ -114,6 +125,24 @@ if cmd == "info":
 elif cmd == "credit":
     c = credit()
     print("ILLISIBLE" if c is None else f"{c:.2f}", f"seuil={seuil_credit():.2f}")
+elif cmd == "estimer":
+    # Ce que l'usine louerait MAINTENANT, sans louer (lecture seule) : les 5 meilleures offres au coût du travail, sous le
+    # budget. USINE_OFFRES=fichier.json remplace l'appel à Vast (essais hors ligne).
+    if os.environ.get("USINE_OFFRES"):
+        offres = json.load(open(os.environ["USINE_OFFRES"]))
+    else:
+        s, j = appel("/api/v0/bundles/?q=" + urllib.parse.quote(json.dumps(FILTRE)))
+        offres = j.get("offers", []) if s == 200 else []
+    for o in offres:
+        o["_heures"] = heures_offre(o)
+        if INTERRUPTIBLE:
+            o["_enchere"] = enchere(o)
+            o["dph_total"] = o["dph_total"] - o["min_bid"] + o["_enchere"] if o.get("min_bid") else o["_enchere"]
+    bonnes = sorted((o for o in offres if pire_cas(o) <= BUDGET), key=lambda o: (pire_cas(o), o["dph_total"]))
+    for o in bonnes[:5]:
+        print(o.get("id"), o.get("gpu_name"), f"{o.get('num_gpus') or 1}x", f"{o['dph_total']:.3f}$/h", f"{o['_heures']:.2f}h",
+              f"pire={pire_cas(o):.2f}$", o.get("geolocation"))
+    print(f"{len(bonnes)} offre(s) sous le budget, sur {len(offres)}")
 elif cmd == "louer":
     i = mienne()
     if i == "ERREUR":
@@ -129,6 +158,8 @@ elif cmd == "louer":
     EXCLUES = set(open(f).read().split()) if os.path.exists(f) else set()
     s, j = appel("/api/v0/bundles/?q=" + urllib.parse.quote(json.dumps(FILTRE)))
     offres = j.get("offers", []) if s == 200 else []
+    for o in offres:
+        o["_heures"] = heures_offre(o)   # une machine à N cartes finit l'animation N fois plus vite
     if INTERRUPTIBLE:
         # Le tri et le budget jugent le prix que l'on PROPOSE : la carte à notre enchère, le reste (disque…) inchangé.
         for o in offres:
@@ -147,7 +178,8 @@ elif cmd == "louer":
             corps["price"] = o["_enchere"]   # un prix dans la location = une machine interruptible (vast-cli --bid_price)
         s, r = appel(f"/api/v0/asks/{o['id']}/", "PUT", corps)
         if s == 200 and (r.get("success") or r.get("new_contract")):
-            print("LOUEE", o["id"], r.get("new_contract"), o.get("gpu_name"), f"{o['dph_total']:.3f}$/h",
+            print("LOUEE", o["id"], r.get("new_contract"), o.get("gpu_name"), f"×{o.get('num_gpus') or 1}", f"{o['dph_total']:.3f}$/h",
+                  f"{o['_heures']:.1f}h",
                   "INTERRUPTIBLE" if INTERRUPTIBLE else "à la demande",
                   o.get("geolocation"), f"pire={pire:.2f}$", f"credit={c:.2f}$"); sys.exit(0)
         print("REFUSEE", o["id"], s, str(r)[:80])

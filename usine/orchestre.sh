@@ -98,6 +98,9 @@ while :; do
   done
   [ $ok = 1 ] || { alerte "Usine $ETIQ : 3 hôtes bloqués" "Aucune machine n'a ouvert son SSH." default; etat "ABANDON : 3 hôtes bloqués au démarrage"; exit 0; }
   limite() { [ $(( ($(date +%s) - T0) / 60 )) -ge $ECHEANCE_MIN ] || [ "$(total_min)" -ge "$ECHEANCE_TOTALE_MIN" ]; }
+  # Le coût RÉEL de cette machine (tarif × durée) n'atteint jamais son budget : une machine à 4 cartes coûte 4 fois plus à
+  # l'heure — un travail bloqué dessus doit s'arrêter bien avant l'échéance, prévue pour une carte seule.
+  depasse() { python3 -c "import sys; sys.exit(0 if float('${DPH:-0}') * ($(date +%s) - $T0) / 3600 >= 0.95 * $USINE_BUDGET else 1)"; }
   etat "SSH ok ($GPU, $DPH \$/h)"
   R 'mkdir -p /workspace/usine/entrees /workspace/usine/resultats'
   if [ "$SYNCHRO" = 1 ]; then
@@ -129,6 +132,10 @@ while :; do
     if limite; then
       issue=echeance; etat "ÉCHÉANCE atteinte (${ECHEANCE_MIN} min par machine, ${ECHEANCE_TOTALE_MIN} min en tout)"
       alerte "Usine $ETIQ : échéance atteinte" "Le travail n'a pas fini à temps ; résultats partiels rapatriés." default; break
+    fi
+    if depasse; then
+      issue=echeance; etat "BUDGET de la machine atteint (~${USINE_BUDGET} \$ au tarif de ${DPH} \$/h)"
+      alerte "Usine $ETIQ : budget de la machine atteint" "Arrêt avant dépassement ; résultats partiels rapatriés." default; break
     fi
     [ "$SYNCHRO" = 1 ] && [ $((tic % 5)) = 0 ] && rapatrier
     etat "suivi : $(R 'tail -1 /workspace/usine/resultats/journal.txt 2>/dev/null' | cut -c1-170)"
