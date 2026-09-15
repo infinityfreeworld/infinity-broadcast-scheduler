@@ -61,6 +61,7 @@ function planifier(jt: unknown): number | null {
     if (cle.startsWith('_') || !J.estObjet(p)) continue
     writeFileSync(join(faux, String(p.voix)), 'RIFF')
     writeFileSync(join(faux, String(p.image)), 'PNG')
+    if (p.image_ouverture) writeFileSync(join(faux, String(p.image_ouverture)), 'PNG')
   }
   const dossier = mkdtempSync(join(tmpdir(), 'jt-commande-'))
   writeFileSync(join(dossier, 'jt.json'), JSON.stringify(jt))
@@ -236,6 +237,55 @@ test('décor : ni être humain, ni texte — le modèle d’image les ferait app
   assert.deepEqual(erreursDe(avec(jt => { jt.sujets[0].decor = 'a man-made lake at dawn, reeds and mist' })), [], '« man-made » n’appelle personne')
 })
 
+test('⭐ plans de coupe : les Bipèdes montrés comme du bétail — jamais d’esclavage, d’enfants, de presse ni de texte (15/09)', () => {
+  const coupe = (v: string) => avec(jt => { jt.sujets[1].coupe = v })
+  assert.deepEqual(erreursDe(coupe('a farmyard seen from above, humans in beige overalls in straw pens, a pig supervisor with a clipboard')), [],
+    'le cadre du fondateur passe — les humains y sont permis, contrairement au décor')
+  assert.deepEqual(erreursDe(coupe('')), [], 'vide = pas de plan de coupe')
+  refuse(coupe('children playing in a pen'), /« children » — hors du cadre des plans de coupe/)
+  refuse(coupe('humans in chains in a barn'), /« chains »/)
+  refuse(coupe('a slave auction in a market square'), /« slave »/)
+  refuse(coupe('blood on the barn floor'), /« blood »/)
+  refuse(coupe('a cameraman filming the pens'), /« cameraman » — ni journaliste, ni caméraman, ni micro/)
+  refuse(coupe('a barn with a big logo on the wall'), /« logo » — ni texte, ni panneau, ni logo dans l'image/)
+  refuse(coupe(mots(J.MOTS_MAX.decor + 1, 'barn')), /plan de coupe : 41 mots/)
+  // La même liste que planif.py, relue dans le fichier Python : elle ne peut pas diverger en silence.
+  const py = PLANIF.match(/^COUPE_INTERDIT = re\.compile\(r"(.+?)"\s*\n\s*r"(.+?)", re\.I\)/m)
+  assert.ok(py, 'COUPE_INTERDIT introuvable dans planif.py')
+  assert.equal(J.COUPE_INTERDIT.source, py[1] + py[2])
+  assert.ok(J.COUPE_INTERDIT.flags.includes('i'))
+  // Publiée nettoyée comme un décor ; absente, elle n'est pas ajoutée.
+  const n = J.normaliserCommande(coupe('a  "farm" {yard}  at dawn'))
+  assert.equal(n.sujets[1].coupe, 'a farm yard at dawn')
+  assert.ok(!('coupe' in n.sujets[0]))
+})
+
+test('⭐ les fermes n’élèvent QUE des Bipèdes : poules, vaches laitières, élevages d’animaux refusés (fondateur, 15/09)', () => {
+  refuse(avec(jt => { jt.sujets[0].terrain = 'Oui Iggy ! Ici, les poules pondent sous la pluie.' }),
+    /« poules » — dans Freeworld, les animaux n'élèvent pas d'animaux/)
+  refuse(avec(jt => { jt.sujets[1].interview.reponse = 'Mon élevage de vaches croule sous les formulaires.' }), /« élevage de vaches »/)
+  refuse(avec(jt => { jt.sommaire = 'Bonsoir. Un éleveur de cochons en colère.' }), /« éleveur de cochons »/)
+  refuse(avec(jt => { jt.au_revoir = 'Et des vaches laitières, à demain, sur Freeworld TV.' }), /« vaches laitières »/)
+  assert.deepEqual(erreursDe(avec(jt => { jt.sujets[1].interview.reponse = 'Mes Bipèdes sont élevés en plein air, et le lait de Bipède se vend bien.' })), [],
+    'l’élevage de Bipèdes, oui')
+  assert.deepEqual(erreursDe(avec(jt => { jt.sujets[0].terrain = 'Oui Iggy ! Les cochons, citoyens de la vallée, votent ce soir.' })), [],
+    'un cochon citoyen, oui')
+})
+
+test('⭐ la consigne du rédacteur en chef (un thème imposé) passe EN TÊTE du message du jour, bornée, par l’environnement', () => {
+  const m = J.messageDuJour({ date: DATE, minutes: 5, matiere: '', consigne: '  Un sujet sur le FLH,\n les activistes végans.  ' })
+  assert.match(m, /^LA CONSIGNE DU RÉDACTEUR EN CHEF pour ce Journal — à suivre, toujours dans les règles et les garde-fous : Un sujet sur le FLH, les activistes végans\.$/m)
+  assert.ok(m.indexOf('RÉDACTEUR EN CHEF') < m.indexOf('Le Journal du'))
+  assert.doesNotMatch(J.messageDuJour({ date: DATE, minutes: 5, matiere: '', consigne: '   ' }), /RÉDACTEUR EN CHEF/)
+  assert.doesNotMatch(J.messageDuJour({ date: DATE, minutes: 5, matiere: '' }), /RÉDACTEUR EN CHEF/)
+  const longue = J.messageDuJour({ date: DATE, minutes: 5, matiere: '', consigne: 'x'.repeat(5000) })
+  assert.ok(longue.includes('x'.repeat(J.CONSIGNE_MAX)) && !longue.includes('x'.repeat(J.CONSIGNE_MAX + 1)), 'bornée')
+  assert.match(lire('src/scripts/jt-freeworld.ts'), /process\.env\.JT_CONSIGNE/)
+  const wf = lire('.github/workflows/jt-freeworld.yml')
+  assert.match(wf, /JT_CONSIGNE: +\$\{\{ github\.event\.inputs\.consigne \}\}/)
+  assert.equal(wf.match(/github\.event\.inputs\.consigne/g)?.length, 1, 'texte libre : par l’environnement seulement, jamais dans un script')
+})
+
 test('une interview mal formée est refusée — un objet complet, ou null', () => {
   refuse(avec(jt => { jt.sujets[0].interview = 'oui' }), /sujet 1 : interview : un objet complet, ou null/)
   refuse(avec(jt => { jt.sujets[0].interview = {} }), /un objet complet, ou null/)
@@ -257,6 +307,8 @@ test('⭐ même verdict que planif.py, le vrai, sur les mêmes commandes', () =>
     ['une date piégée', avec(jt => { jt.date = '../../etc' }), false],
     ['un sujet de trop', avec(jt => { jt.sujets = Array.from({ length: J.SUJETS_MAX + 1 }, () => structuredClone(EXEMPLE.sujets[0])) }), false],
     ['un sommaire vide', avec(jt => { jt.sommaire = '  ' }), false],
+    ['un plan de coupe dans le cadre', avec(jt => { jt.sujets[1].coupe = 'a farmyard seen from above, humans in beige overalls in straw pens' }), true],
+    ['un plan de coupe hors cadre', avec(jt => { jt.sujets[1].coupe = 'a slave auction in a market square' }), false],
   ]
   for (const [quoi, jt, attendu] of cas) {
     const erreurs = erreursDe(jt)
@@ -295,7 +347,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Pistache, l'écureuil : les parcs, les forêts, la ville/, 'Pistache'], [/noisettes/, 'les noisettes'],
     [/Rick, le raton laveur : les enquêtes, les ministères, les administrations/, 'Rick'], [/murmure de conspirateur/, 'le murmure'],
     [/Rosa, l'autruche : les grands reportages, le vaste monde/, 'Rosa'], [/Curieuse de tout/, 'Rosa curieuse'],
-    [/Gaston Lardon, éleveur de cochons : la vie rurale ; excédé par la paperasse/, 'Gaston'],
+    [/Gaston Lardon, un cochon ÉLEVEUR DE BIPÈDES : la vie rurale ; excédé par la paperasse/, 'Gaston'],
     [/Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes/, 'Cramon'],
     [/UNE FOIS AU PLUS par Journal/, 'Cramon une fois'], [/langue de bois absurde/, 'la langue de bois'],
     [/ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle/, 'aucune déclaration réelle'],
@@ -311,6 +363,8 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Les animaux sont les maîtres/, 'l’inversion'], [/« les Bipèdes », « les Sans-Poils »/, 'les humains'],
     [/ils ne parlent JAMAIS et ne sont jamais interviewés/, 'les humains muets'],
     [/On les SUGGÈRE, on ne les montre pas : aucune violence, rien de sanglant, aucune description d'abattage/, 'suggérer, pas montrer'],
+    // Fondateur, 15/09 : « les fermes élèvent uniquement des humains, pas des animaux ».
+    [/Les animaux n'élèvent JAMAIS d'animaux/, 'pas d’élevage d’animaux'], [/Les fermes n'élèvent QUE des Bipèdes/, 'les fermes à Bipèdes'],
     [/l'UERSS et ses directives absurdes et liberticides/, 'l’UERSS'],
     [/vaccination obligatoire des animaux et de leurs troupeaux d'humains/, 'la vaccination forcée'],
     [/On se moque de la BUREAUCRATIE et des OBLIGATIONS, JAMAIS de la médecine : aucune fausse information de santé/, 'jamais la médecine'],
@@ -332,6 +386,10 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/"decor" : une courte description EN ANGLAIS d'un LIEU/, 'le décor en anglais'],
     [/AUCUN être humain \(ni foule/, 'décor sans humain ni foule'], [/AUCUN journaliste, caméraman ou photographe/, 'décor sans presse'],
     [/AUCUN texte, panneau, affiche ou logo/, 'décor sans texte'], [/« En direct du port de Brest »/, 'le bandeau'],
+    // … et les plans de coupe, dans le cadre accepté le 15/09 : le miroir de l'élevage, jamais de l'esclavage.
+    [/"coupe" \(facultatif/, 'le plan de coupe'], [/MONTRER les Bipèdes comme du BÉTAIL/, 'les Bipèdes montrés'],
+    [/adultes seulement, de toutes origines/, 'adultes, toutes origines'],
+    [/JAMAIS enchaînés, blessés ni nus, jamais d'enfants, jamais de scène de vente/, 'le cadre du bétail'],
   ]
   for (const [motif, quoi] of attendus) assert.match(c, motif, quoi)
 })

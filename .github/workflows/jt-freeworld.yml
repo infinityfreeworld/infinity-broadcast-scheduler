@@ -46,6 +46,10 @@ on:
         type: boolean
         required: false
         default: false
+      consigne:
+        description: 'commande : consigne du rédacteur en chef (un thème imposé, ex. « un sujet sur le FLH »)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -141,6 +145,8 @@ jobs:
           DATE_JT:             ${{ github.event.inputs.date }}
           # Essai : le vrai rédacteur écrit, RIEN ne part sur les relais — le conducteur se lit dans l'artefact.
           ESSAI:               ${{ github.event.inputs.essai }}
+          # Par l'environnement, jamais interpolée dans le script (texte libre).
+          JT_CONSIGNE:         ${{ github.event.inputs.consigne }}
         run: |
           ARGS=(--sortie commande-jt.json)
           if [ -n "${DATE_JT:-}" ]; then ARGS+=(--date "$DATE_JT"); fi

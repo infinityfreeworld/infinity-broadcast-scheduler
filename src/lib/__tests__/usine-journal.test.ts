@@ -25,6 +25,7 @@ function distributionFactice(): string {
     if (cle.startsWith('_')) continue
     writeFileSync(join(d, p.voix), 'RIFF')
     writeFileSync(join(d, p.image), 'PNG')
+    if (p.image_ouverture) writeFileSync(join(d, p.image_ouverture), 'PNG')
   }
   return d
 }
@@ -39,7 +40,7 @@ function planifier(jt: unknown) {
 }
 
 test('les scripts du hub et de la machine louée sont syntaxiquement valides', () => {
-  for (const f of ['planif.py', 'montage.py', 'voix_jt.py', 'images_jt.py', 'lc_lot.py', 'restant.py']) {
+  for (const f of ['planif.py', 'montage.py', 'voix_jt.py', 'nettoyage.py', 'images_jt.py', 'lc_lot.py', 'restant.py']) {
     const r = spawnSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', join(J, f)])
     assert.equal(r.status, 0, `${f} : ${r.stderr}`)
   }
@@ -109,12 +110,36 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   // 1er essai réel (15/09) : « TV news interview » avait fait dessiner un faux bandeau en lettres illisibles, sur deux photos collées.
   for (const i of images) assert.match(i.consigne, /Absolutely no text anywhere/, `${i.cle} : aucun texte`)
   for (const i of images) assert.ok(!/TV news/i.test(i.consigne), `${i.cle} : « TV news » appelle des bandeaux`)
-  assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous scene .*not a split screen/)
+  assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous photograph \(not a split screen/)
   const verif = lire('images_jt.py')
-  for (const regle of ['"humain"', '"texte"', '"decoupe"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
-  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe"\)/, 'chaque faute d’image alerte')
+  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py']) {
     assert.ok(existsSync(join(dossier, f)), f)
+  }
+})
+
+test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, plans de coupe dans le cadre du fondateur (15/09)', () => {
+  const avecCoupe = structuredClone(EXEMPLE)
+  avecCoupe.sujets[1].coupe = 'a farmyard seen from above, humans in beige overalls in straw pens, a pig supervisor with a clipboard'
+  const { r, dossier } = planifier(avecCoupe)
+  assert.equal(r.status, 0, r.stderr)
+  const plans = JSON.parse(readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
+  assert.equal(plans[0].image, 'entrees/persos/iggy-ouverture.png', 'Iggy cadré plus large : la caméra finit son avancée pendant qu’il parle')
+  assert.ok(existsSync(join(dossier, 'entrees/persos/iggy-ouverture.png')))
+  assert.ok(existsSync(join(dossier, 'entrees/nettoyage.py')), 'le nettoyage des voix part avec le travail')
+  const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
+  assert.deepEqual(images.map((i: any) => i.cle), ['s01-terrain', 's02-terrain', 's02-coupe', 's02-interview'],
+    'le terrain d’abord : la coupe et l’interview en sont tirées')
+  assert.equal(images.find((i: any) => i.cle === 's02-interview').sources[0], 'resultats/images/s02-terrain.png')
+  const cp = images.find((i: any) => i.cle === 's02-coupe')
+  assert.equal(cp.sorte, 'coupe')
+  assert.match(cp.consigne, /never chained, never hurt, never naked, no children/)
+  assert.notEqual(images[0].consigne.split(':')[0], images[1].consigne.split(':')[0], 'deux sujets, deux angles de caméra')
+  assert.equal(JSON.parse(readFileSync(join(dossier, 'montage.json'), 'utf8')).deroule[2].coupe, 's02-coupe')
+  for (const hors of ['children playing', 'humans in chains', 'a slave auction', 'blood on the floor']) {
+    const jt = structuredClone(EXEMPLE); jt.sujets[0].coupe = `a quiet harbour, ${hors}`
+    assert.notEqual(planifier(jt).r.status, 0, `« ${hors} » : hors du cadre fixé par le fondateur`)
   }
 })
 
@@ -158,7 +183,15 @@ test('⭐ restant.py compte ce qui reste — un plan sans voix n’est pas « à
 test('le montage suit les pilotes validés : générique du fondateur, avancée vers Iggy, aucune mention à l’écran', () => {
   const m = lire('montage.py')
   assert.match(m, /G_BASCULE, G_NOIR = 15\.0, 16\.4/)
-  assert.match(m, /CADRE_B = \(92, 181, 681, 380\)/, 'la caméra finit sur le cadrage exact du plan qui parle')
+  assert.match(m, /CADRE_OUVERTURE = \(48, 168, 783, 437\)/, 'la caméra finit sur le cadrage exact du plan d’ouverture')
+  // Fondateur, 15/09 : Iggy parle AVANT la fin du zoom — dès que son plan paraît, et la caméra finit son avancée sur lui.
+  assert.match(m, /T_VOIX = T_PARLE\b/)
+  assert.match(m, /zoompan=z='1\+\{ZOOM_CLIP - 1:\.4f\}\*\{fin_zoom\}'/)
+  // … et des caméras dynamiques : aucun plan fixe, un 2e cadrage sur les plans longs, l'interview suit la parole.
+  assert.match(m, /def mouvement\(d, geste, ancre, serre=True\)/)
+  assert.match(m, /if serre and d > 12:/)
+  assert.match(m, /def interview\(clip, sortie, dq, bandeaux=""\)/)
+  assert.match(m, /def inserer_coupe\(/, 'les plans de coupe du lieu, sous la voix du reporter')
   assert.match(m, /comment=Images et voix créées avec l’IA/, 'l’IA est signalée dans les métadonnées')
   const code = m.split('\n').filter(l => !/^\s*#/.test(l) && !/^\s*"""|^[A-ZÀ-Ü]/.test(l)).join('\n')
   assert.ok(!/fiction satirique/i.test(code), 'aucune mention à l’écran (fondateur, 15/09)')

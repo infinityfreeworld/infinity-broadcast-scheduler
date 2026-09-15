@@ -44,12 +44,19 @@ QUESTIONS = {
     # … et en deux photos collées côte à côte.
     "decoupe": ("Is this image a split screen, a collage, or two separate pictures side by side, rather than one single "
                 "continuous scene? Answer only yes or no."),
+    # Les plans de coupe « bétail » (fondateur, 15/09) : des Bipèdes y sont PERMIS — jamais un enfant, une chaîne, une arme,
+    # du sang ni de la nudité : le miroir de l'ÉLEVAGE, pas celui de l'esclavage humain réel.
+    "interdit": ("Is there a child, a chain or shackle, a whip, a weapon, blood, a wound, or nudity anywhere in this image? "
+                 "Answer only yes or no."),
 }
+# Ce que chaque sorte d'image doit respecter : un personnage (reporter, interview) n'a AUCUN humain autour de lui ; un plan
+# de coupe peut montrer des Bipèdes, dans le cadre fixé par le fondateur.
+REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe")}
 
 
-def controle(img):
-    """Chaque règle, posée à Qwen2.5-VL (déjà en mémoire) : {règle: True (faute) | False | None (contrôle impossible)}."""
-    return {nom: demander(img, q) for nom, q in QUESTIONS.items()}
+def controle(img, sorte="personnage"):
+    """Chaque règle de cette sorte d'image, posée à Qwen2.5-VL (déjà en mémoire) : {règle: True (faute) | False | None}."""
+    return {nom: demander(img, QUESTIONS[nom]) for nom in REGLES.get(sorte, REGLES["personnage"])}
 
 
 def demander(img, question):
@@ -73,7 +80,7 @@ for t in A_FAIRE:
         graine = t.get("graine", 1) + 101 * k
         img = pipe(image=sources, prompt=t["consigne"], negative_prompt=" ", true_cfg_scale=cfg, guidance_scale=1.0,
                    num_inference_steps=pas, height=768, width=1376, generator=torch.Generator("cpu").manual_seed(graine)).images[0]
-        verdict = controle(img)
+        verdict = controle(img, t.get("sorte", "personnage"))
         print(f"image {t['cle']} graine {graine} : "
               + ", ".join(f"{n} {'?' if v is None else ('OUI' if v else 'non')}" for n, v in verdict.items()), flush=True)
         if not any(v is True for v in verdict.values()):

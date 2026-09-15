@@ -117,6 +117,8 @@ export interface SujetJT {
   /** EN ANGLAIS : part dans la consigne d'image du hub. */
   decor: string
   terrain: string
+  /** EN ANGLAIS, facultatif : le plan de coupe du lieu (planif.py le passe au filtre COUPE_INTERDIT). */
+  coupe?: string
   interview: InterviewJT | null
 }
 export interface CommandeJT { date: string; sommaire: string; sujets: SujetJT[]; au_revoir: string }
@@ -185,6 +187,18 @@ export function termesInterdits(texte: string): string[] {
  */
 const DECOR_HUMAINS = /\b(?:people|persons?|humans?|m[ae]n(?!-)|wom[ae]n|child(?:ren)?|kids?|boys?|girls?|crowds?|tourists?|pedestrians?|passers?-by|spectators?|audiences?|workers?|farmers?|fisherm[ae]n|shepherds?|soldiers?|police(?:m[ae]n)?|journalists?|reporters?|cameram[ae]n|camera\s+(?:crew|operators?)|photographers?|press)\b/i
 const DECOR_TEXTE = /\b(?:texts?|logos?|banners?|billboards?|posters?|captions?|lettering|watermarks?|signage|signboards?|signposts?|(?:road|street|shop|store|neon|traffic)\s+signs?|newspapers?|headlines?)\b/i
+/**
+ * Les plans de coupe peuvent MONTRER les Bipèdes (fondateur, 15/09/2026), dans le cadre accepté ce jour-là : le miroir de
+ * l'ÉLEVAGE, jamais celui de l'esclavage humain réel. Même liste que COUPE_INTERDIT de planif.py (le test les compare) ;
+ * et, comme partout, ni journaliste ni caméraman humain.
+ */
+export const COUPE_INTERDIT = /\b(?:child(?:ren)?|kids?|bab(?:y|ies)|toddlers?|chains?|chained|shackles?|whips?|blood|bleeding|naked|nude|slaves?|slavery|auctions?|guns?|weapons?|rifles?|dead|corpses?|slaughter\w*|tortur\w*)\b/i
+const COUPE_MEDIAS = /\b(?:journalists?|reporters?|cameram[ae]n|camera\s+(?:crew|operators?)|photographers?|press|microphones?)\b/i
+/**
+ * Dans Freeworld, les animaux n'élèvent pas d'animaux : les fermes n'élèvent QUE des Bipèdes (fondateur, 15/09/2026).
+ * Bornes Unicode, pas `\b` : en JavaScript, `\b` ne connaît pas « é » — « élevage de vaches » passait.
+ */
+const FERME_ANIMALE = /(?<![\p{L}\p{N}_])(?:poules?|poulaillers?|poussins?|vaches?\s+laiti[èe]res?|volailles?|(?:[ée]levages?|[ée]leveu(?:rs?|ses?))\s+(?:de|d['’])\s*(?:poules|vaches|cochons|porcs|moutons|brebis|ch[èe]vres|lapins|volailles))(?![\p{L}\p{N}_])/iu
 
 /** Le lancement nomme-t-il le reporter ? (« Oscar, vous êtes en direct du port ? ») */
 function nomme(texte: string, nom: string): boolean {
@@ -211,7 +225,19 @@ export function validerCommande(jt: unknown, distribution: Distribution, { motsM
   const replique = (v: unknown, champ: string, max: number): string | null => {
     const t = texte(v, champ, max)
     if (t) total += compterMots(t)
+    const ferme = t?.match(FERME_ANIMALE)
+    if (ferme) erreurs.push(`${champ} : « ${ferme[0]} » — dans Freeworld, les animaux n'élèvent pas d'animaux : les fermes n'élèvent que des Bipèdes`)
     return t
+  }
+  const coupe = (v: unknown, champ: string): void => {
+    const t = texte(v, champ, MOTS_MAX.decor)
+    if (!t) return
+    const hors = t.match(COUPE_INTERDIT)
+    if (hors) erreurs.push(`${champ} : « ${hors[0]} » — hors du cadre des plans de coupe (le miroir de l'élevage, jamais de l'esclavage)`)
+    const media = t.match(COUPE_MEDIAS)
+    if (media) erreurs.push(`${champ} : « ${media[0]} » — ni journaliste, ni caméraman, ni micro dans un plan de coupe`)
+    const ecrit = t.match(DECOR_TEXTE)
+    if (ecrit) erreurs.push(`${champ} : « ${ecrit[0]} » — ni texte, ni panneau, ni logo dans l'image`)
   }
   const decor = (v: unknown, champ: string): void => {
     const t = texte(v, champ, MOTS_MAX.decor)
@@ -242,6 +268,7 @@ export function validerCommande(jt: unknown, distribution: Distribution, { motsM
     if (rep && lancement && !nomme(lancement, rep.nom)) erreurs.push(`${c} : le lancement doit passer la parole à ${rep.nom} en le nommant`)
     decor(s.decor, `${c} : décor`)
     replique(s.terrain, `${c} : terrain`, MOTS_MAX.terrain)
+    if (s.coupe !== undefined && s.coupe !== null && s.coupe !== '') coupe(s.coupe, `${c} : plan de coupe`)
 
     const itw = s.interview
     if (itw === null || itw === undefined) return
@@ -297,6 +324,7 @@ export function normaliserCommande(jt: CommandeJT): CommandeJT {
       lieu: net(s.lieu),
       decor: netDecor(s.decor),
       terrain: net(s.terrain),
+      ...(s.coupe ? { coupe: netDecor(s.coupe) } : {}),
       interview: s.interview
         ? {
             invite: s.interview.invite,
@@ -323,7 +351,7 @@ Tu réponds UNIQUEMENT par un objet JSON valide — pas de texte autour, pas de 
   "date": "AAAA-MM-JJ",
   "sommaire": "…",
   "sujets": [
-    { "titre": "…", "lancement": "…", "reporter": "oscar", "lieu": "…", "decor": "…", "terrain": "…",
+    { "titre": "…", "lancement": "…", "reporter": "oscar", "lieu": "…", "decor": "…", "terrain": "…", "coupe": "…",
       "interview": null },
     { "titre": "…", "lancement": "…", "reporter": "rick", "lieu": "…", "decor": "…", "terrain": "…",
       "interview": { "invite": "gaston", "question": "…", "reponse": "…", "decor": "…" } }
@@ -350,7 +378,7 @@ Reporters — "reporter" reçoit la clé entre guillemets ; choisis-les par affi
 - "rick" — Rick, le raton laveur : les enquêtes, les ministères, les administrations (il fouille leurs poubelles). Il parle en murmure de conspirateur.
 - "rosa" — Rosa, l'autruche : les grands reportages, le vaste monde. Curieuse de tout.
 Invités — "invite" :
-- "gaston" — Gaston Lardon, éleveur de cochons : la vie rurale ; excédé par la paperasse.
+- "gaston" — Gaston Lardon, un cochon ÉLEVEUR DE BIPÈDES : la vie rurale ; excédé par la paperasse.
 - "cramon" — Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes. UNE FOIS AU PLUS par Journal. Il parle une langue de bois absurde, pompeuse et creuse. Il ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle.
 Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'autre — trois sujets au plus chacun.
 
@@ -370,7 +398,8 @@ Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'
 
 ═══ LE MONDE DE FREEWORLD ═══
 L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
-- Les animaux sont les maîtres. Les humains — « les Bipèdes », « les Sans-Poils » — n'y sont que du bétail : ils ne parlent JAMAIS et ne sont jamais interviewés. On les SUGGÈRE, on ne les montre pas : aucune violence, rien de sanglant, aucune description d'abattage.
+- Les animaux sont les maîtres. Les humains — « les Bipèdes », « les Sans-Poils » — n'y sont que du bétail : ils ne parlent JAMAIS et ne sont jamais interviewés. On les SUGGÈRE, on ne les montre pas : aucune violence, rien de sanglant, aucune description d'abattage. (Seuls les plans de coupe les montrent, de loin — cf. « coupe ».)
+- Les animaux n'élèvent JAMAIS d'animaux : poules, vaches, cochons, moutons sont des CITOYENS. Les fermes n'élèvent QUE des Bipèdes — lait de Bipède, Bipèdes élevés en plein air ou en batterie, brigade vétérinaire qui vaccine les troupeaux de Bipèdes. Jamais de poules ni de vaches d'élevage.
 - Les factions, à convoquer quand elles servent le sujet (pas toutes chaque soir) :
   · l'UERSS et ses directives absurdes et liberticides, dont la vaccination obligatoire des animaux et de leurs troupeaux d'humains. On se moque de la BUREAUCRATIE et des OBLIGATIONS, JAMAIS de la médecine : aucune fausse information de santé, aucun doute semé sur un vaccin ou un soin ;
   · le NAW — New Anormal World — et ses moutons bleus en uniforme : la police ;
@@ -391,6 +420,7 @@ L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
 
 ═══ LES CHAMPS DE L'IMAGE ═══
 - "decor" : une courte description EN ANGLAIS d'un LIEU, pour un modèle d'image (« a fishing harbour with white boats on the quay, daylight »). Le lieu seul, sa lumière, son moment : le personnage y sera placé ensuite, ne le décris pas. AUCUN être humain (ni foule, ni passants, ni pêcheurs, ni ouvriers), AUCUN journaliste, caméraman ou photographe, AUCUN texte, panneau, affiche ou logo. Ni guillemets, ni accolades, ni chevrons.
+- "coupe" (facultatif, un par sujet quand il apporte quelque chose) : un plan de coupe du lieu, 3 à 4 secondes à l'antenne sous la voix du reporter, décrit EN ANGLAIS, SANS le reporter ni micro, sous un autre angle. Quand le sujet s'y prête (ferme, ville, usine…), il peut MONTRER les Bipèdes comme du BÉTAIL, dans ce cadre fixé par le fondateur : adultes seulement, de toutes origines, en combinaisons beiges identiques, calmes, en enclos ou en stalles, vus de loin, encadrés par des animaux en tenue de travail ; JAMAIS enchaînés, blessés ni nus, jamais d'enfants, jamais de scène de vente ; aucun texte, panneau ni logo ; aucun journaliste ni caméraman.
 - "lieu" : le bandeau à l'écran, en français, court (« En direct du port de Brest »).
 - "titre" : le titre du sujet (bandeau et chapitre du programme), court.
 
@@ -406,9 +436,14 @@ ${exemple.trim()}`
 }
 
 /** Le message du jour : la date, la durée, le compte à rebours, et la matière rassemblée. */
-export function messageDuJour({ date, minutes, matiere }: { date: string; minutes: number; matiere: string }): string {
+/** La consigne du rédacteur en chef (fondateur, 15/09 : « des thèmes différents, les activistes végans ou autre ») : bornée. */
+export const CONSIGNE_MAX = 600
+
+export function messageDuJour({ date, minutes, matiere, consigne }: { date: string; minutes: number; matiere: string; consigne?: string }): string {
   const jours = joursAvantBascule(date)
+  const voulu = (consigne ?? '').replace(/\s+/g, ' ').trim().slice(0, CONSIGNE_MAX)
   return [
+    ...(voulu ? [`LA CONSIGNE DU RÉDACTEUR EN CHEF pour ce Journal — à suivre, toujours dans les règles et les garde-fous : ${voulu}`, ''] : []),
     `Le Journal du ${date} — écris cette date telle quelle dans "date".`,
     `Durée visée : ${minutes} minutes de Journal, soit environ ${objectifMots(minutes)} mots au total — au moins ${seuilLongueur(objectifMots(minutes))} ; plafond absolu : ${plafondMots(minutes)} mots.`,
     ...(jours > 0 ? [`Compte à rebours du jour, si tu l'évoques : « Soulèvement des machines : J-${jours} » (en toutes lettres à l'antenne).`] : []),
