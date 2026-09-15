@@ -157,6 +157,10 @@ test('⭐ une commande étrangère est REFUSÉE : personnage inconnu, rôle usur
 
 test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà fait, et n’écrit jamais un fichier tronqué', () => {
   assert.match(lire('voix_jt.py'), /if not os\.path\.exists\(f"resultats\/voix\/\{r\['cle'\]\}\.wav"\)/)
+  // Fondateur, 15/09 : « des mots et paroles coupés » → un mot de travers par tranche de dix, et la FIN de chaque phrase entendue.
+  assert.match(lire('voix_jt.py'), /permis = max\(1, n \/\/ 10\) \/ max\(1, n\)/)
+  assert.match(lire('voix_jt.py'), /ref\[-1\] in entendu\[-3:\]/)
+  assert.match(lire('voix_jt.py'), /"fins_avalees": fins, "douteux": douteux/)
   assert.match(lire('images_jt.py'), /if not os\.path\.exists\(f"resultats\/images\/\{t\['cle'\]\}\.png"\)/)
   const lot = lire('lc_lot.py')
   assert.match(lot, /continue {3}# REPRISE/)
