@@ -16,7 +16,7 @@ Sorties dans DOSSIER : journal.mp4 (1280×720, 25 i/s, H.264 + AAC, −16 LUFS),
 
   python3 montage.py DOSSIER_DU_TRAVAIL
 """
-import json, os, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 
 HABILLAGE = os.environ.get("JT_HABILLAGE", "/root/usine/journal/habillage")
 GENERIQUE = f"{HABILLAGE}/generique.mp4"        # la vidéo du fondateur, « Breaking news short (1) »
@@ -46,7 +46,7 @@ VISAGE_OUVERTURE = (0.424, 0.227)   # le visage d'Iggy dans le plan d'ouverture 
 VISAGE_IGGY = (0.424, 0.228)        # … et dans son plan moyen habituel
 VISAGE_TERRAIN = (0.5, 0.33)        # un reporter est au centre, le visage dans le tiers haut
 MUSIQUE_SOUS_VOIX = 0.7            # la traîne du générique décroît d'elle-même ; ≈ l'écart voix/musique du pilote 2 validé
-TMP = tempfile.mkdtemp(prefix="montage-jt-", dir=os.environ.get("TMPDIR"))
+TMP = None   # les pièces du montage : main() les range DANS le dossier du jour, que purge.sh efface à J+2
 
 
 def ff(*args):
@@ -105,9 +105,10 @@ def plan(clip, sortie, bandeaux="", geste=0, ancre=VISAGE_TERRAIN):
 
 def interview(clip, sortie, dq, bandeaux=""):
     """L'interview à deux, filmée par un cadreur qui suit la parole : serré (×1,18) sur le reporter à gauche pendant la
-    question, la caméra glisse vers l'invité à droite quand il répond."""
+    question, la caméra glisse vers l'invité à droite quand il répond — ~12 % de l'image, les deux restent dans le cadre
+    (0,28 → 0,72 ne bougeait que de 6 % : invisible sur le rejeu du 15/09)."""
     d = duree(clip)
-    x = f"(0.28+0.44*{lisse(f'(on/{FPS}-{dq:.2f})/0.8')})"
+    x = f"(0.1+0.8*{lisse(f'(on/{FPS}-{dq:.2f})/0.8')})"
     f = (f"[0:v]{PLEIN},{AGRANDI},zoompan=z='1.18':x='{x}*(iw-iw/zoom)':y='0.35*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
          f"{',' + bandeaux if bandeaux else ''}[v];{voix('0:a', d)}")
     ff("-i", clip, "-filter_complex", f, "-map", "[v]", "-map", "[a]", *V, *A, sortie)
@@ -225,6 +226,9 @@ def assembler(morceaux, sortie):
 
 
 def main(dossier):
+    global TMP
+    # Jamais dans /tmp, où les pièces s'entassaient (~0,5 Go par Journal de 15 min, rien ne les effaçait) ; caché : rapatrier() l'ignore.
+    TMP = tempfile.mkdtemp(prefix=".montage-", dir=os.environ.get("TMPDIR") or dossier)
     m = json.load(open(os.path.join(dossier, "montage.json"), encoding="utf-8"))
     gens = m["personnages"]
     fichier = lambda sous, cle, ext: (lambda c: c if os.path.exists(c) else None)(os.path.join(dossier, "resultats", sous, f"{cle}.{ext}"))
@@ -295,6 +299,7 @@ def main(dossier):
               open(os.path.join(dossier, "chapitres.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"{sortie} : {total / 60:.1f} min, {len(chapitres)} chapitre(s), {os.path.getsize(sortie) / 1e6:.0f} Mo"
           + (f" · ⚠ plans manquants : {manquants}" if manquants else ""))
+    shutil.rmtree(TMP, ignore_errors=True)   # un échec, lui, garde ses pièces pour l'enquête (effacées avec le jour)
 
 
 if __name__ == "__main__":
