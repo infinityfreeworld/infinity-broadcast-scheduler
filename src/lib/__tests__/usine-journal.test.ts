@@ -159,7 +159,9 @@ test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà f
   assert.match(lire('voix_jt.py'), /if not os\.path\.exists\(f"resultats\/voix\/\{r\['cle'\]\}\.wav"\)/)
   // Fondateur, 15/09 : « des mots et paroles coupés » → un mot de travers par tranche de dix, et la FIN de chaque phrase entendue.
   assert.match(lire('voix_jt.py'), /permis = max\(1, n \/\/ 10\) \/ max\(1, n\)/)
-  assert.match(lire('voix_jt.py'), /ref\[-1\] in entendu\[-3:\]/)
+  assert.match(lire('voix_jt.py'), /attendus\[-1\] in entendu\[-4:\]/)
+  // … et un sigle ou un nom de Freeworld écrit « à la Whisper » (NAW → Nao) n'est pas un mot perdu (2e essai réel, 15/09).
+  assert.match(lire('voix_jt.py'), /def souples\(texte\)/)
   assert.match(lire('voix_jt.py'), /"fins_avalees": fins, "douteux": douteux/)
   // 2e essai réel (15/09) : un sommaire de plus de 30 s réécouté d'un bloc a fait planter Whisper — et les 26 voix avec.
   const vj = lire('voix_jt.py')
