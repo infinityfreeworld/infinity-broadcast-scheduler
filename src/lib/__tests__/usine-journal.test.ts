@@ -112,8 +112,8 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   for (const i of images) assert.ok(!/TV news/i.test(i.consigne), `${i.cle} : « TV news » appelle des bandeaux`)
   assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous photograph \(not a split screen/)
   const verif = lire('images_jt.py')
-  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
-  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit"\)/, 'chaque faute d’image alerte')
+  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py', 'entrees/animer.sh']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }
@@ -141,6 +141,17 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
     const jt = structuredClone(EXEMPLE); jt.sujets[0].coupe = `a quiet harbour, ${hors}`
     assert.notEqual(planifier(jt).r.status, 0, `« ${hors} » : hors du cadre fixé par le fondateur`)
   }
+  // 2e essai réel (15/09) : la règle du bétail, ajoutée à CHAQUE coupe, mettait des Bipèdes au casino et dans des cellules de
+  // bureau. Sans Bipèdes demandés : aucun humain, et le contrôle vérifie aussi qu'aucun reporter n'est resté dans l'image.
+  const lieu = structuredClone(EXEMPLE); lieu.sujets[0].coupe = 'a casino ballroom with chandeliers and empty gaming tables'
+  const cl = JSON.parse(readFileSync(join(planifier(lieu).dossier, 'entrees/images.json'), 'utf8')).find((i: any) => i.cle === 's01-coupe')
+  assert.equal(cl.sorte, 'coupe-lieu')
+  assert.match(cl.consigne, /there are no human beings anywhere/)
+  assert.doesNotMatch(cl.consigne, /livestock/)
+  assert.match(cl.consigne, /without any animal holding a microphone/)
+  assert.match(lire('images_jt.py'), /"coupe": \("interdit", "texte", "decoupe", "reporter"\),\s+"coupe-lieu": \("humain", "texte", "decoupe", "reporter"\)/)
+  // … et un plan de coupe signalé par le contrôle n'est pas monté (un faux « FASD FCD » l'avait été).
+  assert.match(lire('montage.py'), /seq\["coupe"\] not in signalees/)
 })
 
 test('⭐ une commande étrangère est REFUSÉE : personnage inconnu, rôle usurpé, texte trop long, date piégée', () => {
