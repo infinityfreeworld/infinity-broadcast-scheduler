@@ -37,6 +37,42 @@ export function getRelays(): string[] {
   return DEFAULT_RELAYS
 }
 
+/** Ce que rend une publication : qui a signé, l'identifiant, et la réponse de chaque relais. */
+export interface BilanPublication {
+  pubkey:  string
+  eventId: string
+  relays:  { url: string; ok: boolean; reason?: string }[]
+}
+
+/**
+ * Signe et publie UN évènement sur tous les relais ; réussit si AU MOINS un relais l'a accepté.
+ * Même filtrage du faux positif « connection failure » que `publishBroadcast` (cf. plus bas). Sert au
+ * programme TV (kind 30184) et à la commande du Journal de Freeworld TV (kind 30078).
+ */
+export async function publierEvenement(
+  template: { kind: number; created_at: number; tags: string[][]; content: string },
+  privKeyHex: string,
+): Promise<BilanPublication> {
+  const signed = finalizeEvent(template, hexToBytes(privKeyHex))
+  const relays = getRelays()
+  const pool = new SimplePool()
+
+  const results = await Promise.allSettled(pool.publish(relays, signed))
+  const summary = results.map((r, i) => {
+    const url = relays[i]
+    if (r.status === 'rejected') return { url, ok: false, reason: String(r.reason?.message ?? r.reason) }
+    const value = String(r.value ?? '')
+    if (value.startsWith('connection failure')) return { url, ok: false, reason: value }
+    return { url, ok: true, reason: value || 'ok' }
+  })
+  pool.close(relays)
+
+  if (!summary.some(s => s.ok)) {
+    throw new Error(`Tous les relays ont rejeté le publish:\n${summary.map(s => `- ${s.url}: ${s.reason}`).join('\n')}`)
+  }
+  return { pubkey: signed.pubkey, eventId: signed.id, relays: summary }
+}
+
 /** Construit le d-tag d'un broadcast (= clé replaceable). */
 /** Clé publique hex d'une clé privée hex (sert à reconnaître NOS émissions sur les relais). */
 export function pubkeyDe(privKeyHex: string): string {

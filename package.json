@@ -19,7 +19,10 @@
     "generate:tv:all": "tsx src/scripts/generate-tv-all.ts",
     "preview:voice": "tsx src/scripts/tv-voice-preview.ts",
     "test:tv": "tsx src/scripts/tv-voice-test.ts && tsx src/scripts/tv-contrat-test.ts",
-    "test:contrat": "tsx src/scripts/tv-contrat-test.ts"
+    "test:contrat": "tsx src/scripts/tv-contrat-test.ts",
+    "jt:commande": "tsx src/scripts/jt-freeworld.ts commande",
+    "jt:publier": "tsx src/scripts/jt-freeworld.ts publier",
+    "test:jt": "tsx --test src/lib/__tests__/jt-freeworld.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.93.0",

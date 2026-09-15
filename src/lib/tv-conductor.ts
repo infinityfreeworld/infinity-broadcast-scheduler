@@ -64,8 +64,9 @@ actualité ne dit pas combien ils étaient, le JT ne le dit pas non plus.
 
 ${CHARTE_VISUELLE}`
 
-function extractJson(text: string): unknown {
+export function extractJson(text: string): unknown {
   // Le modèle peut entourer le JSON de ``` ou de texte : on isole { … }.
+  // Exportée : le Journal de Freeworld TV lit la réponse de son rédacteur de la même façon.
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   const raw = fenced ? fenced[1] : text
   const start = raw.indexOf('{')
