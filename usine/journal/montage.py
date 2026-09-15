@@ -245,6 +245,11 @@ def main(dossier):
     TMP = tempfile.mkdtemp(prefix=".montage-", dir=os.environ.get("TMPDIR") or dossier)
     m = json.load(open(os.path.join(dossier, "montage.json"), encoding="utf-8"))
     gens = m["personnages"]
+    # Un plan de coupe est FACULTATIF : signalé par le contrôle après ses 3 graines (texte, humain, reporter…), il n'est pas
+    # monté. 2e essai réel (15/09) : un faux « FASD FCD », signalé texte=True, avait été inséré quand même.
+    controle = os.path.join(dossier, "resultats", "images", "controle.jsonl")
+    signalees = ({d["cle"] for d in (json.loads(l) for l in open(controle, encoding="utf-8") if l.strip())
+                  if any(v is True for k, v in d.items() if k not in ("cle", "graine"))} if os.path.exists(controle) else set())
     fichier = lambda sous, cle, ext: (lambda c: c if os.path.exists(c) else None)(os.path.join(dossier, "resultats", sous, f"{cle}.{ext}"))
     clip = lambda cle: fichier("clips", cle, "mp4")
     morceaux, chapitres, manquants = [], [], []
@@ -284,7 +289,7 @@ def main(dossier):
                     duplex(terrain, brut, fond_vivant(lance, f"{base}-fond.mp4"), rep["nom"], seq["lieu"], 2 * (geste % 2))
                 else:   # sans lancement, le reporter prend l'antenne en plein écran
                     plan(terrain, brut, bandeau(rep["nom"], seq["lieu"], 0.5, min(5.5, duree(terrain))), 2 * (geste % 2))
-                image = fichier("images", seq["coupe"], "png") if seq.get("coupe") else None
+                image = fichier("images", seq["coupe"], "png") if seq.get("coupe") and seq["coupe"] not in signalees else None
                 d = duree(brut)
                 debut = max(6.0 if lance else 3.0, 0.45 * d)
                 if image and debut + 3.5 <= d - 1.0:

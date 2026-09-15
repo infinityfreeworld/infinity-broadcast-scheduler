@@ -48,10 +48,15 @@ QUESTIONS = {
     # du sang ni de la nudité : le miroir de l'ÉLEVAGE, pas celui de l'esclavage humain réel.
     "interdit": ("Is there a child, a chain or shackle, a whip, a weapon, blood, a wound, or nudity anywhere in this image? "
                  "Answer only yes or no."),
+    # 2e essai réel (15/09) : Rick, micro en main, était resté dans le plan de coupe du couloir — un plan de coupe montre le LIEU.
+    "reporter": ("Is there an animal character holding a microphone, or a news reporter, anywhere in this image? "
+                 "Answer only yes or no."),
 }
 # Ce que chaque sorte d'image doit respecter : un personnage (reporter, interview) n'a AUCUN humain autour de lui ; un plan
-# de coupe peut montrer des Bipèdes, dans le cadre fixé par le fondateur.
-REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe")}
+# de coupe montre le lieu SANS le reporter — avec des Bipèdes quand sa description en demande (cadre du fondateur), sans
+# aucun humain sinon.
+REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe", "reporter"),
+          "coupe-lieu": ("humain", "texte", "decoupe", "reporter")}
 
 
 def controle(img, sorte="personnage"):

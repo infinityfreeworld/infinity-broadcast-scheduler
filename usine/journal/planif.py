@@ -51,8 +51,12 @@ BETAIL = ("If humans appear, they are livestock in this satirical world ruled by
           "in identical plain beige overalls, calm, grouped in straw pens or fenced enclosures, seen from a distance, never "
           "chained, never hurt, never naked, no children; animals in work clothes (vests, caps) supervise them.")
 COUPE = ("Using the first photograph only as a reference for the PLACE and the light, show the same place from a different camera "
-         "angle, WITHOUT the reporter and without any microphone: {coupe}. " + BETAIL + " Photorealistic documentary photograph. "
-         + SANS_TEXTE)
+         "angle, WITHOUT the reporter, without any animal holding a microphone, without any microphone: {coupe}. {regle} "
+         "Photorealistic documentary photograph. " + SANS_TEXTE)
+# BETAIL seulement quand la description DEMANDE des Bipèdes ; sinon, aucun humain. 2e essai réel (15/09) : ajoutée à chaque
+# coupe, la règle en faisait apparaître partout — au casino, devant un fast-food, et dans des cellules au fond d'un couloir de
+# bureau (« certaines scènes », avait dit le fondateur, pas toutes).
+BIPEDES = re.compile(r"\b(?:humans?|people|persons?|bipeds?|bip[eè]des?|livestock|herds?|jumpsuits?|overalls?)\b", re.I)
 COUPE_INTERDIT = re.compile(r"\b(?:child(?:ren)?|kids?|bab(?:y|ies)|toddlers?|chains?|chained|shackles?|whips?|blood|bleeding|"
                             r"naked|nude|slaves?|slavery|auctions?|guns?|weapons?|rifles?|dead|corpses?|slaughter\w*|tortur\w*)\b", re.I)
 
@@ -133,8 +137,11 @@ def main(jt_chemin, dossier):
                                 "natural mouth movements, documentary style, natural light"})
         seq = {"type": "sujet", "titre": titre, "lieu": lieu, "reporter": r, "lancement": f"{n}-lancement", "terrain": f"{n}-terrain"}
         if s.get("coupe"):   # facultatif : un plan de coupe du lieu, glissé sous la voix du reporter au montage
-            images.append({"cle": f"{n}-coupe", "sources": [f"resultats/images/{n}-terrain.png"], "graine": 170 + k, "sorte": "coupe",
-                           "consigne": COUPE.format(coupe=coupe(s.get("coupe"), f"sujet {k} : plan de coupe"))})
+            c = coupe(s.get("coupe"), f"sujet {k} : plan de coupe")
+            bipedes = bool(BIPEDES.search(c))   # des Bipèdes seulement si la description en demande
+            images.append({"cle": f"{n}-coupe", "sources": [f"resultats/images/{n}-terrain.png"], "graine": 170 + k,
+                           "sorte": "coupe" if bipedes else "coupe-lieu",
+                           "consigne": COUPE.format(coupe=c, regle=BETAIL if bipedes else SANS_HUMAIN)})
             seq["coupe"] = f"{n}-coupe"
         itw = s.get("interview")
         if itw:
