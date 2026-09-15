@@ -78,6 +78,14 @@ test('⭐ un ESSAI ne publie jamais rien : commande posée à la main, résultat
   assert.match(lire('purge.sh'), /\(-essai\)\?\$/, 'les essais sont purgés comme les vrais jours')
 })
 
+test('⭐ le budget d’une machine compte la BANDE PASSANTE et des heures au dixième (1er essai réel du 15/09)', () => {
+  const j = lire('jt-du-jour.sh')
+  assert.match(j, /heures = max\(1\.0, round\(/, 'au dixième d’heure : arrondi à l’heure, un petit essai sortait de son budget')
+  assert.match(j, /machine = round\(heures \* 1\.8 \+ 1\.0, 1\)/, 'jusqu’à 1,8 $/h, + bande passante et disque')
+  assert.ok(!/\$\(\( *HEURES/.test(j), 'des heures décimales : jamais d’arithmétique entière bash dessus')
+  assert.ok(!/base_model_int8/.test(lire('travail.sh').split('\n').filter(l => !/^\s*#/.test(l)).join('\n')), 'aucun Go inutile téléchargé')
+})
+
 test('la rétention tient la promesse faite à DATASPACE : travail 2 jours, vidéos de la forge 3 jours', () => {
   const p = lire('purge.sh')
   assert.match(p, /JT_GARDE_JOURS:-1\} days/, 'aujourd’hui et hier')

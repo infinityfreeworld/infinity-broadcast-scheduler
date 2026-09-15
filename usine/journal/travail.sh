@@ -29,7 +29,8 @@ HF=/opt/venv/hf/bin/hf
 tele_lc() {
   for i in 1 2 3 4; do
     $HF download meituan-longcat/LongCat-Video --local-dir $W/lc/LongCat-Video --include "tokenizer/*" --include "text_encoder/*" --include "vae/*" --include "*.json" &&
-    $HF download meituan-longcat/LongCat-Video-Avatar-1.5 --local-dir $W/lc/LongCat-Video-Avatar-1.5 --include "base_model/*" --include "base_model_int8/*" \
+    # Sans base_model_int8 : lc_lot.py ne s'en sert pas, et chaque Go téléchargé se paie chez certains hôtes (15/09).
+    $HF download meituan-longcat/LongCat-Video-Avatar-1.5 --local-dir $W/lc/LongCat-Video-Avatar-1.5 --include "base_model/*" \
       --include "lora/*" --include "scheduler/*" --include "vocal_separator/*" --include "whisper-large-v3/*.json" --include "whisper-large-v3/model.safetensors" --include "*.json" && return 0
     sleep $((i * 30))
   done; return 1

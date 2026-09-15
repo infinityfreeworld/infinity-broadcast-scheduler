@@ -36,12 +36,23 @@ function avec(modif: (jt: any) => void): any {
 }
 const erreursDe = (jt: unknown, opts?: { motsMax?: number }) => J.validerCommande(jt, DISTRIBUTION, opts)
 const refuse = (jt: unknown, motif: RegExp, message?: string) => assert.match(erreursDe(jt).join('\n'), motif, message)
-/** Un sujet plein : Oscar lance, parle, et interroge Gaston — chaque réplique à sa borne. */
-const sujetPlein = () => ({
-  titre: 'Un titre', lancement: `Oscar ${mots(J.MOTS_MAX.lancement - 1)}`, reporter: 'oscar', lieu: 'En direct du port',
-  decor: 'a quiet harbour at dawn', terrain: mots(J.MOTS_MAX.terrain),
-  interview: { invite: 'gaston', question: mots(J.MOTS_MAX.question), reponse: mots(J.MOTS_MAX.reponse) },
-})
+/** Les reporters de la distribution, dans l'ordre de rotation, avec le nom que le lancement doit prononcer. */
+const REPORTERS: Array<[string, string]> = [['oscar', 'Oscar'], ['tao', 'Tao'], ['pistache', 'Pistache'], ['rick', 'Rick'], ['rosa', 'Rosa']]
+/**
+ * Le i-ème sujet plein — chaque réplique à sa borne — dans un Journal VARIÉ : les reporters tournent (trois sujets
+ * au plus chacun), Gaston est interrogé aux deux premiers, Cramon au troisième (cf. INVITATIONS_MAX, REPORTAGES_MAX).
+ */
+const sujetPlein = (_?: unknown, i = 0) => {
+  const [reporter, nom] = REPORTERS[i % REPORTERS.length]
+  const invite = i < 2 ? 'gaston' : i === 2 ? 'cramon' : null
+  return {
+    titre: 'Un titre', lancement: `${nom} ${mots(J.MOTS_MAX.lancement - 1)}`, reporter, lieu: 'En direct du port',
+    decor: 'a quiet harbour at dawn', terrain: mots(J.MOTS_MAX.terrain),
+    interview: invite ? { invite, question: mots(J.MOTS_MAX.question), reponse: mots(J.MOTS_MAX.reponse) } : null,
+  }
+}
+/** Un Journal trop long pour planif.py, et SEULEMENT trop long : tous les sujets pleins, et le sommaire aussi. */
+const tropLong = () => avec(jt => { jt.sujets = Array.from({ length: J.SUJETS_MAX }, sujetPlein); jt.sommaire = mots(J.MOTS_MAX.sommaire) })
 
 /** planif.py, le vrai, sur des voix et des photos factices (les vraies ne vivent que sur le hub). */
 function planifier(jt: unknown): number | null {
@@ -138,7 +149,11 @@ test('⭐ une date mal formée ou piégée est refusée', () => {
 
 test('⭐ un à SUJETS_MAX sujets — un de plus, zéro, ou pas de liste : refusé', () => {
   // Borne relue dans planif.py (12 depuis le 15/09) : le test la suit au lieu de la figer.
-  const copies = (n: number) => Array.from({ length: n }, () => structuredClone(EXEMPLE.sujets[0]))
+  // Des copies du 1er sujet de l'exemple, reporters en rotation (trois sujets au plus chacun).
+  const copies = (n: number) => Array.from({ length: n }, (_, i) => {
+    const [reporter, nom] = REPORTERS[i % REPORTERS.length]
+    return { ...structuredClone(EXEMPLE.sujets[0]), reporter, lancement: `${nom}, ${EXEMPLE.sujets[0].lancement}` }
+  })
   const borne = `il faut 1 à ${J.SUJETS_MAX} sujets`
   refuse(avec(jt => { jt.sujets = [] }), new RegExp(`${borne} \\(0 reçus\\)`))
   refuse(avec(jt => { jt.sujets = copies(J.SUJETS_MAX + 1) }), new RegExp(`${borne} \\(${J.SUJETS_MAX + 1} reçus\\)`))
@@ -169,7 +184,7 @@ test('⭐ la réponse du rédacteur n’est plus coupée : en flux, 32 000 jeton
 })
 
 test('⭐ le Journal entier est borné (budget GPU du hub), et JT_MINUTES le resserre', () => {
-  const plein = avec(jt => { jt.sujets = Array.from({ length: 10 }, sujetPlein) })
+  const plein = tropLong()
   refuse(plein, /mots au total \(plus de 2600\)/)
   assert.ok(erreursDe(plein).every(e => /mots au total/.test(e)), 'SEUL le total dépasse : chaque réplique est à sa borne')
   assert.match(J.validerCommande(plein, DISTRIBUTION, { motsMax: 10_000 }).join(), /plus de 2600/, 'jamais au-delà de planif.py')
@@ -234,7 +249,8 @@ test('⭐ même verdict que planif.py, le vrai, sur les mêmes commandes', () =>
     ["l'exemple de l'usine", EXEMPLE, true],
     ['un terrain à la borne', avec(jt => { jt.sujets[0].terrain = mots(J.MOTS_MAX.terrain) }), true],
     ['neuf sujets pleins', avec(jt => { jt.sujets = Array.from({ length: 9 }, sujetPlein) }), true],
-    ['dix sujets pleins : le total dépasse', avec(jt => { jt.sujets = Array.from({ length: 10 }, sujetPlein) }), false],
+    ['douze sujets pleins et variés', avec(jt => { jt.sujets = Array.from({ length: 12 }, sujetPlein) }), true],
+    ['tout plein : le total dépasse', tropLong(), false],
     ['un terrain d’un mot de trop', avec(jt => { jt.sujets[0].terrain = mots(J.MOTS_MAX.terrain + 1) }), false],
     ['un reporter inconnu', avec(jt => { jt.sujets[0].reporter = 'personne' }), false],
     ['le présentateur en invité', avec(jt => { jt.sujets[1].interview.invite = 'iggy' }), false],
@@ -283,7 +299,8 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes/, 'Cramon'],
     [/UNE FOIS AU PLUS par Journal/, 'Cramon une fois'], [/langue de bois absurde/, 'la langue de bois'],
     [/ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle/, 'aucune déclaration réelle'],
-    [/Entre huit et onze sujets ; une interview dans environ un tiers/, 'le format'],
+    [/Entre dix et treize sujets, comme un vrai journal télévisé\. Trois interviews au plus/, 'le format'],
+    [/trois sujets au plus par reporter : varie-les/, 'la variété des reporters'],
     [/EN TOUTES LETTRES/, 'les nombres en lettres'], [/« l'eau » compte DEUX mots/, 'le compte de l’usine'],
     [/MAJORITAIREMENT des nouvelles POSITIVES des DERNIÈRES 24 HEURES/, 'le positif du jour'],
     [/un sujet plus ancien est permis/, 'les sujets anciens'],
