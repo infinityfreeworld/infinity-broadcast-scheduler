@@ -29,13 +29,32 @@ SANS_HUMAIN = "The only characters are animals; there are no human beings anywhe
 # « LEFT half / RIGHT half » deux photos collées. On décrit une PHOTO documentaire d'UNE scène, et l'on bannit tout texte.
 SANS_TEXTE = ("Absolutely no text anywhere: no captions, no subtitles, no news banner or lower third, no on-screen graphics, "
               "no logo, no watermark.")
-TERRAIN = ("Photorealistic documentary photograph, medium shot framed from the waist up: the {qui} from the image stands in {decor}, "
+# Des angles qui VARIENT d'un sujet à l'autre (fondateur, 15/09 : « des caméras et angles de vue dynamiques ») — toujours
+# assez près pour que LongCat anime la bouche.
+ANGLES = ("eye-level medium shot framed from the waist up",
+          "slightly low-angle medium shot framed from the waist up",
+          "three-quarter view medium shot framed from the waist up, the reporter turned slightly to the side")
+TERRAIN = ("Photorealistic documentary photograph, {angle}: the {qui} from the image stands in {decor}, "
            "holding a microphone and facing the camera, reporting live. Keep the character EXACTLY as in the image: same head, same "
            "fur or feathers, same clothes. " + SANS_HUMAIN + " Natural light. " + SANS_TEXTE)
-INTERVIEW = ("Photorealistic documentary photograph of ONE single continuous scene in {decor} (not a split screen, no frame, no border): "
-             "on the left, the {reporter} from the first image holds a microphone toward the {invite} from the second image, who stands "
-             "on the right, in the same place and the same light; both are seen from the waist up, turned three-quarters toward the "
-             "camera. Keep both characters EXACTLY as in their images. " + SANS_HUMAIN + " " + SANS_TEXTE)
+# L'interview se fabrique À PARTIR de l'image du terrain (fondateur, 15/09 : deux décors séparés par une ligne, « pas
+# cohérent ») : même lieu, même lumière, même reporter — l'invité y entre.
+INTERVIEW = ("Edit the first photograph: keep EXACTLY the same place, the same light and the same {reporter}. Widen the shot a "
+             "little so that the reporter stands on the left, turned three-quarters, holding the microphone toward the {invite} from "
+             "the second image, who now stands on the right, facing the reporter, in the same place. ONE single continuous photograph "
+             "(not a split screen, no frame, no border), both seen from the waist up. Keep both characters EXACTLY as in their "
+             "images. " + SANS_HUMAIN + " " + SANS_TEXTE)
+# Les plans de coupe (fondateur, 15/09 : « percevoir des humains » en conditions de bétail). Cadre accepté le 15/09 : le miroir
+# de l'ÉLEVAGE, jamais celui de l'esclavage humain réel — adultes seulement, de toutes origines, en combinaisons de bétail
+# identiques, calmes, en enclos, vus de loin, jamais enchaînés, blessés ni nus ; des animaux en tenue de travail les encadrent.
+BETAIL = ("If humans appear, they are livestock in this satirical world ruled by animals: adults only, of all ages and origins, "
+          "in identical plain beige overalls, calm, grouped in straw pens or fenced enclosures, seen from a distance, never "
+          "chained, never hurt, never naked, no children; animals in work clothes (vests, caps) supervise them.")
+COUPE = ("Using the first photograph only as a reference for the PLACE and the light, show the same place from a different camera "
+         "angle, WITHOUT the reporter and without any microphone: {coupe}. " + BETAIL + " Photorealistic documentary photograph. "
+         + SANS_TEXTE)
+COUPE_INTERDIT = re.compile(r"\b(?:child(?:ren)?|kids?|bab(?:y|ies)|toddlers?|chains?|chained|shackles?|whips?|blood|bleeding|"
+                            r"naked|nude|slaves?|slavery|auctions?|guns?|weapons?|rifles?|dead|corpses?|slaughter\w*|tortur\w*)\b", re.I)
 
 
 def refuse(msg):
@@ -56,6 +75,15 @@ def decor(v, champ):
     # Le décor part dans une consigne d'image EN ANGLAIS : court, sans guillemets ni retour à la ligne.
     v = texte(v, champ, 40)
     return re.sub(r"[\"{}<>]", "", v)
+
+
+def coupe(v, champ):
+    # Un plan de coupe part lui aussi dans une consigne d'image EN ANGLAIS, et jamais hors du cadre fixé par le fondateur.
+    v = decor(v, champ)
+    m = COUPE_INTERDIT.search(v)
+    if m:
+        refuse(f"{champ} : « {m.group(0)} » — hors du cadre des plans de coupe (le miroir de l'élevage, jamais de l'esclavage)")
+    return v
 
 
 def perso(cle, champ, role):
@@ -81,10 +109,12 @@ def main(jt_chemin, dossier):
         utilises.add(qui)
         return f"resultats/voix/{cle}.wav"
 
-    def plan_iggy(cle, txt):
-        plans.append({"cle": cle, "image": "entrees/persos/iggy.png", "voix": [replique(cle, "iggy", txt)], "prompt": IGGY})
+    def plan_iggy(cle, txt, image="entrees/persos/iggy.png"):
+        plans.append({"cle": cle, "image": image, "voix": [replique(cle, "iggy", txt)], "prompt": IGGY})
 
-    plan_iggy("ouverture", texte(jt.get("sommaire"), "sommaire", 120))
+    # L'ouverture part d'un Iggy cadré un peu plus LARGE : la caméra du générique finit son avancée pendant qu'il parle déjà.
+    plan_iggy("ouverture", texte(jt.get("sommaire"), "sommaire", 120),
+              "entrees/persos/iggy-ouverture.png" if DISTRIBUTION["iggy"].get("image_ouverture") else "entrees/persos/iggy.png")
     deroule.append({"type": "ouverture", "plan": "ouverture"})
     for k, s in enumerate(sujets, 1):
         if not isinstance(s, dict):
@@ -95,18 +125,24 @@ def main(jt_chemin, dossier):
         lieu = texte(s.get("lieu"), f"sujet {k} : lieu", 12)
         plan_iggy(f"{n}-lancement", texte(s.get("lancement"), f"sujet {k} : lancement"))
         images.append({"cle": f"{n}-terrain", "sources": [f"entrees/persos/{r}.png"], "graine": 7 + k,
-                       "consigne": TERRAIN.format(qui=rep["qui"], decor=decor(s.get("decor"), f"sujet {k} : décor"))})
+                       "consigne": TERRAIN.format(angle=ANGLES[(k - 1) % len(ANGLES)], qui=rep["qui"],
+                                                  decor=decor(s.get("decor"), f"sujet {k} : décor"))})
         plans.append({"cle": f"{n}-terrain", "image": f"resultats/images/{n}-terrain.png",
                       "voix": [replique(f"{n}-terrain", r, texte(s.get("terrain"), f"sujet {k} : terrain"))],
                       "prompt": f"{rep['description']} stands in {decor(s.get('decor'), 'décor')}, holds a microphone and talks to the camera, "
                                 "natural mouth movements, documentary style, natural light"})
         seq = {"type": "sujet", "titre": titre, "lieu": lieu, "reporter": r, "lancement": f"{n}-lancement", "terrain": f"{n}-terrain"}
+        if s.get("coupe"):   # facultatif : un plan de coupe du lieu, glissé sous la voix du reporter au montage
+            images.append({"cle": f"{n}-coupe", "sources": [f"resultats/images/{n}-terrain.png"], "graine": 170 + k, "sorte": "coupe",
+                           "consigne": COUPE.format(coupe=coupe(s.get("coupe"), f"sujet {k} : plan de coupe"))})
+            seq["coupe"] = f"{n}-coupe"
         itw = s.get("interview")
         if itw:
             i = itw.get("invite"); inv = perso(i, f"sujet {k} : invité", "invite")
-            d = decor(itw.get("decor") or s.get("decor"), f"sujet {k} : décor de l'interview")
-            images.append({"cle": f"{n}-interview", "sources": [f"entrees/persos/{r}.png", f"entrees/persos/{i}.png"], "graine": 70 + k,
-                           "consigne": INTERVIEW.format(decor=d, reporter=rep["qui"], invite=inv["qui"])})
+            # Même lieu que le terrain : l'image de l'interview en est TIRÉE (le « decor » propre à l'interview n'est plus lu).
+            d = decor(s.get("decor"), f"sujet {k} : décor")
+            images.append({"cle": f"{n}-interview", "sources": [f"resultats/images/{n}-terrain.png", f"entrees/persos/{i}.png"],
+                           "graine": 70 + k, "consigne": INTERVIEW.format(reporter=rep["qui"], invite=inv["qui"])})
             q = replique(f"{n}-question", r, texte(itw.get("question"), f"sujet {k} : question", 40))
             a = replique(f"{n}-reponse", i, texte(itw.get("reponse"), f"sujet {k} : réponse", 60))
             plans.append({"cle": f"{n}-interview", "image": f"resultats/images/{n}-interview.png", "voix": [q, a], "audio_type": "add",
@@ -128,9 +164,11 @@ def main(jt_chemin, dossier):
         p = DISTRIBUTION[qui]
         shutil.copyfile(os.path.join(FICHIERS, p["voix"]), os.path.join(e, "refs", f"{qui}.wav"))
         shutil.copyfile(os.path.join(FICHIERS, p["image"]), os.path.join(e, "persos", f"{qui}.png"))
+        if p.get("image_ouverture"):
+            shutil.copyfile(os.path.join(FICHIERS, p["image_ouverture"]), os.path.join(e, "persos", f"{qui}-ouverture.png"))
     for nom, contenu in (("repliques", repliques), ("images", images), ("plans", plans)):
         json.dump(contenu, open(os.path.join(e, f"{nom}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    for f in ("voix_jt.py", "images_jt.py", "lc_lot.py", "restant.py"):
+    for f in ("voix_jt.py", "nettoyage.py", "images_jt.py", "lc_lot.py", "restant.py"):
         shutil.copyfile(os.path.join(ICI, f), os.path.join(e, f))
     shutil.copyfile(os.path.join(ICI, "travail.sh"), os.path.join(dossier, "travail.sh"))
     json.dump({"date": jt["date"], "deroule": deroule, "personnages": {q: {"nom": DISTRIBUTION[q]["nom"], "role": DISTRIBUTION[q]["role"]}

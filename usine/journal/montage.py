@@ -2,17 +2,21 @@
 """Montage du Journal de FREEWORLD TV — sur le hub, dans une unité systemd bornée (CPUQuota=200 %, MemoryMax=2G).
 
 Relit montage.json (l'ordre des séquences, écrit par planif.py) et les plans rendus par l'usine (resultats/clips), et
-monte le Journal tel que le fondateur l'a validé sur les pilotes 2 et 3 (15/09/2026) :
-  générique du fondateur → fondu vers le plan LARGE du plateau → la caméra avance jusqu'à Iggy → Iggy (sommaire)
-  → pour chaque sujet : Iggy lance → duplex (le reporter en encadré sur Iggy qui écoute, puis plein écran)
-    → l'interview s'il y en a une → … → Iggy (au revoir) → le même générique à la fin.
+monte le Journal validé par le fondateur sur les pilotes 2 et 3, corrigé après le 1er essai réel (15/09/2026) :
+  générique du fondateur → fondu vers le plan LARGE du plateau → la caméra avance ; Iggy commence à parler PENDANT
+  l'avancée, qui s'achève sur lui → pour chaque sujet : Iggy lance → duplex (le reporter en encadré sur Iggy qui écoute,
+  puis plein écran), un plan de coupe du lieu sous sa voix → l'interview, la caméra suivant celui qui parle → … →
+  Iggy (au revoir) → le même générique à la fin.
+CAMÉRA VIRTUELLE (fondateur, 15/09 : « des caméras et angles de vue dynamiques ») : aucun plan fixe — chaque plan avance,
+recule ou glisse doucement ; un plan long passe, en son milieu, par un second cadrage plus serré (deux « caméras ») ;
+l'interview suit la parole, du reporter à l'invité.
 Aucune mention à l'écran (« pas besoin de mentions », fondateur, 15/09) : l'IA est signalée dans les MÉTADONNÉES.
 Un plan manquant (voix ratée, machine interrompue trop tard) SAUTE : le Journal se monte sans lui.
 Sorties dans DOSSIER : journal.mp4 (1280×720, 25 i/s, H.264 + AAC, −16 LUFS), chapitres.json (l'EPG), affiche.jpg.
 
   python3 montage.py DOSSIER_DU_TRAVAIL
 """
-import json, os, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 
 HABILLAGE = os.environ.get("JT_HABILLAGE", "/root/usine/journal/habillage")
 GENERIQUE = f"{HABILLAGE}/generique.mp4"        # la vidéo du fondateur, « Breaking news short (1) »
@@ -23,20 +27,26 @@ W, H, FPS = 1280, 720, 25
 V = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-maxrate", "3M", "-bufsize", "6M", "-pix_fmt", "yuv420p", "-r", str(FPS)]
 A = ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
 PLEIN = f"scale={W}:-2:flags=lanczos,crop={W}:{H},setsar=1,fps={FPS}"
-# Entre les phrases, Chatterbox laisse des souffles (jusqu'à −42 dB, mesuré le 15/09) : une porte de bruit baisse le
-# personnage quand il ne parle pas (idée du fondateur). Rien n'est coupé : les lèvres restent calées.
+AGRANDI = f"scale={W * 3 // 2}:{H * 3 // 2}:flags=lanczos"   # ×1,5 : la marge de précision des mouvements de caméra
+# Entre les phrases, Chatterbox laissait des souffles : ils sont retirés AVANT l'animation (nettoyage.py) ; cette porte
+# de bruit n'est plus qu'une sécurité. Rien n'est coupé : les lèvres restent calées.
 VOIX_PROPRE = "highpass=f=70,agate=threshold=0.01:ratio=8:attack=3:release=150:range=0.01:knee=2"
 # Le générique : image jusqu'à 16,4 s ; dès 15 s, fondu d'opacité vers la caméra du Journal (consigne du fondateur).
 G_BASCULE, G_NOIR = 15.0, 16.4
-# Le plan moyen d'Iggy = le plan large recadré en 681×380 à (92, 181) (cadrage B). LongCat en garde le centre
-# (1376×768 → 1331×768 → 832×480 : SSIM 0,93 contre 0,64 étiré), puis PLEIN rogne 2,5 % en hauteur : la caméra
-# finit EXACTEMENT sur cette fenêtre du plan large (SSIM 0,96, mesuré le 15/09), le fondu ne se voit pas.
-CADRE_B = (92, 181, 681, 380)
-ZOOM_DUREE, FONDU = 3.6, 0.4
-T_PARLE = G_BASCULE + ZOOM_DUREE
-T_VOIX = T_PARLE + FONDU
-MUSIQUE_SOUS_VOIX = 0.7      # la traîne du générique décroît d'elle-même ; ≈ l'écart voix/musique du pilote 2 validé
-TMP = tempfile.mkdtemp(prefix="montage-jt-", dir=os.environ.get("TMPDIR"))
+# L'ouverture (fondateur, 15/09 : Iggy doit parler AVANT la fin du zoom). Son plan animé part d'un cadrage un peu plus
+# LARGE que le plan moyen (crop B′ 48, 168, 783, 437 du plan large) : la caméra avance sur le plateau jusqu'à ce cadrage,
+# fond vers Iggy qui PARLE déjà, puis finit son avancée SUR lui (× 783/681, retour au plan moyen) pendant ses premiers mots.
+# LongCat garde le centre de l'image (SSIM 0,93) et PLEIN rogne 2,5 % en hauteur : la fin de l'avancée tombe pile.
+CADRE_OUVERTURE = (48, 168, 783, 437)
+ZOOM_DUREE, FONDU = 2.2, 0.4
+T_PARLE = G_BASCULE + ZOOM_DUREE   # le plan qui parle entre en fondu…
+T_VOIX = T_PARLE                   # … et Iggy parle dès cet instant, pendant que la caméra avance encore
+ZOOM_CLIP, ZOOM_CLIP_DUREE = 783 / 681, 2.0
+VISAGE_OUVERTURE = (0.424, 0.227)   # le visage d'Iggy dans le plan d'ouverture (après recadrage LongCat et PLEIN)
+VISAGE_IGGY = (0.424, 0.228)        # … et dans son plan moyen habituel
+VISAGE_TERRAIN = (0.5, 0.33)        # un reporter est au centre, le visage dans le tiers haut
+MUSIQUE_SOUS_VOIX = 0.7            # la traîne du générique décroît d'elle-même ; ≈ l'écart voix/musique du pilote 2 validé
+TMP = None   # les pièces du montage : main() les range DANS le dossier du jour, que purge.sh efface à J+2
 
 
 def ff(*args):
@@ -65,27 +75,61 @@ def voix(entree, d):
     return f"[{entree}]{VOIX_PROPRE},afade=t=in:d=0.04,afade=t=out:st={max(0.0, d - 0.12):.2f}:d=0.12[a]"
 
 
-def plan(clip, sortie, bandeaux=""):
-    f = f"[0:v]{PLEIN}{',' + bandeaux if bandeaux else ''}[v];{voix('0:a', duree(clip))}"
+def lisse(expr, registre=0):
+    """Départ et arrivée en douceur (smoothstep) d'une grandeur qui va de 0 à 1."""
+    return f"(st({registre},clip({expr},0,1));ld({registre})*ld({registre})*(3-2*ld({registre})))"
+
+
+def mouvement(d, geste, ancre, serre=True):
+    """La caméra virtuelle d'un plan de d secondes. geste : 0 avancer, 1 reculer (finit au cadrage d'origine), 2 glisser.
+    Un plan long (plus de 12 s) passe en son milieu par un second cadrage, plus serré sur le visage : deux « caméras »."""
+    p = lisse(f"on/{max(1, round(d * FPS))}")
+    ax, ay = ancre
+    if geste % 3 == 0:
+        z, x = f"1+0.08*{p}", f"{ax}"
+    elif geste % 3 == 1:
+        z, x = f"1.08-0.08*{p}", f"{ax}"
+    else:
+        z, x = "1.1", f"clip({ax}-0.2+0.4*{p},0,1)"
+    if serre and d > 12:
+        t1, t2 = round(d * 0.4 * FPS), round(d * 0.7 * FPS)
+        z, x = f"if(between(on,{t1},{t2}),1.22,{z})", f"if(between(on,{t1},{t2}),{ax},{x})"
+    return f"{AGRANDI},zoompan=z='{z}':x='({x})*(iw-iw/zoom)':y='{ay}*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
+
+
+def plan(clip, sortie, bandeaux="", geste=0, ancre=VISAGE_TERRAIN):
+    d = duree(clip)
+    f = f"[0:v]{PLEIN},{mouvement(d, geste, ancre)}{',' + bandeaux if bandeaux else ''}[v];{voix('0:a', d)}"
+    ff("-i", clip, "-filter_complex", f, "-map", "[v]", "-map", "[a]", *V, *A, sortie)
+
+
+def interview(clip, sortie, dq, bandeaux=""):
+    """L'interview à deux, filmée par un cadreur qui suit la parole : serré (×1,18) sur le reporter à gauche pendant la
+    question, la caméra glisse vers l'invité à droite quand il répond — ~12 % de l'image, les deux restent dans le cadre
+    (0,28 → 0,72 ne bougeait que de 6 % : invisible sur le rejeu du 15/09)."""
+    d = duree(clip)
+    x = f"(0.1+0.8*{lisse(f'(on/{FPS}-{dq:.2f})/0.8')})"
+    f = (f"[0:v]{PLEIN},{AGRANDI},zoompan=z='1.18':x='{x}*(iw-iw/zoom)':y='0.35*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}"
+         f"{',' + bandeaux if bandeaux else ''}[v];{voix('0:a', d)}")
     ff("-i", clip, "-filter_complex", f, "-map", "[v]", "-map", "[a]", *V, *A, sortie)
 
 
 def fond_vivant(clip, sortie, d=12):
-    """Fond du duplex : la DERNIÈRE image du plan d'Iggy qui précède — le raccord est parfait — sous une caméra qui avance
-    très lentement (1 → 1,05 en 4 s), pour qu'il ne paraisse pas figé. (LongCat refuse une piste de silence pur : un
-    plan « Iggy écoute » ne se calcule pas, mesuré le 15/09.)"""
+    """Fond du duplex : la DERNIÈRE image du plan d'Iggy qui précède — le raccord est parfait (ce plan finit toujours au
+    cadrage d'origine) — sous une caméra qui avance très lentement (1 → 1,05 en 4 s). (LongCat refuse une piste de silence
+    pur : un plan « Iggy écoute » ne se calcule pas, mesuré le 15/09.)"""
     image = sortie + ".png"
     ff("-sseof", "-0.3", "-i", clip, "-update", "1", image)
-    p = f"(st(0,clip(on/{4 * FPS},0,1));ld(0)*ld(0)*(3-2*ld(0)))"
     ff("-loop", "1", "-framerate", str(FPS), "-t", str(d), "-i", image, "-vf",
-       f"{PLEIN},scale={2 * W}:{2 * H}:flags=lanczos,zoompan=z='1+0.05*{p}':x='0.42*(iw-iw/zoom)':y='0.30*(ih-ih/zoom)'"
+       f"{PLEIN},{AGRANDI},zoompan=z='1+0.05*{lisse(f'on/{4 * FPS}')}':x='0.42*(iw-iw/zoom)':y='0.30*(ih-ih/zoom)'"
        f":d=1:s={W}x{H}:fps={FPS},format=yuv420p", *V, sortie)
     return sortie
 
 
-def duplex(clip, sortie, fond, nom, role, bascule=3.0):
+def duplex(clip, sortie, fond, nom, role, geste=0, bascule=3.0):
     """Le reporter dans un ENCADRÉ en haut à droite, sur le plateau où Iggy l'écoute, puis l'encadré s'agrandit jusqu'au
-    plein écran — sa voix continue d'un bout à l'autre (même mécanique que filtreDuplex de la Forge)."""
+    plein écran — sa voix continue d'un bout à l'autre (même mécanique que filtreDuplex de la Forge). La caméra du
+    terrain bouge déjà dans l'encadré."""
     d = duree(clip)
     pair = lambda n: max(2, round(n / 2) * 2)
     bw, bh = pair(W * 0.36), pair(H * 0.36)
@@ -95,7 +139,7 @@ def duplex(clip, sortie, fond, nom, role, bascule=3.0):
     S, T, P = 0.4, 0.7, bascule
     e = f"(st(0,clip((t-{P:.2f})/{T},0,1));ld(0)*ld(0)*(3-2*ld(0)))"
     entree = f"(st(1,min(t/{S},1));ld(1)*ld(1)*(3-2*ld(1)))"
-    f = (f"[1:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,format=yuv420p,"
+    f = (f"[1:v]{PLEIN},{mouvement(d, geste, VISAGE_TERRAIN)},format=yuv420p,"
          f"scale=w='trunc(({bw}+{W - bw}*{e})/2)*2':h='trunc(({bh}+{H - bh}*{e})/2)*2':eval=frame[pip];"
          f"[0:v]tpad=stop_mode=clone:stop_duration={d:.2f},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
          f"setsar=1,fps={FPS},format=yuv420p,"
@@ -106,9 +150,20 @@ def duplex(clip, sortie, fond, nom, role, bascule=3.0):
     ff("-i", fond, "-i", clip, "-filter_complex", f, "-map", "[v]", "-map", "[a]", "-t", f"{d}", *V, *A, sortie)
 
 
+def inserer_coupe(piece, image, sortie, debut, d=3.5):
+    """Le plan de coupe du lieu (fondateur, 15/09 : voir les Bipèdes, varier les angles), glissé plein écran dans la pièce
+    déjà montée : une photo qui avance doucement, fondue à l'entrée et à la sortie ; la voix du reporter continue dessous."""
+    f = (f"[1:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,"
+         f"zoompan=z='1+0.1*{lisse(f'on/{round(d * FPS)}')}':x='0.5*(iw-iw/zoom)':y='0.45*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS},"
+         f"format=yuva420p,fade=t=in:st=0:d=0.25:alpha=1,fade=t=out:st={d - 0.25:.2f}:d=0.25:alpha=1,setpts=PTS+{debut:.2f}/TB[c];"
+         f"[0:v][c]overlay=0:0:eof_action=pass,format=yuv420p[v]")
+    ff("-i", piece, "-loop", "1", "-framerate", str(FPS), "-t", f"{d}", "-i", image, "-filter_complex", f,
+       "-map", "[v]", "-map", "0:a", "-c:a", "copy", *V, sortie)
+
+
 def camera_large():
-    """zoompan qui part du plan large entier (ramené au 16:9) et finit sur la fenêtre du plan qui parle."""
-    x, y, w, _ = CADRE_B
+    """zoompan qui part du plan large entier (ramené au 16:9) et finit sur le cadrage d'ouverture d'Iggy."""
+    x, y, w, _ = CADRE_OUVERTURE
     k = w / 1376
     garde_lc = 768 * 832 / 480
     rogne = 768 * (1 - 720 / (480 * W / 832)) / 2
@@ -118,24 +173,26 @@ def camera_large():
     z_fin = lx / fw
     ax = (x0 - dx) * s / (2 * W - 2 * W / z_fin)
     ay = y0 * s / (2 * H - 2 * H / z_fin)
-    p = f"(st(0,clip(on/{ZOOM_DUREE * FPS:.0f},0,1));ld(0)*ld(0)*(3-2*ld(0)))"
     return (f"crop={lx}:768:{dx}:0,scale={2 * W}:{2 * H}:flags=lanczos,"
-            f"zoompan=z='pow({z_fin:.5f},{p})':x='{ax:.5f}*(iw-iw/zoom)':y='{ay:.5f}*(ih-ih/zoom)':d=1:s={W}x{H}:fps={FPS}")
+            f"zoompan=z='pow({z_fin:.5f},{lisse(f'on/{ZOOM_DUREE * FPS:.0f}')})':x='{ax:.5f}*(iw-iw/zoom)':y='{ay:.5f}*(ih-ih/zoom)'"
+            f":d=1:s={W}x{H}:fps={FPS}")
 
 
 def ouverture(clip, sortie, bandeaux=""):
-    """Générique → fondu d'opacité (15 s) vers le plan LARGE → la caméra avance jusqu'à Iggy → fondu vers le plan qui
-    parle → Iggy parle, la musique du générique en fondu sous sa voix."""
+    """Générique → fondu d'opacité (15 s) vers le plan LARGE → la caméra avance → fondu vers Iggy qui PARLE, cadré un peu
+    plus large → la caméra finit son avancée sur lui pendant ses premiers mots ; la musique en fondu sous sa voix."""
     d = duree(clip)
-    total = T_VOIX + d
+    total = T_PARLE + d
     b, n = G_BASCULE, G_NOIR
-    baisse = T_PARLE - 0.2
+    baisse = T_VOIX - 0.6
     vol = (f"if(lt(t,{baisse:.2f}),1,if(lt(t,{T_VOIX:.2f}),"
            f"1-{1 - MUSIQUE_SOUS_VOIX:.2f}*(t-{baisse:.2f})/{T_VOIX - baisse:.2f},{MUSIQUE_SOUS_VOIX}))")
+    ax, ay = VISAGE_OUVERTURE
+    fin_zoom = lisse(f"on/{round(ZOOM_CLIP_DUREE * FPS)}")
     f = (f"[0:v]scale={W}:{H}:flags=lanczos,fps={FPS},setsar=1,tpad=stop_mode=clone:stop_duration={total:.2f},format=yuv420p[gen];"
          f"[1:v]{camera_large()},setsar=1,format=yuva420p,fade=t=in:st=0:d={n - b:.2f}:alpha=1,setpts=PTS+{b}/TB[cam];"
-         f"[2:v]{PLEIN},tpad=start_duration={FONDU}:start_mode=clone,format=yuva420p,fade=t=in:st=0:d={FONDU}:alpha=1,"
-         f"setpts=PTS+{T_PARLE:.2f}/TB[parle];"
+         f"[2:v]{PLEIN},{AGRANDI},zoompan=z='1+{ZOOM_CLIP - 1:.4f}*{fin_zoom}':x='{ax}*(iw-iw/zoom)':y='{ay}*(ih-ih/zoom)'"
+         f":d=1:s={W}x{H}:fps={FPS},format=yuva420p,fade=t=in:st=0:d={FONDU}:alpha=1,setpts=PTS+{T_PARLE:.2f}/TB[parle];"
          f"[gen][cam]overlay=0:0:eof_action=pass[g];[g][parle]overlay=0:0:eof_action=pass,format=yuv420p"
          f"{',' + bandeaux if bandeaux else ''}[v];"
          f"[0:a]aresample=48000,volume='{vol}':eval=frame[mus];"
@@ -169,19 +226,22 @@ def assembler(morceaux, sortie):
 
 
 def main(dossier):
+    global TMP
+    # Jamais dans /tmp, où les pièces s'entassaient (~0,5 Go par Journal de 15 min, rien ne les effaçait) ; caché : rapatrier() l'ignore.
+    TMP = tempfile.mkdtemp(prefix=".montage-", dir=os.environ.get("TMPDIR") or dossier)
     m = json.load(open(os.path.join(dossier, "montage.json"), encoding="utf-8"))
     gens = m["personnages"]
-    clip = lambda cle: (lambda c: c if os.path.exists(c) else None)(os.path.join(dossier, "resultats", "clips", f"{cle}.mp4"))
-    voix_wav = lambda cle: os.path.join(dossier, "resultats", "voix", f"{cle}.wav")
+    fichier = lambda sous, cle, ext: (lambda c: c if os.path.exists(c) else None)(os.path.join(dossier, "resultats", sous, f"{cle}.{ext}"))
+    clip = lambda cle: fichier("clips", cle, "mp4")
     morceaux, chapitres, manquants = [], [], []
-    t = 0.0
+    t, geste = 0.0, 0
 
-    def ajoute(fichier, titre=None):
+    def ajoute(f, titre=None):
         nonlocal t
         if titre:
             chapitres.append({"title": titre, "startSec": round(t, 2)})
-        morceaux.append(fichier)
-        t += duree(fichier)
+        morceaux.append(f)
+        t += duree(f)
 
     for i, seq in enumerate(m["deroule"]):
         base = f"{TMP}/{i:02d}"
@@ -199,25 +259,34 @@ def main(dossier):
                 manquants.append(seq["interview"])
             rep = gens[seq["reporter"]]
             titre = seq["titre"]
-            if lance:
-                plan(lance, f"{base}-a.mp4", texte(titre, "64", "h-120", 36, quand=(0.6, min(5.0, duree(lance)))))
+            if lance:   # Iggy lance : la caméra RECULE, pour finir au cadrage d'où part le fond du duplex
+                plan(lance, f"{base}-a.mp4", texte(titre, "64", "h-120", 36, quand=(0.6, min(5.0, duree(lance)))), 1, VISAGE_IGGY)
                 ajoute(f"{base}-a.mp4", titre); titre = None
             if terrain:
+                geste += 1
+                brut = f"{base}-b0.mp4"
                 if lance:
-                    duplex(terrain, f"{base}-b.mp4", fond_vivant(lance, f"{base}-fond.mp4"), rep["nom"], seq["lieu"])
+                    duplex(terrain, brut, fond_vivant(lance, f"{base}-fond.mp4"), rep["nom"], seq["lieu"], 2 * (geste % 2))
                 else:   # sans lancement, le reporter prend l'antenne en plein écran
-                    plan(terrain, f"{base}-b.mp4", bandeau(rep["nom"], seq["lieu"], 0.5, min(5.5, duree(terrain))))
+                    plan(terrain, brut, bandeau(rep["nom"], seq["lieu"], 0.5, min(5.5, duree(terrain))), 2 * (geste % 2))
+                image = fichier("images", seq["coupe"], "png") if seq.get("coupe") else None
+                d = duree(brut)
+                debut = max(6.0 if lance else 3.0, 0.45 * d)
+                if image and debut + 3.5 <= d - 1.0:
+                    inserer_coupe(brut, image, f"{base}-b.mp4", debut)
+                else:
+                    os.replace(brut, f"{base}-b.mp4")
                 ajoute(f"{base}-b.mp4", titre); titre = None
             if itw:
-                dq = duree(voix_wav(f"{seq['interview'][:3]}-question"))
+                dq = duree(os.path.join(dossier, "resultats", "voix", f"{seq['interview'][:3]}-question.wav"))
                 inv = gens[seq["invite"]]
-                plan(itw, f"{base}-c.mp4", bandeau(rep["nom"], rep["role"], 0.5, min(5.0, dq)) + ","
-                     + bandeau(inv["nom"], inv["role"], dq + 0.4, dq + 5.0))
+                interview(itw, f"{base}-c.mp4", dq, bandeau(rep["nom"], rep["role"], 0.5, min(5.0, dq)) + ","
+                          + bandeau(inv["nom"], inv["role"], dq + 0.4, dq + 5.0))
                 ajoute(f"{base}-c.mp4", titre)
         elif seq["type"] == "fermeture":
             c = clip(seq["plan"])
             if c:
-                plan(c, f"{base}.mp4"); ajoute(f"{base}.mp4", "À demain")
+                plan(c, f"{base}.mp4", "", 0, VISAGE_IGGY); ajoute(f"{base}.mp4", "À demain")
             else:
                 manquants.append(seq["plan"])
             generique_seul(f"{base}-g.mp4"); ajoute(f"{base}-g.mp4")
@@ -230,6 +299,7 @@ def main(dossier):
               open(os.path.join(dossier, "chapitres.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"{sortie} : {total / 60:.1f} min, {len(chapitres)} chapitre(s), {os.path.getsize(sortie) / 1e6:.0f} Mo"
           + (f" · ⚠ plans manquants : {manquants}" if manquants else ""))
+    shutil.rmtree(TMP, ignore_errors=True)   # un échec, lui, garde ses pièces pour l'enquête (effacées avec le jour)
 
 
 if __name__ == "__main__":

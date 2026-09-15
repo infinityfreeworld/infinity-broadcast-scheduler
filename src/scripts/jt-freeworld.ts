@@ -92,11 +92,11 @@ async function rassemblerMatiere(): Promise<string> {
  * au lieu de 15). Trois essais au plus ; au dernier, un Journal court mais valide part quand même.
  */
 async function rediger(p: {
-  apiKey: string; model: string; date: string; minutes: number; distribution: Distribution; matiere: string
+  apiKey: string; model: string; date: string; minutes: number; distribution: Distribution; matiere: string; consigne?: string
 }): Promise<CommandeJT> {
   const systemPrompt = consigneConducteur(lireExemple())
   const objectif = objectifMots(p.minutes)
-  const messages: LLMMessage[] = [{ role: 'user', content: messageDuJour({ date: p.date, minutes: p.minutes, matiere: p.matiere }) }]
+  const messages: LLMMessage[] = [{ role: 'user', content: messageDuJour({ date: p.date, minutes: p.minutes, matiere: p.matiere, consigne: p.consigne }) }]
   let erreurs: string[] = []
   for (let essai = 1; essai <= ESSAIS_REDACTION; essai++) {
     console.log(`\n   ✍️  Rédaction — ${p.model}, essai ${essai}/${ESSAIS_REDACTION}…`)
@@ -174,7 +174,10 @@ async function commande(): Promise<void> {
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY manquant')
     const model = process.env.ANTHROPIC_MODEL_JT || MODELE_JT_DEFAUT
     console.log(`   ⏱  ${minutes} min visées → ~${objectifMots(minutes)} mots (plafond ${plafondMots(minutes)})`)
-    jt = await rediger({ apiKey, model, date, minutes, distribution, matiere: await rassemblerMatiere() })
+    // La consigne du rédacteur en chef (entrée « consigne » du workflow) : un thème imposé, dans les règles.
+    const consigne = (process.env.JT_CONSIGNE ?? '').trim()
+    if (consigne) console.log(`   🎯 consigne du rédacteur en chef : ${consigne.slice(0, 200)}`)
+    jt = await rediger({ apiKey, model, date, minutes, distribution, matiere: await rassemblerMatiere(), consigne })
   }
 
   const mots = motsCommande(jt)

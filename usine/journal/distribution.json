@@ -1,7 +1,8 @@
 {
   "_": "Les personnages du Journal de FREEWORLD TV : voix INVENTÉES (Qwen3-TTS VoiceDesign reprises par Chatterbox) et photos validées par le fondateur (casting des 14-15/09/2026). Les fichiers vivent sur le hub (/root/usine/journal/distribution/), jamais dans ce dépôt public. « emplois » dit ce que le conducteur peut leur confier ; « qui » nomme le personnage dans les consignes d'image, « description » dans celles de LongCat. Réglages Chatterbox des castings : présentateur posé 0,5/0,45, reporters et invités loufoques 0,8/0,3.",
   "_hulotte": "Professeure Hulotte (chouette experte, voix 3) : AUCUNE photo choisie au casting — absente du Journal tant que le fondateur n'en a pas validé une.",
-  "iggy": {"nom": "Iggy Varan", "role": "Le Journal de Freeworld TV", "emplois": ["presentateur"], "voix": "iggy.wav", "image": "iggy.png",
+  "_ouverture": "Iggy a une 2e image, image_ouverture : le même plan large recadré un peu plus LARGE (48, 168, 783, 437). La caméra du générique finit son avancée sur Iggy qui parle déjà (fondateur, 15/09 : il doit parler avant la fin du zoom).",
+  "iggy": {"nom": "Iggy Varan", "role": "Le Journal de Freeworld TV", "emplois": ["presentateur"], "voix": "iggy.wav", "image": "iggy.png", "image_ouverture": "iggy-ouverture.png",
            "exa": 0.5, "cfg": 0.45, "qui": "lizard-headed news anchor",
            "description": "a news anchor with a human body in a navy blue suit and the head of a realistic green iguana"},
   "oscar": {"nom": "Oscar", "role": "Envoyé spécial", "emplois": ["reporter"], "voix": "oscar.wav", "image": "oscar.png",
@@ -19,7 +20,7 @@
   "pistache": {"nom": "Pistache", "role": "Reporter", "emplois": ["reporter"], "voix": "pistache.wav", "image": "pistache.png",
                "exa": 0.8, "cfg": 0.3, "qui": "red squirrel reporter",
                "description": "a red squirrel reporter in a green jacket, with a big bushy red tail and cheeks full of hazelnuts"},
-  "gaston": {"nom": "Gaston Lardon", "role": "Éleveur", "emplois": ["invite"], "voix": "gaston.wav", "image": "gaston.png",
+  "gaston": {"nom": "Gaston Lardon", "role": "Éleveur de Bipèdes", "emplois": ["invite"], "voix": "gaston.wav", "image": "gaston.png",
              "exa": 0.8, "cfg": 0.3, "qui": "pig farmer",
              "description": "a pig farmer in blue overalls and green rubber boots, with a pink snout"},
   "cramon": {"nom": "Emmanuel Cramon", "role": "Président des moutons jaunes", "emplois": ["invite"], "voix": "cramon.wav", "image": "cramon.png",

@@ -2,19 +2,30 @@
 """Voix du Journal de FREEWORLD TV — Chatterbox 0.1.7 multilingue (= la production), sur la machine louée.
 
 Chaque réplique de entrees/repliques.json est dite avec la voix INVENTÉE de son personnage (référence .wav du casting).
-REPRISE : une réplique déjà rendue (resultats/voix/<clé>.wav) n'est pas refaite — une machine interruptible peut être
-reprise en cours de route, l'usine rapporte alors sur la machine suivante tout ce qui était fini.
-Deux gardes, 5 essais au plus, le meilleur essai est gardé :
-  · la DURÉE (leçon de la radio, 14/09) : un rendu emballé (× 2) ou coupé (moins de la moitié) est refait ;
-  · l'ÉCOUTE : Whisper relit la phrase ; plus d'un mot sur quatre de travers → refaite.
+REPRISE : une réplique déjà rendue (resultats/voix/<clé>.wav) n'est pas refaite (machines interruptibles).
+
+CONTRÔLE QUALITÉ EN AMONT (fondateur, 15/09/2026 : « des moments de vide avec des artefacts sonores »). Mesuré sur le 1er
+essai : 13 s de pauses NON silencieuses sur 98 s de voix (souffles, marmonnements entre −55 et −30 dB, que la porte de
+bruit du montage laisse passer), et une réplique de 15 s dite en 27 s. Tout se corrige ICI, avant l'animation — les lèvres
+suivent ce son-là : le retoucher après le montage les décalerait.
+  1. PHRASE PAR PHRASE : Chatterbox s'emballe bien moins sur une phrase courte. Chaque phrase a ses gardes — la durée
+     (0,5 à 1,6 fois l'attendu, mesurée APRÈS nettoyage) et l'écoute (Whisper : au plus un mot sur quatre de travers) —,
+     5 essais, le meilleur gardé.
+  2. NETTOYAGE (nettoyage.py, numpy seul, éprouvé sur les voix réelles du 1er essai) : silences de tête et de queue coupés ;
+     toute pause de plus de 0,18 s devient un VRAI silence, de 0,30 s au plus ; les phrases sont recollées avec une pause
+     propre (0,28 s, 0,40 s après « ? » et « ! »).
+  3. RAPPORT : resultats/voix/rapport.jsonl, une ligne par réplique (durée, phrases, essais, pauses nettoyées, bruit
+     restant, mots de travers, « douteux ») ; l'usine alerte sur ce qui reste douteux.
 
   repliques.json : [{"cle": "s01-lancement", "texte": "…", "voix": "entrees/refs/iggy.wav", "exa": 0.5, "cfg": 0.45}]
 """
-import json, os, re, sys, time, unicodedata
+import json, math, os, re, sys, time, unicodedata
 
 import torch
 import torchaudio as ta
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+
+import nettoyage
 
 REPS = json.load(open("entrees/repliques.json", encoding="utf-8"))
 os.makedirs("resultats/voix", exist_ok=True)
@@ -57,32 +68,89 @@ def ecart(ref, lu):
     return d[len(b)] / max(1, len(a))
 
 
-ratees = []
-for r in A_FAIRE:
-    cible = len(mots(r["texte"])) * 0.36
+def phrases(texte):
+    """Découpée aux fins de phrase ; un fragment de moins de trois mots rejoint la phrase suivante."""
+    sortie = []
+    for m in (m.strip() for m in re.split(r"(?<=[.!?…])\s+", texte.strip())):
+        if not m:
+            continue
+        if sortie and len(mots(sortie[-1])) < 3:
+            sortie[-1] = f"{sortie[-1]} {m}"
+        else:
+            sortie.append(m)
+    return sortie or [texte]
+
+
+def nettoyer(wav, sr):
+    """nettoyage.nettoyer (numpy) sur un tenseur : (son, pauses nettoyées, secondes de pause retirées)."""
+    son, n, retire = nettoyage.nettoyer(wav.reshape(-1).float().cpu().numpy(), sr)
+    return torch.from_numpy(son).unsqueeze(0), n, retire
+
+
+def bruit_restant(wav, sr):
+    return nettoyage.bruit_restant(wav.reshape(-1).float().cpu().numpy(), sr)
+
+
+def ecouter(wav, texte):
+    if ecoute is None:
+        return None
+    lu = ecoute({"raw": wav.reshape(-1).cpu().numpy(), "sampling_rate": tts.sr}, generate_kwargs={"language": "french"})["text"]
+    return ecart(texte, lu)
+
+
+def dire(phrase, r):
+    """Une phrase : 5 essais au plus, le meilleur gardé. Rend un dict (son, note, essais, nettoyées, retiré, faux)."""
+    cible = max(0.8, len(mots(phrase)) * 0.36)
     meilleur = None
     for essai in range(1, 6):
-        torch.manual_seed(100 * essai + len(r["cle"]))
-        wav = tts.generate(r["texte"], language_id="fr", audio_prompt_path=r["voix"], exaggeration=r["exa"],
-                           cfg_weight=r["cfg"], temperature=r.get("temp", 0.8))
-        d = wav.shape[-1] / tts.sr
-        bonne_duree = 0.5 <= d / cible <= 2.0
-        faux = None
-        if ecoute is not None and bonne_duree:
-            lu = ecoute({"raw": wav.squeeze(0).cpu().numpy(), "sampling_rate": tts.sr}, generate_kwargs={"language": "french"})["text"]
-            faux = ecart(r["texte"], lu)
-        note = (0 if bonne_duree else 10) + (faux or 0)
-        print(f"voix {r['cle']} essai {essai} : {d:.1f} s pour {cible:.1f} attendues, mots de travers "
-              f"{'?' if faux is None else f'{faux:.0%}'}", flush=True)
-        if meilleur is None or note < meilleur[0]:
-            meilleur = (note, wav)
-        if bonne_duree and (faux is None or faux <= 0.25):
+        torch.manual_seed(100 * essai + len(phrase))
+        brut = tts.generate(phrase, language_id="fr", audio_prompt_path=r["voix"], exaggeration=r["exa"],
+                            cfg_weight=r["cfg"], temperature=r.get("temp", 0.8)).detach().cpu()
+        son, nettoyees, retire = nettoyer(brut, tts.sr)
+        d = son.shape[-1] / tts.sr
+        bonne = 0.5 <= d / cible <= 1.6
+        faux = ecouter(son, phrase) if bonne else None
+        note = (0 if bonne else 10) + (faux or 0) + 0.1 * abs(math.log(max(d, 0.01) / cible))
+        if meilleur is None or note < meilleur["note"]:
+            meilleur = {"son": son, "note": note, "essais": essai, "nettoyees": nettoyees, "retire": retire, "faux": faux}
+        if bonne and (faux is None or faux <= 0.25):
             break
-    if meilleur[0] >= 10:
+    return meilleur
+
+
+ratees = []
+rapport = open("resultats/voix/rapport.jsonl", "a", encoding="utf-8")
+for r in A_FAIRE:
+    morceaux, bilan, echec = [], [], False
+    liste = phrases(r["texte"])
+    for k, ph in enumerate(liste):
+        p = dire(ph, r)
+        bilan.append(p)
+        if p["note"] >= 10:
+            echec = True
+            break
+        morceaux.append(p["son"])
+        if k < len(liste) - 1:   # la pause entre deux phrases : propre, et plus longue après une question ou une exclamation
+            morceaux.append(torch.zeros(1, int((0.40 if ph.rstrip().endswith(("?", "!")) else 0.28) * tts.sr)))
+    if echec:
         ratees.append(r["cle"])
-        print(f"🔴 voix {r['cle']} : durée toujours fausse après 5 essais — son plan sautera", flush=True)
+        print(f"🔴 voix {r['cle']} : une phrase reste emballée ou coupée après 5 essais — son plan sautera", flush=True)
+        rapport.write(json.dumps({"cle": r["cle"], "ok": False, "douteux": True}, ensure_ascii=False) + "\n"); rapport.flush()
         continue
+    ligne = torch.cat(morceaux, dim=1)
+    d = ligne.shape[-1] / tts.sr
+    attendu = len(mots(r["texte"])) * 0.36
+    reste = bruit_restant(ligne, tts.sr)
+    faux = ecouter(ligne, r["texte"])
+    douteux = (faux is not None and faux > 0.25) or reste > 0.3 or not 0.6 <= d / max(attendu, 0.8) <= 1.5
+    note = {"cle": r["cle"], "ok": True, "duree": round(d, 2), "attendu": round(attendu, 2), "phrases": len(liste),
+            "essais": [p["essais"] for p in bilan], "pauses_nettoyees": sum(p["nettoyees"] for p in bilan),
+            "secondes_retirees": round(sum(p["retire"] for p in bilan), 2), "bruit_restant": reste,
+            "mots_de_travers": None if faux is None else round(faux, 2), "douteux": douteux}
+    print(f"voix {r['cle']} : {d:.1f} s pour {attendu:.1f} attendues, {len(liste)} phrase(s), essais {note['essais']}, "
+          f"{note['pauses_nettoyees']} pause(s) nettoyée(s), bruit restant {reste} s{' — DOUTEUX' if douteux else ''}", flush=True)
+    rapport.write(json.dumps(note, ensure_ascii=False) + "\n"); rapport.flush()
     partiel = f"resultats/voix/.{r['cle']}.wav"   # renommé seulement une fois écrit en entier (reprise sûre)
-    ta.save(partiel, meilleur[1], tts.sr)
+    ta.save(partiel, ligne, tts.sr)
     os.replace(partiel, f"resultats/voix/{r['cle']}.wav")
 print(f"voix : fini, {len(ratees)} ratée(s) {ratees}", flush=True)
