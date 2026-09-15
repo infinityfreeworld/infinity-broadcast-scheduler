@@ -284,6 +284,8 @@ test('⭐ la consigne du rédacteur en chef (un thème imposé) passe EN TÊTE d
   const wf = lire('.github/workflows/jt-freeworld.yml')
   assert.match(wf, /JT_CONSIGNE: +\$\{\{ github\.event\.inputs\.consigne \}\}/)
   assert.equal(wf.match(/github\.event\.inputs\.consigne/g)?.length, 1, 'texte libre : par l’environnement seulement, jamais dans un script')
+  // La durée d'un essai se choisit au lancement (ex. 5 min) sans toucher la variable du dépôt, qui règle le quotidien.
+  assert.match(wf, /JT_MINUTES: +\$\{\{ github\.event\.inputs\.minutes \|\| vars\.JT_MINUTES \|\| '' \}\}/)
 })
 
 test('une interview mal formée est refusée — un objet complet, ou null', () => {
