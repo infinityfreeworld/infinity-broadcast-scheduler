@@ -11,7 +11,8 @@ LIMITE_FORGE=$(date -u -d "-${JT_GARDE_FORGE:-3} days" +%F)
 for d in "$ICI"/jours/*/; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
-  [[ "$n" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [[ "$n" < "$LIMITE_JOURS" ]] && { rm -rf -- "$d"; echo "dossier du $n effacé"; }
+  # Les essais (jours/<date>-essai) suivent la même règle que les vrais jours.
+  [[ "$n" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(-essai)?$ ]] && [[ "${n:0:10}" < "$LIMITE_JOURS" ]] && { rm -rf -- "$d"; echo "dossier du $n effacé"; }
 done
 [ -f "$ICI/depots.jsonl" ] || exit 0
 HDR=$(mktemp); chmod 600 "$HDR"; trap 'rm -f "$HDR" "$ICI/depots.reste"' EXIT

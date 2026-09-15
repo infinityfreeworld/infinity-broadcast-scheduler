@@ -9,11 +9,14 @@
 #      habituel en images garde le canal 1 ce soir-là — l'antenne n'est jamais vide.
 # Toute anomalie part sur le canal d'alerte. Un fichier PAUSE à côté de ce script arrête tout (le fondateur garde la main).
 #
-#   jt-du-jour.sh [AAAA-MM-JJ]        (défaut : aujourd'hui, UTC)
+#   jt-du-jour.sh [AAAA-MM-JJ]                  (défaut : aujourd'hui, UTC)
+#   JT_ESSAI=1 jt-du-jour.sh AAAA-MM-JJ         ESSAI : commande posée à la main dans jours/<date>-essai/jt.json,
+#                                               tout est fabriqué et monté, RIEN n'est publié (ni résultat, ni antenne)
 set -u
 ICI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DATE=${1:-$(date -u +%F)}
-J="$ICI/jours/$DATE"; T="$J/travail"; mkdir -p "$J"
+ESSAI=${JT_ESSAI:-0}; SUFFIXE=""; [ "$ESSAI" = 1 ] && SUFFIXE="-essai"
+J="$ICI/jours/$DATE$SUFFIXE"; T="$J/travail"; mkdir -p "$J"
 NODE=${JT_NODE:-/opt/node22/bin/node}
 ALERTE=${USINE_ALERTE:-/opt/nostr-relay-platform/scripts/alerte-canal.sh}
 FORGE=${JT_FORGE:-http://127.0.0.1:5400}
@@ -23,20 +26,25 @@ BUDGET_JOUR_MAX=${JT_BUDGET_JOUR_MAX:-12}
 FILTRE=${JT_FILTRE:-'{"gpu_ram":{"gte":79000},"compute_cap":{"gte":900,"lte":900},"cpu_ram":{"gte":128000}}'}
 journal() { echo "$(date -u +%FT%TZ) $*" | tee -a "$J/ETAT"; }
 alerte() { [ -x "$ALERTE" ] && "$ALERTE" "$1" "$2" "${3:-default}" >/dev/null 2>&1 || true; }
-echec() { journal "🔴 $1"; alerte "Journal Freeworld $DATE : $1" "${2:-Voir $J/ETAT sur le hub.}" "${3:-default}"; exit 1; }
+echec() { journal "🔴 $1"; alerte "Journal Freeworld $DATE$SUFFIXE : $1" "${2:-Voir $J/ETAT sur le hub.}" "${3:-default}"; exit 1; }
 [ -f "$ICI/PAUSE" ] && { journal "PAUSE : aucun Journal aujourd'hui ($ICI/PAUSE)"; exit 0; }
 [ -f "$J/resultat.json" ] && { journal "déjà fait aujourd'hui (résultat présent)"; exit 0; }
 journal "DEBUT du Journal du $DATE"
 
 # ── 1) La commande du jour ──
-while :; do
-  "$NODE" "$ICI/nostr-jt.mjs" commande "$DATE" "$J/jt.json" >> "$J/ETAT" 2>&1; c=$?
-  [ $c = 0 ] && break
-  [ $c = 2 ] || echec "commande du jour illisible ou refusée (code $c)"
-  [ "$(date -u +%H:%M)" \< "$ATTENTE_FIN" ] || echec "aucune commande reçue avant $ATTENTE_FIN UTC" \
-    "Le générateur n'a rien publié ce matin : le JT habituel en images gardera le canal 1 ce soir."
-  sleep 300
-done
+if [ "$ESSAI" = 1 ]; then
+  [ -f "$J/jt.json" ] || echec "essai : poser d'abord la commande dans $J/jt.json"
+  journal "ESSAI : commande posée à la main, rien ne sera publié"
+else
+  while :; do
+    "$NODE" "$ICI/nostr-jt.mjs" commande "$DATE" "$J/jt.json" >> "$J/ETAT" 2>&1; c=$?
+    [ $c = 0 ] && break
+    [ $c = 2 ] || echec "commande du jour illisible ou refusée (code $c)"
+    [ "$(date -u +%H:%M)" \< "$ATTENTE_FIN" ] || echec "aucune commande reçue avant $ATTENTE_FIN UTC" \
+      "Le générateur n'a rien publié ce matin : le JT habituel en images gardera le canal 1 ce soir."
+    sleep 300
+  done
+fi
 
 # ── 2) Le travail d'usine (les résultats d'un passage précédent du même jour sont gardés : reprise) ──
 python3 "$ICI/planif.py" "$J/jt.json" "$T" >> "$J/ETAT" 2>&1 || echec "commande refusée par le planificateur" "$(tail -1 "$J/ETAT")"
@@ -55,7 +63,7 @@ journal "travail : $MOTS mots, ~$HEURES h de carte, budget $BM \$ par machine et
 
 # ── 3) La fabrication, sur machines interruptibles ──
 for essai in 1 2 3; do
-  USINE_DOSSIER="$T" USINE_ETIQUETTE="usine-jt-$DATE" USINE_INTERRUPTIBLE=1 USINE_REPRISES=4 \
+  USINE_DOSSIER="$T" USINE_ETIQUETTE="usine-jt$SUFFIXE-$DATE" USINE_INTERRUPTIBLE=1 USINE_REPRISES=4 \
   USINE_BUDGET="$BM" USINE_BUDGET_TOTAL="$BT" USINE_HEURES="$HEURES" USINE_GO=150 USINE_DISQUE=300 \
   USINE_ECHEANCE_MIN=$(( HEURES * 60 + 60 )) USINE_ECHEANCE_TOTALE_MIN=${JT_ECHEANCE_TOTALE_MIN:-720} USINE_FILTRE="$FILTRE" \
     bash "$ICI/../orchestre.sh" >> "$J/usine.log" 2>&1
@@ -102,9 +110,13 @@ if a.get("url"):
     r["poster"] = a.get("ipfs") or a["url"]
 print(json.dumps(r, ensure_ascii=False))
 PY
-"$NODE" "$ICI/nostr-jt.mjs" resultat "$DATE" "$J/resultat.tmp" >> "$J/ETAT" 2>&1 || echec "résultat non publié sur les relais"
-mv "$J/resultat.tmp" "$J/resultat.json"
+if [ "$ESSAI" = 1 ]; then
+  mv "$J/resultat.tmp" "$J/resultat.json"; journal "ESSAI : résultat écrit et PAS publié ($J/resultat.json)"
+else
+  "$NODE" "$ICI/nostr-jt.mjs" resultat "$DATE" "$J/resultat.tmp" >> "$J/ETAT" 2>&1 || echec "résultat non publié sur les relais"
+  mv "$J/resultat.tmp" "$J/resultat.json"
+fi
 MANQUE=$(python3 -c "import json; print(', '.join(json.load(open('$T/chapitres.json'))['manquants']))")
 HUMAIN=$(grep -h '"humain": true' "$T"/resultats/images/controle.jsonl 2>/dev/null | cut -d'"' -f4 | tr '\n' ' ')
-[ -n "$MANQUE$HUMAIN" ] && alerte "Journal Freeworld $DATE : à regarder" "Plans manquants : ${MANQUE:-aucun}. Images signalées « humain » : ${HUMAIN:-aucune}." default
+[ -n "$MANQUE$HUMAIN" ] && alerte "Journal Freeworld $DATE$SUFFIXE : à regarder" "Plans manquants : ${MANQUE:-aucun}. Images signalées « humain » : ${HUMAIN:-aucune}." default
 journal "✅ Journal du $DATE prêt et annoncé au générateur ($(python3 -c "import json; print(round(json.load(open('$T/chapitres.json'))['durationSec'] / 60, 1))") min)"
