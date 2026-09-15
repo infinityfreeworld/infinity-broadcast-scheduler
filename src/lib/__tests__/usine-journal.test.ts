@@ -106,6 +106,13 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   assert.equal(itw.audio_type, 'add')
   const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
   for (const i of images) assert.match(i.consigne, /there are no human beings anywhere/, `${i.cle} : la règle des humains dans CHAQUE consigne`)
+  // 1er essai réel (15/09) : « TV news interview » avait fait dessiner un faux bandeau en lettres illisibles, sur deux photos collées.
+  for (const i of images) assert.match(i.consigne, /Absolutely no text anywhere/, `${i.cle} : aucun texte`)
+  for (const i of images) assert.ok(!/TV news/i.test(i.consigne), `${i.cle} : « TV news » appelle des bandeaux`)
+  assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous scene .*not a split screen/)
+  const verif = lire('images_jt.py')
+  for (const regle of ['"humain"', '"texte"', '"decoupe"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }

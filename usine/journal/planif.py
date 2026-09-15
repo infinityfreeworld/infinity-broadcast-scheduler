@@ -25,13 +25,17 @@ IGGY = ("A news anchor with a human body in a navy blue suit, light blue shirt a
         "with a spiky crest and orange eyes, sits behind a long light wood news desk in a TV studio with indoor trees and a living "
         "plant wall, talks to the camera, natural mouth movements, studio lighting")
 SANS_HUMAIN = "The only characters are animals; there are no human beings anywhere in the image."
-TERRAIN = ("Photorealistic TV news report on location, medium shot framed from the waist up: the {qui} from the image stands in {decor}, "
-           "holding a microphone and facing the camera, as if reporting live. Keep the character EXACTLY as in the image: same head, same "
-           "fur or feathers, same clothes. " + SANS_HUMAIN + " Natural light, documentary style, no text, no logo, no watermark.")
-INTERVIEW = ("Photorealistic TV news interview on location in {decor}: on the LEFT half of the image, the {reporter} from the first image "
-             "holds a microphone toward the {invite} from the second image, who stands on the RIGHT half; both are seen from the waist up, "
-             "turned three-quarters toward the camera. Keep both characters EXACTLY as in their images. " + SANS_HUMAIN
-             + " Documentary style, no text, no logo, no watermark.")
+# 1er essai réel (15/09) : « TV news interview » a fait dessiner un FAUX bandeau d'information en lettres illisibles, et
+# « LEFT half / RIGHT half » deux photos collées. On décrit une PHOTO documentaire d'UNE scène, et l'on bannit tout texte.
+SANS_TEXTE = ("Absolutely no text anywhere: no captions, no subtitles, no news banner or lower third, no on-screen graphics, "
+              "no logo, no watermark.")
+TERRAIN = ("Photorealistic documentary photograph, medium shot framed from the waist up: the {qui} from the image stands in {decor}, "
+           "holding a microphone and facing the camera, reporting live. Keep the character EXACTLY as in the image: same head, same "
+           "fur or feathers, same clothes. " + SANS_HUMAIN + " Natural light. " + SANS_TEXTE)
+INTERVIEW = ("Photorealistic documentary photograph of ONE single continuous scene in {decor} (not a split screen, no frame, no border): "
+             "on the left, the {reporter} from the first image holds a microphone toward the {invite} from the second image, who stands "
+             "on the right, in the same place and the same light; both are seen from the waist up, turned three-quarters toward the "
+             "camera. Keep both characters EXACTLY as in their images. " + SANS_HUMAIN + " " + SANS_TEXTE)
 
 
 def refuse(msg):

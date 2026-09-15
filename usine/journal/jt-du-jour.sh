@@ -121,6 +121,14 @@ else
   mv "$J/resultat.tmp" "$J/resultat.json"
 fi
 MANQUE=$(python3 -c "import json; print(', '.join(json.load(open('$T/chapitres.json'))['manquants']))")
-HUMAIN=$(grep -h '"humain": true' "$T"/resultats/images/controle.jsonl 2>/dev/null | cut -d'"' -f4 | tr '\n' ' ')
-[ -n "$MANQUE$HUMAIN" ] && alerte "Journal Freeworld $DATE$SUFFIXE : à regarder" "Plans manquants : ${MANQUE:-aucun}. Images signalées « humain » : ${HUMAIN:-aucune}." default
+SIGNALEES=$(python3 - "$T/resultats/images/controle.jsonl" 2>/dev/null <<'PY'
+import json, sys
+for ligne in open(sys.argv[1], encoding="utf-8"):
+    d = json.loads(ligne)
+    fautes = [k for k in ("humain", "texte", "decoupe") if d.get(k) is True]
+    if fautes:
+        print(f"{d['cle']} ({', '.join(fautes)})", end=" ")
+PY
+)
+[ -n "$MANQUE$SIGNALEES" ] && alerte "Journal Freeworld $DATE$SUFFIXE : à regarder" "Plans manquants : ${MANQUE:-aucun}. Images signalées : ${SIGNALEES:-aucune}." default
 journal "✅ Journal du $DATE prêt et annoncé au générateur ($(python3 -c "import json; print(round(json.load(open('$T/chapitres.json'))['durationSec'] / 60, 1))") min)"
