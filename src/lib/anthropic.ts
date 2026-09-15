@@ -17,7 +17,7 @@ export interface LLMCallOpts {
   systemPrompt:  string
   messages:      LLMMessage[]
   maxTokens?:    number                  // défaut 400 (3 phrases courtes)
-  temperature?:  number                  // défaut 0.85 (vivant)
+  temperature?:  number                  // défaut 0.85 (vivant) — jamais envoyée aux modèles qui la refusent
 }
 
 export interface LLMResponse {
@@ -30,6 +30,16 @@ const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
 const MAX_ATTEMPTS = 3
 const BASE_BACKOFF_MS = 1500
+
+/**
+ * Les modèles récents REFUSENT les paramètres d'échantillonnage : `temperature` y rend une erreur 400
+ * (Claude Sonnet 5, Opus 5, Opus 4.7 et 4.8, Fable, Mythos). Le Journal de Freeworld TV écrit avec
+ * Sonnet 5 (15/09/2026) : sans ce tri, chaque appel échouait avant d'avoir écrit un mot. Les modèles
+ * plus anciens — Haiku 4.5, celui de la radio et du JT en images — gardent leur température.
+ */
+export function accepteTemperature(model: string): boolean {
+  return !/^claude-(?:sonnet-5|opus-5|opus-4-[78]|fable|mythos)(?:$|-)/.test(model)
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
@@ -52,16 +62,17 @@ function isRetryable(err: unknown): boolean {
 
 export async function callAnthropic(opts: LLMCallOpts): Promise<LLMResponse> {
   const client = new Anthropic({ apiKey: opts.apiKey })
+  const model = opts.model ?? DEFAULT_MODEL
 
   let lastErr: unknown
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const resp = await client.messages.create({
-        model:       opts.model ?? DEFAULT_MODEL,
+        model,
         system:      opts.systemPrompt,
         messages:    opts.messages,
         max_tokens:  opts.maxTokens ?? 400,
-        temperature: opts.temperature ?? 0.85,
+        ...(accepteTemperature(model) ? { temperature: opts.temperature ?? 0.85 } : {}),
       })
 
       const text = resp.content

@@ -1,0 +1,160 @@
+name: Journal de Freeworld TV
+
+# 🦎 Le Journal de Freeworld TV — la moitié GitHub : le CERVEAU. Le hub DATASPACE est l'USINE.
+#
+# GitHub garde les clés (langage, signature NOSTR) ; le hub loue la carte, fabrique et monte. Ils ne se
+# parlent que par des évènements NOSTR signés (kind 30078, NIP-78) :
+#
+#   05:00 UTC  commande  actualité → conducteur du jour (Anthropic) → validé comme planif.py le fera sur
+#                        le hub → publié, d = freeworld-jt:commande:<date>
+#   la nuit    le hub    fabrique (voix, images, LongCat, montage), puis publie son résultat,
+#                        d = freeworld-jt:resultat:<date>, signé par la clé JT_USINE_PUBKEY
+#   19:30 UTC  publier   résultat vérifié (signature, auteur, adresse de la forge) → programme TV
+#                        kind 30184 sur tv-main-1, d = tv-main-1:<date>
+#   22:30 UTC  publier   rattrapage, si l'usine était en retard
+#
+# Pas encore de résultat : le job reste VERT — ce n'est pas une panne. daily-tv (20 h UTC) publie alors
+# son JT en images, et le rattrapage de 22 h 30 le remplace (même d-tag, même clé : le plus récent
+# gagne). Un résultat FALSIFIÉ ou INVALIDE, lui, fait ROUGIR le job.
+#
+# Déclenchement manuel (« Run workflow ») : choisir l'étape, et une date si besoin.
+on:
+  schedule:
+    - cron: '0 5 * * *'
+    - cron: '30 19 * * *'
+    - cron: '30 22 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'commande (le conducteur du matin) ou publier (le programme du soir)'
+        type: choice
+        options:
+          - commande
+          - publier
+        default: commande
+      date:
+        description: 'Date AAAA-MM-JJ (vide = aujourd’hui, UTC)'
+        required: false
+        default: ''
+      forcer:
+        description: 'commande : remplacer celle déjà publiée pour cette date'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+# Deux passages ne se chevauchent jamais : une commande refaite pendant qu'une autre part, ou deux
+# publications du soir, écriraient le même d-tag dans un ordre imprévisible.
+concurrency:
+  group: jt-freeworld
+  cancel-in-progress: false
+
+jobs:
+  journal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # L'étape du jour : la planification horaire la dit (05:00 → commande, sinon publier) ; le
+      # déclenchement manuel la choisit.
+      - name: Étape
+        id: etape
+        env:
+          EVENEMENT:   ${{ github.event_name }}
+          PLANIF:      ${{ github.event.schedule }}
+          ACTION_MAIN: ${{ github.event.inputs.action }}
+        run: |
+          if [ "$EVENEMENT" = "workflow_dispatch" ]; then ACTION="$ACTION_MAIN"
+          elif [ "$PLANIF" = "0 5 * * *" ]; then ACTION=commande
+          else ACTION=publier; fi
+          case "$ACTION" in
+            commande|publier) ;;
+            *) echo "::error::étape inconnue : $ACTION"; exit 1 ;;
+          esac
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+          echo "▶ étape : $ACTION"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # La commande doit être ACCEPTÉE par planif.py sur le hub (bornes, distribution) et tenir les
+      # garde-fous du fondateur ; le résultat du soir n'est cru que signé par l'usine. Si ce test
+      # rougit, rien ne part.
+      - name: Tests du Journal (hors ligne)
+        run: npm run test:jt
+
+      # Un cron qui échoue chaque jour sans dire pourquoi finit ignoré : s'il manque une clé, on le DIT,
+      # avec le geste à faire.
+      - name: Vérifier les clés
+        env:
+          ACTION:            ${{ steps.etape.outputs.action }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
+          JT_USINE_PUBKEY:   ${{ vars.JT_USINE_PUBKEY }}
+        run: |
+          manque=0
+          if [ -z "$NOSTR_PRIVATE_KEY" ]; then
+            echo "::error title=Secret NOSTR_PRIVATE_KEY manquant::Sans la clé du générateur, rien ne peut être signé."
+            manque=1
+          fi
+          if [ "$ACTION" = "commande" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error title=Secret ANTHROPIC_API_KEY manquant::Le conducteur du jour ne peut pas être écrit."
+            manque=1
+          fi
+          if [ "$ACTION" = "publier" ] && [ -z "$JT_USINE_PUBKEY" ]; then
+            echo "::error title=Variable JT_USINE_PUBKEY manquante::Sans la clé publique du hub, aucun résultat ne peut être authentifié."
+            echo ""
+            echo "  Réglages du dépôt → Secrets and variables → Actions → onglet Variables → New repository variable"
+            echo "  nom : JT_USINE_PUBKEY   valeur : la clé publique HEX (64 caractères) de l'usine du hub"
+            manque=1
+          fi
+          if [ "$manque" = 0 ]; then echo "✓ clés présentes"; fi
+          exit $manque
+
+      - name: Commande du jour (conducteur → NOSTR)
+        if: steps.etape.outputs.action == 'commande'
+        env:
+          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+          NOSTR_PRIVATE_KEY:   ${{ secrets.NOSTR_PRIVATE_KEY }}
+          # Vide = le défaut du code (claude-sonnet-5).
+          ANTHROPIC_MODEL_JT:  ${{ vars.ANTHROPIC_MODEL_JT || '' }}
+          JT_MINUTES:          ${{ vars.JT_MINUTES || '' }}
+          NOSTR_RELAYS:        ${{ vars.NOSTR_RELAYS || '' }}
+          FORCER_REGENERATION: ${{ github.event.inputs.forcer == 'true' && '1' || '' }}
+          # Par l'environnement, jamais interpolée dans le script : le script vérifie son format.
+          DATE_JT:             ${{ github.event.inputs.date }}
+        run: |
+          ARGS=(--sortie commande-jt.json)
+          if [ -n "${DATE_JT:-}" ]; then ARGS+=(--date "$DATE_JT"); fi
+          npm run jt:commande -- "${ARGS[@]}"
+
+      # Le conducteur du jour, lisible sans relais (il est de toute façon public sur NOSTR).
+      - name: Garder le conducteur (artefact)
+        if: always() && steps.etape.outputs.action == 'commande'
+        uses: actions/upload-artifact@v4
+        with:
+          name: commande-jt-${{ github.run_id }}
+          path: commande-jt.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publier le Journal (résultat de l'usine → programme TV)
+        if: steps.etape.outputs.action == 'publier'
+        env:
+          NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
+          JT_USINE_PUBKEY:   ${{ vars.JT_USINE_PUBKEY }}
+          NOSTR_RELAYS:      ${{ vars.NOSTR_RELAYS || '' }}
+          DATE_JT:           ${{ github.event.inputs.date }}
+        run: |
+          if [ -n "${DATE_JT:-}" ]; then npm run jt:publier -- --date "$DATE_JT"; else npm run jt:publier; fi
