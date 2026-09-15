@@ -95,8 +95,9 @@ REPLIQUES = [
     # ≈ 38 s une fois dite : le sommaire du 2e essai réel dépassait 30 s
     {"cle": "ouverture", "texte": " ".join(["Bonsoir, et sssoyez les bienvenus dans le Journal de Freeworld TV."] * 9),
      "voix": "x.wav", "exa": 0.5, "cfg": 0.45},
+    # une partie d'une réplique découpée (planif.py) : sa pause de fin de phrase reste avant le changement de plan
     {"cle": "s01-lancement", "texte": "Premier sujet ce soir, devant un Machuman. Pistache, vous êtes sur place ?",
-     "voix": "x.wav", "exa": 0.6, "cfg": 0.35},
+     "voix": "x.wav", "exa": 0.6, "cfg": 0.35, "pause_fin": 0.3},
     {"cle": "s02-question", "texte": "Monsieur Lardon, que craignez-vous pour vos Bipèdes ?", "voix": "x.wav", "exa": 0.6, "cfg": 0.35},
     # les sigles que Whisper écrit à sa façon ne sont pas des mots perdus : ni nouvel essai, ni fausse alerte
     {"cle": "s03-terrain", "texte": "Oui Iggy ! Le NAW a dépêché trois moutons bleus. L'UERSS réclame un formulaire, sous "

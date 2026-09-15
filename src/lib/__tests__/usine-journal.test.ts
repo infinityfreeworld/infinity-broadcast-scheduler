@@ -112,8 +112,8 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   for (const i of images) assert.ok(!/TV news/i.test(i.consigne), `${i.cle} : « TV news » appelle des bandeaux`)
   assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous photograph \(not a split screen/)
   const verif = lire('images_jt.py')
-  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
-  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter"\)/, 'chaque faute d’image alerte')
+  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"', '"melange"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter", "melange"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py', 'entrees/animer.sh']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }
@@ -149,9 +149,46 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
   assert.match(cl.consigne, /there are no human beings anywhere/)
   assert.doesNotMatch(cl.consigne, /livestock/)
   assert.match(cl.consigne, /without any animal holding a microphone/)
-  assert.match(lire('images_jt.py'), /"coupe": \("interdit", "texte", "decoupe", "reporter"\),\s+"coupe-lieu": \("humain", "texte", "decoupe", "reporter"\)/)
+  assert.match(lire('images_jt.py'), /"coupe": \("interdit", "texte", "decoupe", "reporter", "melange"\),\s+"coupe-lieu": \("humain", "texte", "decoupe", "reporter"\)/)
+  // Fondateur, 15/09 : des Bipèdes SOUMIS, seuls dans l'enclos — les animaux restent dehors.
+  assert.match(cp.consigne, /no animal at all is inside the pens, only the humans are penned/)
+  assert.match(cp.consigne, /docile and submissive/)
   // … et un plan de coupe signalé par le contrôle n'est pas monté (un faux « FASD FCD » l'avait été).
   assert.match(lire('montage.py'), /seq\["coupe"\] not in signalees/)
+})
+
+test('⭐ une réplique longue en PLUSIEURS plans : ni dérive vers le très gros plan, et le reportage change d’angle (15/09)', () => {
+  const long = structuredClone(EXEMPLE)
+  const phrase = 'Les moutons bleus du NAW gardent le parc depuis ce matin, sans savoir très bien pourquoi.'   // 16 mots
+  long.sommaire = Array(6).fill(phrase).join(' ')            // 96 mots → 3 parties
+  long.sujets[0].terrain = Array(7).fill(phrase).join(' ')   // 112 mots → 4 parties
+  const { r, dossier } = planifier(long)
+  assert.equal(r.status, 0, r.stderr)
+  const plans = JSON.parse(readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
+  const repliques = JSON.parse(readFileSync(join(dossier, 'entrees/repliques.json'), 'utf8'))
+  const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
+  const deroule = JSON.parse(readFileSync(join(dossier, 'montage.json'), 'utf8')).deroule
+  const mots = (t: string) => (t.match(/[\p{L}\p{N}_]+/gu) ?? []).length
+  for (const x of repliques) assert.ok(mots(x.texte) <= 45, `${x.cle} : ${mots(x.texte)} mots — au-delà, LongCat dérive`)
+  const ouv = repliques.filter((x: any) => /^ouverture(-\d+)?$/.test(x.cle))
+  assert.deepEqual(ouv.map((x: any) => x.cle), ['ouverture', 'ouverture-2', 'ouverture-3'])
+  assert.equal(ouv.map((x: any) => x.texte).join(' '), long.sommaire, 'le texte, rien que le texte, dans l’ordre')
+  assert.ok(ouv.slice(0, -1).every((x: any) => x.pause_fin === 0.3) && !ouv.at(-1).pause_fin, 'une pause de fin de phrase avant chaque changement de plan')
+  assert.deepEqual(deroule[0].suite, ['ouverture-2', 'ouverture-3'])
+  assert.equal(plans.find((p: any) => p.cle === 'ouverture-2').image, 'entrees/persos/iggy.png', 'la suite du sommaire : le plan moyen d’Iggy')
+  const terr = plans.filter((p: any) => /^s01-terrain(-\d+)?$/.test(p.cle)).map((p: any) => p.cle)
+  assert.deepEqual(terr, ['s01-terrain', 's01-terrain-2', 's01-terrain-3', 's01-terrain-4'])
+  assert.deepEqual(deroule[1].terrain_suite, terr.slice(1))
+  const autre = images.find((i: any) => i.cle === 's01-terrain-2')
+  assert.deepEqual(autre.sources, ['resultats/images/s01-terrain.png'], 'la 2e partie : le même reporter, au même endroit, sous un autre angle')
+  assert.match(autre.consigne, /now seen from ANOTHER camera/)
+  assert.ok(images.findIndex((i: any) => i.cle === 's01-terrain') < images.findIndex((i: any) => i.cle === 's01-terrain-2'))
+  // … la voix garde sa pause de fin, et le montage enchaîne les parties ; le plan de coupe cache la jonction du reportage.
+  assert.match(lire('voix_jt.py'), /if r\.get\("pause_fin"\):/)
+  const m = lire('montage.py')
+  assert.match(m, /def suite\(cles, base, ancre, geste_final=None\):/)
+  assert.match(m, /inserer_coupe\(piece, image, f"\{base\}-b\{j\}\.mp4", 0\.0\)/)
+  assert.match(m, /fin_lance = suite\(seq\.get\("lancement_suite", \[\]\), f"\{base\}-a", VISAGE_IGGY, geste_final=1\) or lance/)
 })
 
 test('⭐ une commande étrangère est REFUSÉE : personnage inconnu, rôle usurpé, texte trop long, date piégée', () => {
@@ -160,7 +197,7 @@ test('⭐ une commande étrangère est REFUSÉE : personnage inconnu, rôle usur
   assert.notEqual(r.status, 0); assert.match(r.stderr, /n'est pas un reporter/)
   r = avec(jt => { jt.sujets[1].interview.invite = 'iggy' })
   assert.notEqual(r.status, 0, 'le présentateur n’est pas un invité de terrain')
-  r = avec(jt => { jt.sujets[0].terrain = 'mot '.repeat(120) })
+  r = avec(jt => { jt.sujets[0].terrain = 'mot '.repeat(130) })   // la borne du terrain est 120 mots (MOTS_MAX_TERRAIN)
   assert.notEqual(r.status, 0); assert.match(r.stderr, /mots/)
   r = avec(jt => { jt.date = '../../etc' })
   assert.notEqual(r.status, 0)
@@ -272,7 +309,11 @@ test('le montage suit les pilotes validés : générique du fondateur, avancée 
   assert.doesNotMatch(m, /agate/)
   // … et des caméras dynamiques : aucun plan fixe, un 2e cadrage sur les plans longs, l'interview suit la parole.
   assert.match(m, /def mouvement\(d, geste, ancre, serre=True\)/)
-  assert.match(m, /if serre and d > 12:/)
+  // Fondateur, 15/09 : « les angles de vue manquent de dynamisme » → au-delà de 7 s, un changement de cadrage toutes les
+  // ~4,5 s, le gros plan sur le visage (style 3) en alternance ; et l'interview finit en gros plan sur l'invité.
+  assert.match(m, /k = max\(2, round\(d \/ 4\.5\)\)/)
+  assert.match(m, /cadrage\(3 if \(k - 1 - i\) % 2 else geste % 3/)
+  assert.match(m, /z = f"\(1\.18\+0\.12\*/)
   assert.match(m, /def interview\(clip, sortie, dq, bandeaux=""\)/)
   assert.match(m, /def inserer_coupe\(/, 'les plans de coupe du lieu, sous la voix du reporter')
   assert.match(m, /comment=Images et voix créées avec l’IA/, 'l’IA est signalée dans les métadonnées')
