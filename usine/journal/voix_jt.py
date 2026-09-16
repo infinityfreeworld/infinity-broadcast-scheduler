@@ -67,6 +67,12 @@ def mots(t):
 # et une fausse alerte ; « L'UERSS » lu « U.R.S.S. » comptait pour quatre mots de travers.
 NOMS = {"iggy", "varan", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "lardon", "emmanuel", "cramon", "freeworld",
         "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez"}
+# Les nombres sont DITS en toutes lettres et Whisper les écrit en chiffres (« cent six » → « 106 ») : ce ne sont pas des mots
+# perdus non plus (2e essai réel, 16/09 : trois voix « douteuses » à tort, dont « … Soulèvement des machines, J moins cent six »).
+NOMBRES = {"zero", "un", "une", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize",
+           "quatorze", "quinze", "seize", "vingt", "vingts", "trente", "quarante", "cinquante", "soixante", "cent", "cents",
+           "mille", "million", "millions", "milliard", "milliards", "premier", "premiere", "deuxieme", "troisieme", "j"}
+NOMS |= NOMBRES
 
 
 # Chatterbox disait mal le prénom (fondateur, 16/09 : « le premier E de Emmanuel a un accent ») : on l'écrit à la voix comme il
@@ -132,7 +138,10 @@ def ecouter(wav, texte):
             reste[m] -= 1
         else:
             perdus += 1
-    return perdus / max(1, len(attendus)), (not attendus or attendus[-1] in entendu[-4:])
+    # La fin : l'un des deux derniers mots ordinaires suffit — un mot très court se perd dans la transcription sans que la
+    # phrase soit coupée (2e essai réel, 16/09).
+    fins = attendus[-2:]
+    return perdus / max(1, len(attendus)), (not fins or any(m in entendu[-5:] for m in fins))
 
 
 def dire(phrase, r):
