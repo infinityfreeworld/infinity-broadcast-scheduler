@@ -352,7 +352,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/UNIQUEMENT par un objet JSON valide/, 'du JSON'], [/JSON seul, sans markdown\./, 'sans markdown'],
     [/Iggy Varan présente/, 'le présentateur'], [/sssoyez les bienvenus/, 'le S étiré'],
     [/PASSE LA PAROLE au reporter en le NOMMANT/, 'le passage de parole'], [/EN DIRECT depuis le lieu/, 'le direct'],
-    [/le reporter pose SA question/, 'l’interview'], [/termine par « à demain, sur Freeworld TV »/, 'la fermeture'],
+    [/le reporter pose SA question/, 'l’interview'], [/termine par « à demain, sur les Déglingos »/, 'la fermeture'],
     [/N'en invente aucun autre/, 'aucun personnage inventé'],
     [/Oscar, l'otarie : la mer, les ports, l'eau/, 'Oscar'], [/« Bravo, bravo ! »/, 'le tic d’Oscar'],
     [/Tao, l'antilope : la campagne, la nature/, 'Tao'], [/toujours prêt à détaler/, 'Tao détale'],
@@ -388,7 +388,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/LE BERGER, l'IA secrète que développe La Meute, les loups de « Silicon Vallée »/, 'LE BERGER'],
     [/Nous sommes en 2026, l'année d'AVANT : les IA sont partout, mais aucune ne gouverne encore/, '2026'],
     [/« Soulèvement des machines : J-… »/, 'le compte à rebours'], [/la Croquette, la monnaie/, 'la Croquette'],
-    [/TéléTroupeau, la télé d'État — face à FREEWORLD TV, la seule chaîne libre/, 'les deux télés'],
+    [/TéléTroupeau, la télé d'État — face aux DÉGLINGOS, la seule chaîne libre/, 'les deux télés'],
     [/L'humour vise le POUVOIR/, 'viser le pouvoir'], [/JAMAIS les victimes, JAMAIS un groupe ethnique ou religieux/, 'ni victimes ni groupes'],
     [/Aucune image évoquant l'esclavage historique/, 'pas d’esclavage historique'],
     [/STRICTEMENT INTERDIT : tout trope complotiste, même pour en rire/, 'aucun complotisme'],
@@ -563,7 +563,7 @@ test('⭐ le résultat devient LE programme de tv-main-1 — même d-tag que le 
   const p = J.programmeDuResultat(RESULTAT, DATE)
   assert.equal(p.id, 'tv-main-1:2026-09-16')
   assert.equal(p.channelId, 'tv-main-1')
-  assert.equal(p.title, 'Le Journal de Freeworld TV')
+  assert.equal(p.title, 'Le Journal des Déglingos')
   assert.equal(p.airDateMs, Date.UTC(2026, 8, 16))
   assert.equal(p.generator, 'freeworld-jt')
   assert.equal(p.blossomUrl, RESULTAT.blossomUrl)

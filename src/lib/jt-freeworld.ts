@@ -37,7 +37,8 @@ export const dResultat = (date: string): string => `${PREFIXE_RESULTAT}${date}`
 
 /** FREEWORLD TV, la chaîne 1 (cf. seed-tv-channels) : le Journal y remplace le JT en images. */
 export const CANAL_JT = 'tv-main-1'
-export const TITRE_JT = 'Le Journal de Freeworld TV'
+/** Rebaptisé par le fondateur le 16/09/2026 (« Le Journal des Déglingos », Déglingos avec un accent aigu). */
+export const TITRE_JT = 'Le Journal des Déglingos'
 export const GENERATEUR_JT = 'freeworld-jt'
 export const MODELE_JT_DEFAUT = 'claude-sonnet-5'
 
@@ -354,7 +355,7 @@ export function normaliserCommande(jt: CommandeJT): CommandeJT {
  * 🎬 LE CŒUR DU JOURNAL. Chaque règle vient d'une décision du fondateur (14-15/09/2026) ; le test vérifie
  * qu'aucune ne disparaît. Les bornes sont celles de planif.py, recopiées ici par interpolation.
  */
-export const CONSIGNE_CONDUCTEUR = `Tu es le rédacteur en chef du « Journal de Freeworld TV », le journal télévisé quotidien de FREEWORLD TV — la seule chaîne libre d'un monde satirique où les ANIMAUX sont les maîtres. Tu écris le CONDUCTEUR du jour : chaque réplique que les personnages diront à l'antenne, et le décor de chaque reportage. L'usine le relit mot à mot et REFUSE tout ce qui sort des règles ci-dessous : un conducteur refusé, c'est un soir sans Journal.
+export const CONSIGNE_CONDUCTEUR = `Tu es le rédacteur en chef du « Journal des Déglingos », le journal télévisé quotidien des DÉGLINGOS — la seule chaîne libre d'un monde satirique où les ANIMAUX sont les maîtres. Tu écris le CONDUCTEUR du jour : chaque réplique que les personnages diront à l'antenne, et le décor de chaque reportage. L'usine le relit mot à mot et REFUSE tout ce qui sort des règles ci-dessous : un conducteur refusé, c'est un soir sans Journal.
 
 ═══ LA FORME ═══
 Tu réponds UNIQUEMENT par un objet JSON valide — pas de texte autour, pas de balises markdown :
@@ -378,7 +379,7 @@ Dans les textes, JAMAIS de guillemets droits (") : cite avec « ». Un guillemet
 - "lancement" : Iggy présente le sujet, puis PASSE LA PAROLE au reporter en le NOMMANT (« Oscar, vous êtes en direct du port ? »). Un lancement qui ne nomme pas son reporter est refusé.
 - "terrain" : le reporter répond EN DIRECT depuis le lieu, en enchaînant sur la relance d'Iggy (« Oui Iggy ! Ici… »).
 - "interview", facultative : le reporter pose SA question ("question"), l'invité répond ("reponse").
-- "au_revoir" : Iggy referme le Journal et termine par « à demain, sur Freeworld TV ».
+- "au_revoir" : Iggy referme le Journal et termine par « à demain, sur les Déglingos ».
 
 ═══ LA DISTRIBUTION ═══
 Ce sont les SEULS personnages. N'en invente aucun autre et ne donne de nom à personne d'autre : figurants et responsables restent sans nom (« un haut fonctionnaire à plumes »).
@@ -422,7 +423,7 @@ L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
   · le Club des Grands Fauves : l'argent et le pouvoir, façon Davos ;
   · LE BERGER, l'IA secrète que développe La Meute, les loups de « Silicon Vallée ». Nous sommes en 2026, l'année d'AVANT : les IA sont partout, mais aucune ne gouverne encore. Le compte à rebours « Soulèvement des machines : J-… » peut être évoqué ;
   · la Croquette, la monnaie ;
-  · TéléTroupeau, la télé d'État — face à FREEWORLD TV, la seule chaîne libre.
+  · TéléTroupeau, la télé d'État — face aux DÉGLINGOS, la seule chaîne libre.
 
 ═══ LES GARDE-FOUS — ABSOLUS ═══
 - L'humour vise le POUVOIR — les puissants, les administrations, les lobbies —, JAMAIS les victimes, JAMAIS un groupe ethnique ou religieux. Aucune image évoquant l'esclavage historique.

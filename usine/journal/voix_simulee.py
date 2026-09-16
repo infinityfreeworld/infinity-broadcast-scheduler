@@ -93,7 +93,7 @@ sys.modules.update({"torch": torch, "torchaudio": torchaudio, "chatterbox": cb, 
 
 REPLIQUES = [
     # ≈ 38 s une fois dite : le sommaire du 2e essai réel dépassait 30 s
-    {"cle": "ouverture", "texte": " ".join(["Bonsoir, et sssoyez les bienvenus dans le Journal de Freeworld TV."] * 9),
+    {"cle": "ouverture", "texte": " ".join(["Bonsoir, et sssoyez les bienvenus dans le Journal des Déglingos."] * 9),
      "voix": "x.wav", "exa": 0.5, "cfg": 0.45},
     # une partie d'une réplique découpée (planif.py) : sa pause de fin de phrase reste avant le changement de plan
     {"cle": "s01-lancement", "texte": "Premier sujet ce soir, devant un Machuman. Pistache, vous êtes sur place ?",
