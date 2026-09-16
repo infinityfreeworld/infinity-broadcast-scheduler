@@ -12,7 +12,7 @@ la durée ? » — ce soir-là, des machines à 4 cartes H100 se louaient 0,40 $
   python3 restant.py voix|images|plans|plans-tous      (depuis le dossier du travail)
   python3 restant.py lots N                            → entrees/lots/lot-<k>.json, affiche le nombre de lots non vides
 """
-import json, os, sys
+import json, os, re, sys
 
 
 def faisable(p):
@@ -59,9 +59,19 @@ elif quoi == "plans-tous":
     liste = json.load(open("entrees/plans.json", encoding="utf-8"))
     print(sum(not os.path.exists(f"resultats/clips/{p['cle']}.mp4") for p in liste))
 elif quoi == "secondes":
-    # Les secondes de VOIX qui restent à animer : LongCat en prend ~31 par seconde. Une machine reprise en pleine nuit ne doit
-    # pas être cherchée pour la totalité du travail (2e essai réel, 16/09 : les deux tiers étaient faits, la reprise ne trouvait rien).
-    print(round(sum(sum(duree_wav(v) for v in p["voix"]) for p in json.load(open("entrees/plans.json", encoding="utf-8")) if faisable(p)), 1))
+    # Les secondes de VOIX qui restent à animer : LongCat en prend ~31 par seconde. Une voix pas encore dite compte 0,36 s par
+    # mot (un travail NEUF les compte toutes) ; un passage REPRIS ne compte que les plans qui manquent — sans quoi l'usine
+    # cherche une machine pour la totalité du travail, et son plancher de crédit devient inutilement haut (2e essai, 16/09).
+    textes = ({r["cle"]: r["texte"] for r in json.load(open("entrees/repliques.json", encoding="utf-8"))}
+              if os.path.exists("entrees/repliques.json") else {})
+    total = 0.0
+    for p in json.load(open("entrees/plans.json", encoding="utf-8")):
+        if os.path.exists(f"resultats/clips/{p['cle']}.mp4"):
+            continue
+        for v in p["voix"]:
+            cle = os.path.splitext(os.path.basename(v))[0]
+            total += duree_wav(v) if os.path.exists(v) else len(re.findall(r"\w+", textes.get(cle, ""))) * 0.36
+    print(round(total, 1))
 elif quoi == "lots":
     n = max(1, int(sys.argv[2]) if len(sys.argv) > 2 else 1)
     a_faire = [(sum(duree_wav(v) for v in p["voix"]), p) for p in json.load(open("entrees/plans.json", encoding="utf-8")) if faisable(p)]

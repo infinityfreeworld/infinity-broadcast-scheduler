@@ -260,8 +260,10 @@ test('⭐ plusieurs cartes : des lots d’égale durée de voix, et animer.sh la
   assert.deepEqual([...lot(0), ...lot(1)].sort(), ['a', 'b', 'c', 'd', 'e'], 'chaque plan à faire dans UN lot ; ni le rendu, ni l’impossible')
   assert.ok(Math.abs(somme(0) - somme(1)) <= 12, `lots équilibrés : ${somme(0)} s et ${somme(1)} s`)
   assert.equal(spawnSync('python3', ['restant.py', 'lots', '8'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '5', 'jamais plus de lots que de plans')
-  // Les secondes de voix qui RESTENT : 30 + 12 + 11 + 10 + 8 (ni le plan rendu, ni celui dont la voix manque).
-  assert.equal(spawnSync('python3', ['restant.py', 'secondes'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '71.0')
+  // Les secondes de voix qui RESTENT à animer : 30 + 12 + 11 + 10 + 8 pour les voix déjà dites (le plan rendu ne compte pas),
+  // plus la voix qui reste à dire, estimée à 0,36 s par mot — c'est ce compte qui fixe le budget, donc le plancher de crédit.
+  writeFileSync(join(S, 'entrees/repliques.json'), JSON.stringify([{ cle: 'x-absente', texte: 'un deux trois quatre cinq six sept huit neuf dix' }]))
+  assert.equal(spawnSync('python3', ['restant.py', 'secondes'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '74.6')
   // … et jt-du-jour.sh s'en sert pour relouer : le travail restant, et le budget restant du jour (2e essai réel, 16/09).
   const jdj = lire('jt-du-jour.sh')
   assert.match(jdj, /"entrees\/restant\.py", "secondes"/)
