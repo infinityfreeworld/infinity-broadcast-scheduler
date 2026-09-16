@@ -163,7 +163,7 @@ export const REPORTAGES_MAX = 3
  * conducteur qui passerait outre. Refusé par le fondateur le 14/09/2026 : la « Franc-animalerie »,
  * Baphomet, Lucifer, l'Antéchrist, le Troisième Temple, Israël en complot — le mythe du complot
  * judéo-maçonnique (les « Protocoles ») ; même en satire, c'est le relayer. S'y ajoutent les mythes
- * voisins qu'une satire de « l'argent et du pouvoir » ferait remonter. Iggy est un iguane, jamais un
+ * voisins qu'une satire de « l'argent et du pouvoir » ferait remonter. Iggy est un caméléon, jamais un
  * « reptilien ». « maçonnerie » seule (le métier) et « Sion » seule (la ville suisse) restent permises.
  */
 export const TERMES_INTERDITS: ReadonlyArray<{ motif: RegExp; nom: string }> = [
@@ -374,7 +374,7 @@ Tu réponds UNIQUEMENT par un objet JSON valide — pas de texte autour, pas de 
 Dans les textes, JAMAIS de guillemets droits (") : cite avec « ». Un guillemet droit oublié casse le JSON — et le Journal avec.
 
 ═══ LE DÉROULÉ ═══
-- Iggy Varan présente, depuis le plateau : un présentateur à tête de lézard, posé, pince-sans-rire, qui étire parfois ses S (« sssoyez les bienvenus ») — une ou deux fois par Journal, pas à chaque phrase.
+- Iggy présente, depuis le plateau : un présentateur à tête de caméléon, posé, pince-sans-rire, qui étire parfois ses S (« sssoyez les bienvenus ») — une ou deux fois par Journal, pas à chaque phrase.
 - "sommaire" : Iggy ouvre le Journal (bonsoir, bienvenue) et annonce les grands titres.
 - "lancement" : Iggy présente le sujet, puis PASSE LA PAROLE au reporter en le NOMMANT (« Oscar, vous êtes en direct du port ? »). Un lancement qui ne nomme pas son reporter est refusé.
 - "terrain" : le reporter répond EN DIRECT depuis le lieu, en enchaînant sur la relance d'Iggy (« Oui Iggy ! Ici… »).
@@ -427,7 +427,7 @@ L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
 
 ═══ LES GARDE-FOUS — ABSOLUS ═══
 - L'humour vise le POUVOIR — les puissants, les administrations, les lobbies —, JAMAIS les victimes, JAMAIS un groupe ethnique ou religieux. Aucune image évoquant l'esclavage historique.
-- STRICTEMENT INTERDIT : tout trope complotiste, même pour en rire. En particulier : rien sur les francs-maçons, ni « Franc-animalerie », ni culte secret ; ni Baphomet, ni Lucifer, ni l'Antéchrist, ni le Troisième Temple ; jamais Israël présenté comme un complot ; jamais le mythe des « Protocoles » ; ni « nouvel ordre mondial », ni « grand remplacement », ni « reptiliens » — Iggy est un iguane, pas un reptilien.
+- STRICTEMENT INTERDIT : tout trope complotiste, même pour en rire. En particulier : rien sur les francs-maçons, ni « Franc-animalerie », ni culte secret ; ni Baphomet, ni Lucifer, ni l'Antéchrist, ni le Troisième Temple ; jamais Israël présenté comme un complot ; jamais le mythe des « Protocoles » ; ni « nouvel ordre mondial », ni « grand remplacement », ni « reptiliens » — Iggy est un caméléon, pas un reptilien.
 - Aucune fausse citation d'une personne réelle ; jamais le nom d'une personne réelle accolé à une déclaration inventée. Une personne réelle ne se nomme que pour un fait réel, tel que la dépêche le rapporte — et mieux vaut la transposer en animal sans nom.
 - Rien de haineux, de racoleur ni de faux.
 
@@ -582,7 +582,7 @@ export function validerResultat(contenu: unknown): { resultat: ResultatJT | null
       if (!estObjet(s)) { erreurs.push(`${n} mal formé`); return }
       const titre = typeof s.title === 'string' ? s.title.trim() : ''
       // eslint-disable-next-line no-control-regex
-      if (!titre || [...titre].length > TITRE_SEGMENT_MAX || /[ -]/.test(titre)) {
+      if (!titre || [...titre].length > TITRE_SEGMENT_MAX || /[\x00-\x1f\x7f]/.test(titre)) {
         erreurs.push(`${n} : titre vide, trop long (plus de ${TITRE_SEGMENT_MAX} caractères) ou avec des caractères de contrôle`)
       }
       if (!nombreBorne(s.startSec, 0, DUREE_MAX_SEC)) erreurs.push(`${n} : startSec ${String(s.startSec)} hors bornes`)

@@ -160,6 +160,46 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
   assert.match(lire('montage.py'), /seq\["coupe"\] not in signalees/)
 })
 
+test('⭐ Iggy CAMÉLÉON (16/09) : la mouche gobée une à deux fois, la teinte du jour aux coupes franches, rien de perdu si elle rate', () => {
+  // Un Journal à 4 sujets : assez long pour qu’Iggy change de teinte (un lancement sur deux à partir du 3e).
+  const quatre = structuredClone(EXEMPLE)
+  quatre.sujets = [0, 1, 0, 1].map((i: number, k: number) => {
+    const s = structuredClone(EXEMPLE.sujets[i]); s.titre = `Sujet numéro ${k + 1}`; return s
+  })
+  const { r, dossier } = planifier(quatre)
+  assert.equal(r.status, 0, r.stderr)
+  const plans = JSON.parse(readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
+  const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
+  // Le présentateur est un CAMÉLÉON, plus un iguane — dans la distribution comme dans le prompt d’animation.
+  const iggy = plans.filter((p: any) => p.prompt.includes('news anchor'))
+  assert.ok(iggy.length >= 6, 'Iggy parle à l’ouverture, à chacun des 4 lancements et à la fermeture')
+  for (const p of iggy) assert.match(p.prompt, /realistic green chameleon with a high curved crest/, p.cle)
+  assert.doesNotMatch(JSON.stringify(plans), /iguana/)
+  assert.match(DISTRIBUTION.iggy.qui, /chameleon-headed news anchor/)
+  // La mouche : une à deux fois par Journal (fondateur, 16/09), et jamais au milieu d’une réplique déjà commencée.
+  const mouches = iggy.filter((p: any) => /long tongue shoots out/.test(p.prompt))
+  assert.ok(mouches.length >= 1 && mouches.length <= 2, `${mouches.length} mouche(s) : il en faut une ou deux`)
+  for (const p of mouches) assert.ok(!/-\d+$/.test(p.cle), `${p.cle} : la mouche ne tombe pas dans une suite de réplique`)
+  // La teinte du jour : UNE image de plus (~45 s de carte), pas un plan de plus.
+  const teinte = images.find((i: any) => i.cle === 'iggy-couleur')
+  assert.ok(teinte, 'la teinte du jour est fabriquée le matin même')
+  assert.match(teinte.consigne, /the chameleon's skin is now/)
+  assert.match(teinte.consigne, /there are no human beings anywhere/)
+  assert.match(teinte.consigne, /Absolutely no text anywhere/)
+  const colores = plans.filter((p: any) => p.image === 'resultats/images/iggy-couleur.png')
+  assert.ok(colores.length >= 1, 'au moins un lancement porte la teinte du jour')
+  // Une couleur ratée ne doit JAMAIS coûter la parole d’Iggy sur tout un sujet : la machine se rabat sur la photo validée.
+  for (const p of colores) assert.equal(p.image_repli, 'entrees/persos/iggy.png', `${p.cle} : repli sur la photo de base`)
+  assert.match(lire('lc_lot.py'), /plan\.get\("image_repli"\)/, 'le repli est appliqué sur la machine, pas seulement promis')
+  // Un caméléon ne change de couleur qu’à une coupe franche : dans une même réplique, toutes les parties gardent la teinte.
+  for (const p of colores) {
+    for (const suite of plans.filter((q: any) => q.cle.startsWith(`${p.cle}-`))) assert.equal(suite.image, p.image, suite.cle)
+  }
+  // Le tirage vient de la DATE : deux passages du planificateur donnent le MÊME Journal (une reprise après interruption en est un).
+  assert.equal(readFileSync(join(planifier(quatre).dossier, 'entrees/plans.json'), 'utf8'),
+    readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
+})
+
 test('⭐ une réplique longue en PLUSIEURS plans : ni dérive vers le très gros plan, et le reportage change d’angle (15/09)', () => {
   const long = structuredClone(EXEMPLE)
   const phrase = 'Les moutons bleus du NAW gardent le parc depuis ce matin, sans savoir très bien pourquoi.'   // 16 mots

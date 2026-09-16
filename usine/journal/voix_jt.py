@@ -65,7 +65,7 @@ def mots(t):
 # Des mots que Whisper écrit à sa façon — sigles, noms propres de Freeworld, le S étiré d'Iggy : ce ne sont pas des mots
 # perdus. 2e essai réel (15/09) : « … sous l'œil nerveux du NAW. », jamais « entendu » en fin de phrase, a coûté 5 essais
 # et une fausse alerte ; « L'UERSS » lu « U.R.S.S. » comptait pour quatre mots de travers.
-NOMS = {"iggy", "varan", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "lardon", "emmanuel", "cramon", "freeworld",
+NOMS = {"iggy", "varan", "cameleon", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "lardon", "emmanuel", "cramon", "freeworld",
         "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez",
         "deglingos"}
 # Les nombres sont DITS en toutes lettres et Whisper les écrit en chiffres (« cent six » → « 106 ») : ce ne sont pas des mots
