@@ -252,7 +252,7 @@ def assembler(morceaux, sortie):
     j = json.loads(mesure[mesure.rindex("{"):mesure.rindex("}") + 1])
     gain = -16.0 - float(j["input_i"])
     ff("-i", brut, "-c:v", "copy", "-af", f"volume={gain:.2f}dB,alimiter=limit=0.84:level=false", *A,
-       "-metadata", "comment=Images et voix créées avec l’IA — Freeworld TV", "-movflags", "+faststart", sortie)
+       "-metadata", "comment=Images et voix créées avec l’IA — Le Journal des Déglingos", "-movflags", "+faststart", sortie)
 
 
 def main(dossier):

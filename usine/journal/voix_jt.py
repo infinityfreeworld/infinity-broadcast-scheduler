@@ -66,7 +66,8 @@ def mots(t):
 # perdus. 2e essai réel (15/09) : « … sous l'œil nerveux du NAW. », jamais « entendu » en fin de phrase, a coûté 5 essais
 # et une fausse alerte ; « L'UERSS » lu « U.R.S.S. » comptait pour quatre mots de travers.
 NOMS = {"iggy", "varan", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "lardon", "emmanuel", "cramon", "freeworld",
-        "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez"}
+        "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez",
+        "deglingos"}
 # Les nombres sont DITS en toutes lettres et Whisper les écrit en chiffres (« cent six » → « 106 ») : ce ne sont pas des mots
 # perdus non plus (2e essai réel, 16/09 : trois voix « douteuses » à tort, dont « … Soulèvement des machines, J moins cent six »).
 NOMBRES = {"zero", "un", "une", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize",
@@ -78,7 +79,8 @@ NOMS |= NOMBRES
 # Chatterbox disait mal le prénom (fondateur, 16/09 : « le premier E de Emmanuel a un accent ») : on l'écrit à la voix comme il
 # doit s'entendre. À l'écran, rien ne change (bandeaux et chapitres viennent de montage.json), et l'écoute Whisper compare des
 # mots sans accent : « Émmanuel » et « Emmanuel » y sont le même mot.
-PRONONCIATION = ((re.compile(r"\bEmmanuel\b"), "Émmanuel"),)
+PRONONCIATION = ((re.compile(r"\bEmmanuel\b"), "Émmanuel"),
+                 (re.compile(r"\bD[ée]glingos\b"), "Déglingos"))   # le Journal des Déglingos, « é » (fondateur, 16/09)
 
 
 def prononcer(txt):

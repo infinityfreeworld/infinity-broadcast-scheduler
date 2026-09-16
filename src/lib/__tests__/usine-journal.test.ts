@@ -215,7 +215,8 @@ test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà f
   // … et un sigle ou un nom de Freeworld écrit « à la Whisper » (NAW → Nao) n'est pas un mot perdu (2e essai réel, 15/09).
   assert.match(lire('voix_jt.py'), /def souples\(texte\)/)
   // Fondateur, 16/09 : « le premier E de Emmanuel a un accent » — le prénom est écrit à la voix comme il doit s'entendre.
-  assert.match(lire('voix_jt.py'), /PRONONCIATION = \(\(re\.compile\(r"\\bEmmanuel\\b"\), "Émmanuel"\),\)/)
+  assert.match(lire('voix_jt.py'), /PRONONCIATION = \(\(re\.compile\(r"\\bEmmanuel\\b"\), "Émmanuel"\),/)
+  assert.match(lire('voix_jt.py'), /"Déglingos"\)\)/, 'le Journal des Déglingos se dit avec un « é » (fondateur, 16/09)')
   assert.match(lire('voix_jt.py'), /liste = phrases\(prononcer\(r\["texte"\]\)\)/)
   assert.match(lire('voix_jt.py'), /"fins_avalees": fins, "douteux": douteux/)
   // 2e essai réel (15/09) : un sommaire de plus de 30 s réécouté d'un bloc a fait planter Whisper — et les 26 voix avec.

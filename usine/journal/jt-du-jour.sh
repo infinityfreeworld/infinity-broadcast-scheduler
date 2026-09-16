@@ -116,8 +116,8 @@ journal "montage : $(tail -1 "$J/montage.log" | cut -c1-200)"
 HDR=$(mktemp); chmod 600 "$HDR"; trap 'rm -f "$HDR"' EXIT
 printf 'Authorization: Bearer %s\n' "$(grep -m1 '^WAF_API_KEYS=' /opt/forge3d/.env | cut -d= -f2- | tr -d '"' | cut -d, -f1)" > "$HDR"
 depose() { curl -sf --max-time 600 -H @"$HDR" -F "file=@$1;type=$2" -F "prompt=$3" "$FORGE/api/v1/upload"; }
-V=$(depose "$T/journal.mp4" video/mp4 "Le Journal de Freeworld TV — $DATE") || echec "dépôt de la vidéo refusé par la forge"
-A=$(depose "$T/affiche.jpg" image/jpeg "Affiche du Journal de Freeworld TV — $DATE") || A='{}'
+V=$(depose "$T/journal.mp4" video/mp4 "Le Journal des Déglingos — $DATE") || echec "dépôt de la vidéo refusé par la forge"
+A=$(depose "$T/affiche.jpg" image/jpeg "Affiche du Journal des Déglingos — $DATE") || A='{}'
 champ() { python3 -c "import json,sys; print((json.loads(sys.argv[1] or '{}')).get(sys.argv[2]) or '')" "$1" "$2"; }
 VID=$(champ "$V" id); AID=$(champ "$A" id)
 echo "{\"date\":\"$DATE\",\"ids\":[\"$VID\"$([ -n "$AID" ] && echo ",\"$AID\"")]}" >> "$ICI/depots.jsonl"
