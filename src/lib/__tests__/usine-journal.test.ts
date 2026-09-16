@@ -210,6 +210,16 @@ test('⭐ Iggy CAMÉLÉON (16/09) : la mouche gobée une à deux fois, la teinte
   for (const p of colores) {
     for (const suite of plans.filter((q: any) => q.cle.startsWith(`${p.cle}-`))) assert.equal(suite.image, p.image, suite.cle)
   }
+  // Sur plusieurs soirs : quand DEUX changements tombent le même jour, ils ne se répètent jamais — ni deux fois la même
+  // couleur, ni deux fois le même décor (la prévisualisation du 16/09 sortait « le bois du bureau » aux deux changements).
+  for (const date of ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']) {
+    const jour = structuredClone(quatre); jour.date = date
+    const teintesDuJour = JSON.parse(readFileSync(join(planifier(jour).dossier, 'entrees/images.json'), 'utf8'))
+      .filter((i: any) => /^iggy-couleur\d$/.test(i.cle))
+    assert.ok(teintesDuJour.length >= 1 && teintesDuJour.length <= 2, `${date} : une à deux fois`)
+    assert.equal(new Set(teintesDuJour.map((i: any) => i.consigne)).size, teintesDuJour.length,
+      `${date} : deux changements le même soir, jamais le même aspect`)
+  }
   // Le tirage vient de la DATE : deux passages du planificateur donnent le MÊME Journal (une reprise après interruption en est un).
   assert.equal(readFileSync(join(planifier(quatre).dossier, 'entrees/plans.json'), 'utf8'),
     readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
