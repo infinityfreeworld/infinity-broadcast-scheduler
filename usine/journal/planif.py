@@ -209,13 +209,17 @@ def main(jt_chemin, dossier):
     # 2 fois aléatoirement ») : le NOMBRE et les MOMENTS sont tirés au sort, et chaque changement a sa PROPRE teinte — le
     # caméléon ne vire jamais deux fois vers la même couleur dans la même émission.
     n = min(de.randint(1, COULEURS_PAR_JT), len(lancements))
+    # Une fois sur trois, un changement n'est pas une couleur mais un MIMÉTISME du décor (feuillage du mur végétal, bois du
+    # bureau, écorce des arbres). Couleurs ET motifs sont tirés SANS REMISE : dans une même émission, le caméléon ne prend
+    # jamais deux fois la même teinte, ni deux fois le même décor (la prévisualisation du 16/09 sortait « le bois du
+    # bureau » aux deux changements du même soir).
+    sortes = [de.randrange(MIMETISME_SUR) == 0 for _ in range(n)]
+    couleurs = iter(de.sample(COULEURS, n - sum(sortes)))
+    motifs = iter(de.sample(MIMETISMES, sum(sortes)))
     teintes = {}
-    for k, couleur in zip(sorted(de.sample(lancements, n)), de.sample(COULEURS, n)):
+    for k, mimetisme in zip(sorted(de.sample(lancements, n)), sortes):
         cle = f"iggy-couleur{len(teintes) + 1}"
-        # Une fois sur trois, il ne prend pas une couleur : il prend LE DÉCOR — feuillage du mur végétal, bois du bureau,
-        # écorce des arbres du plateau.
-        consigne = (IGGY_MIMETISME.format(motif=de.choice(MIMETISMES)) if de.randrange(MIMETISME_SUR) == 0
-                    else IGGY_COULEUR.format(couleur=couleur))
+        consigne = IGGY_MIMETISME.format(motif=next(motifs)) if mimetisme else IGGY_COULEUR.format(couleur=next(couleurs))
         images.append({"cle": cle, "sources": ["entrees/persos/iggy.png"], "graine": 200 + de.randrange(50),
                        "sorte": "mimetisme", "consigne": consigne})
         teintes[k] = f"resultats/images/{cle}.png"
