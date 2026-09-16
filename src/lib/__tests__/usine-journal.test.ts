@@ -210,7 +210,8 @@ test('⭐ reprise : chaque étape de la machine louée saute ce qui est déjà f
   assert.match(lire('voix_jt.py'), /if not os\.path\.exists\(f"resultats\/voix\/\{r\['cle'\]\}\.wav"\)/)
   // Fondateur, 15/09 : « des mots et paroles coupés » → un mot de travers par tranche de dix, et la FIN de chaque phrase entendue.
   assert.match(lire('voix_jt.py'), /permis = max\(1, n \/\/ 10\) \/ max\(1, n\)/)
-  assert.match(lire('voix_jt.py'), /attendus\[-1\] in entendu\[-4:\]/)
+  assert.match(lire('voix_jt.py'), /any\(m in entendu\[-5:\] for m in fins\)/)
+  assert.match(lire('voix_jt.py'), /NOMS \|= NOMBRES/, 'un nombre dit en lettres, écrit en chiffres par Whisper, n’est pas un mot perdu')
   // … et un sigle ou un nom de Freeworld écrit « à la Whisper » (NAW → Nao) n'est pas un mot perdu (2e essai réel, 15/09).
   assert.match(lire('voix_jt.py'), /def souples\(texte\)/)
   // Fondateur, 16/09 : « le premier E de Emmanuel a un accent » — le prénom est écrit à la voix comme il doit s'entendre.
