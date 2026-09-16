@@ -219,6 +219,13 @@ def main():
         plan = dict(plan, image=absolu(plan["image"]), voix=[absolu(v) for v in plan["voix"]])
         if os.path.exists(os.path.join(args.sortie, plan["cle"] + ".mp4")):
             continue   # REPRISE : déjà rendu par cette machine ou par une précédente (machine interruptible reprise)
+        # Une image FACULTATIVE — la teinte du jour d'Iggy, caméléon depuis le 16/09 — peut manquer (contrôle refusé, image
+        # ratée) : on retombe sur sa photo de base plutôt que de perdre la PAROLE du présentateur sur tout un sujet.
+        if not os.path.exists(plan["image"]) and plan.get("image_repli"):
+            repli = absolu(plan["image_repli"])
+            if os.path.exists(repli):
+                print(f"[lot] {plan['cle']} : image absente → repli sur {os.path.basename(repli)}", flush=True)
+                plan["image"] = repli
         manque = [c for c in [plan["image"], *plan["voix"]] if not os.path.exists(c)]
         if manque:     # une voix ratée ou une image absente : le plan saute, le Journal se monte sans lui
             noter({"cle": plan["cle"], "ok": False, "erreur": f"entrée manquante : {', '.join(map(os.path.basename, manque))}", "secondes": 0})

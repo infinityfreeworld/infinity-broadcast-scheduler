@@ -12,7 +12,7 @@ jt.json : {"date": "AAAA-MM-JJ", "sommaire": "…", "au_revoir": "…",
            "sujets": [{"titre": "…", "lancement": "…", "reporter": "oscar", "lieu": "…", "decor": "(anglais) …",
                        "terrain": "…", "interview": {"invite": "gaston", "question": "…", "reponse": "…", "decor": "…"} | null}]}
 """
-import json, os, re, shutil, sys
+import json, os, random, re, shutil, sys
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 DISTRIBUTION = json.load(open(os.path.join(ICI, "distribution.json"), encoding="utf-8"))
@@ -23,14 +23,43 @@ MOTS_MAX_TERRAIN = 120
 MOTS_MAX_JOURNAL = 2600    # ~17 min : le budget GPU du jour
 SUJETS_MAX = 14            # 15/09 : un vrai JT, c'est 10 à 13 sujets d'une minute ; à 10, 15 min étaient hors d'atteinte
 
-IGGY = ("A news anchor with a human body in a navy blue suit, light blue shirt and striped tie, and the head of a realistic green iguana "
-        "with a spiky crest and orange eyes, sits behind a long light wood news desk in a TV studio with indoor trees and a living "
-        "plant wall, talks to the camera, natural mouth movements, studio lighting")
+# Fondateur, 16/09/2026 : Iggy devient un CAMÉLÉON — même allure, mais une mouche passe une à deux fois par émission et il
+# change parfois de couleur. La mouche tient dans le prompt d'animation ; la couleur, elle, se joue sur l'IMAGE de départ.
+IGGY = ("A news anchor with a human body in a navy blue suit, light blue shirt and striped tie, and the head of a realistic green "
+        "chameleon with a high curved crest and independently swivelling turret eyes, sits behind a long light wood news desk in a TV "
+        "studio with indoor trees and a living plant wall, talks to the camera, natural mouth movements, studio lighting")
+# Banc du 16/09 : LongCat-Avatar synchronise une bouche sur une voix, il ne joue pas une action rapide — sur 11 s d'essai, la
+# langue n'est JAMAIS sortie et la mouche n'a jamais été gobée, alors que la mouche elle-même était parfaitement rendue. Le
+# prompt décrit donc ce que le modèle sait faire ; promettre un coup de langue ne produirait que des artefacts. Choix du
+# fondateur, 16/09 : on en reste à la mouche qui passe.
+MOUCHE = " A small fly flies into the frame and circles slowly around his head while he keeps talking calmly."
+MOUCHES_PAR_JT = 2         # « une à 2 fois par présentation » — jamais dans une suite de réplique déjà commencée
+COULEURS = ("turquoise blue with darker bands", "warm ochre and orange with darker bands", "deep emerald green with pale spots",
+            "pale sand yellow with brown bands", "dusty rose pink with cream spots")
+COULEURS_PAR_JT = 2        # fondateur, 16/09 : « il doit changer de couleur de façon aléatoire, une à 2 fois par Journal »
+# Fondateur, 16/09 : « parfois prendre les couleurs ET LES FORMES du décor du plateau ». Le vrai réflexe du caméléon, et un
+# gag muet qui ne coûte pas une seconde de calcul de plus — à une condition, écrite dans la consigne : il doit rester LISIBLE,
+# sinon le présentateur disparaît dans son mur végétal.
+MIMETISMES = ("the green foliage of the plant wall behind him, with leaf shapes and leaf veins running across his skin",
+              "the pale wood of the news desk, with wood grain and warm honey tones running across his skin",
+              "the bark and dappled light of the studio trees, with bark ridges and leaf shadows across his skin")
+MIMETISME_SUR = 3          # une fois sur trois, le changement est un mimétisme du décor plutôt qu'une couleur franche
 SANS_HUMAIN = "The only characters are animals; there are no human beings anywhere in the image."
 # 1er essai réel (15/09) : « TV news interview » a fait dessiner un FAUX bandeau d'information en lettres illisibles, et
 # « LEFT half / RIGHT half » deux photos collées. On décrit une PHOTO documentaire d'UNE scène, et l'on bannit tout texte.
 SANS_TEXTE = ("Absolutely no text anywhere: no captions, no subtitles, no news banner or lower third, no on-screen graphics, "
               "no logo, no watermark.")
+# La teinte du jour, posée sur la photo validée d'Iggy : c'est une IMAGE de plus (~45 s de carte), pas un plan de plus.
+IGGY_COULEUR = ("Edit the photograph: keep EXACTLY the same character, the same navy blue suit, light blue shirt and striped tie, the "
+                "same news desk and the same studio, but the chameleon's skin is now {couleur}. Same head shape, same crest, same "
+                "turret eyes, same position, facing the camera. " + SANS_HUMAIN + " " + SANS_TEXTE)
+# Le mimétisme : sa peau prend le MOTIF du plateau, pas seulement sa couleur. La règle de lisibilité est dans la consigne
+# elle-même — un présentateur qu'on ne distingue plus de son décor n'est pas un gag, c'est un plan raté.
+IGGY_MIMETISME = ("Edit the photograph: keep EXACTLY the same character, the same navy blue suit, light blue shirt and striped tie, "
+                  "the same news desk and the same studio, but the chameleon's skin now MIMICS {motif}. Same head shape, same crest, "
+                  "same turret eyes, same position, facing the camera. He must stay clearly visible and readable: his silhouette "
+                  "stands out from the background, his eyes are sharp, he is never transparent and never dissolved into the set. "
+                  + SANS_HUMAIN + " " + SANS_TEXTE)
 # Des angles qui VARIENT d'un sujet à l'autre (fondateur, 15/09 : « des caméras et angles de vue dynamiques ») — toujours
 # assez près pour que LongCat anime la bouche.
 ANGLES = ("eye-level medium shot framed from the waist up",
@@ -154,18 +183,46 @@ def main(jt_chemin, dossier):
         utilises.add(qui)
         return f"resultats/voix/{cle}.wav"
 
-    def plan_iggy(cle, txt, image="entrees/persos/iggy.png"):
-        """Iggy, en une ou plusieurs parties : la 1re sur `image`, les suivantes sur son plan moyen. Rend les clés des suivantes."""
+    def plan_iggy(cle, txt, image="entrees/persos/iggy.png", suite=None, mouche=False):
+        """Iggy, en une ou plusieurs parties : la 1re sur `image`, les suivantes sur `suite` (son plan moyen, dans la MÊME
+        teinte : un caméléon ne change de couleur qu'à une coupe franche, jamais au milieu d'une phrase). La mouche n'est
+        gobée que dans la 1re partie — une seule fois, là où le spectateur la voit arriver. Rend les clés des suivantes."""
         ps = parties(txt)
         for j, t in enumerate(ps, 1):
             c = cle if j == 1 else f"{cle}-{j}"
-            plans.append({"cle": c, "image": image if j == 1 else "entrees/persos/iggy.png",
-                          "voix": [replique(c, "iggy", t, PAUSE_PARTIE if j < len(ps) else 0)], "prompt": IGGY})
+            p = {"cle": c, "image": image if j == 1 else (suite or "entrees/persos/iggy.png"),
+                 "voix": [replique(c, "iggy", t, PAUSE_PARTIE if j < len(ps) else 0)],
+                 "prompt": IGGY + MOUCHE if (mouche and j == 1) else IGGY}
+            if p["image"] != "entrees/persos/iggy.png":
+                # La teinte du jour est FABRIQUÉE le matin même : si son contrôle la refuse, le plan se rabat sur la photo
+                # validée. Une couleur ratée ne doit jamais coûter la parole d'Iggy sur tout un sujet.
+                p["image_repli"] = "entrees/persos/iggy.png"
+            plans.append(p)
         return [f"{cle}-{j}" for j in range(2, len(ps) + 1)]
 
+    # Le tirage du jour vient de la DATE, jamais du hasard de l'instant : deux passages du planificateur (une reprise après
+    # interruption en est un) doivent donner EXACTEMENT le même Journal, même teinte et mêmes mouches.
+    de = random.Random(jt["date"])
+    lancements = list(range(2, len(sujets) + 1))
+    mouches = set(de.sample(lancements, min(MOUCHES_PAR_JT, len(lancements))))
+    # Les changements de couleur (fondateur, 16/09 : « de façon aléatoire par moment, pas une seule fois par Journal — une à
+    # 2 fois aléatoirement ») : le NOMBRE et les MOMENTS sont tirés au sort, et chaque changement a sa PROPRE teinte — le
+    # caméléon ne vire jamais deux fois vers la même couleur dans la même émission.
+    n = min(de.randint(1, COULEURS_PAR_JT), len(lancements))
+    teintes = {}
+    for k, couleur in zip(sorted(de.sample(lancements, n)), de.sample(COULEURS, n)):
+        cle = f"iggy-couleur{len(teintes) + 1}"
+        # Une fois sur trois, il ne prend pas une couleur : il prend LE DÉCOR — feuillage du mur végétal, bois du bureau,
+        # écorce des arbres du plateau.
+        consigne = (IGGY_MIMETISME.format(motif=de.choice(MIMETISMES)) if de.randrange(MIMETISME_SUR) == 0
+                    else IGGY_COULEUR.format(couleur=couleur))
+        images.append({"cle": cle, "sources": ["entrees/persos/iggy.png"], "graine": 200 + de.randrange(50),
+                       "sorte": "mimetisme", "consigne": consigne})
+        teintes[k] = f"resultats/images/{cle}.png"
     # L'ouverture part d'un Iggy cadré un peu plus LARGE : la caméra du générique finit son avancée pendant qu'il parle déjà.
     suite_ouverture = plan_iggy("ouverture", texte(jt.get("sommaire"), "sommaire", 120),
-              "entrees/persos/iggy-ouverture.png" if DISTRIBUTION["iggy"].get("image_ouverture") else "entrees/persos/iggy.png")
+              "entrees/persos/iggy-ouverture.png" if DISTRIBUTION["iggy"].get("image_ouverture") else "entrees/persos/iggy.png",
+              mouche=not mouches)   # un Journal trop court pour un lancement à mouche : Iggy la gobe au sommaire
     deroule.append({"type": "ouverture", "plan": "ouverture", "suite": suite_ouverture})
     for k, s in enumerate(sujets, 1):
         if not isinstance(s, dict):
@@ -174,7 +231,9 @@ def main(jt_chemin, dossier):
         titre = texte(s.get("titre"), f"sujet {k} : titre", 16)
         r = s.get("reporter"); rep = perso(r, f"sujet {k} : reporter", "reporter")
         lieu = texte(s.get("lieu"), f"sujet {k} : lieu", 12)
-        suite_lancement = plan_iggy(f"{n}-lancement", texte(s.get("lancement"), f"sujet {k} : lancement"))
+        teinte = teintes.get(k)   # ce sujet est-il l'un des moments, tirés au sort, où le caméléon a changé de couleur ?
+        suite_lancement = plan_iggy(f"{n}-lancement", texte(s.get("lancement"), f"sujet {k} : lancement"),
+                                    image=teinte or "entrees/persos/iggy.png", suite=teinte, mouche=k in mouches)
         images.append({"cle": f"{n}-terrain", "sources": [f"entrees/persos/{r}.png"], "graine": 7 + k,
                        "consigne": TERRAIN.format(angle=ANGLES[(k - 1) % len(ANGLES)], qui=rep["qui"],
                                                   decor=decor(s.get("decor"), f"sujet {k} : décor"))})

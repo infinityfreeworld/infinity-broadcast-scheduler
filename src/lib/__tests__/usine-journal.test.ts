@@ -113,7 +113,7 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous photograph \(not a split screen/)
   const verif = lire('images_jt.py')
   for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"', '"melange"', '"gardien"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
-  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter", "melange", "gardien"\)/, 'chaque faute d’image alerte')
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter", "melange", "gardien", "invisible"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py', 'entrees/animer.sh']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }
@@ -129,7 +129,9 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
   assert.ok(existsSync(join(dossier, 'entrees/persos/iggy-ouverture.png')))
   assert.ok(existsSync(join(dossier, 'entrees/nettoyage.py')), 'le nettoyage des voix part avec le travail')
   const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
-  assert.deepEqual(images.map((i: any) => i.cle), ['s01-terrain', 's02-terrain', 's02-coupe', 's02-interview'],
+  // La ou les teintes du caméléon viennent en tête : elles ne dépendent d’aucune autre image (elles partent de la photo
+  // validée d’Iggy), là où la coupe et l’interview sont tirées de l’image du terrain.
+  assert.deepEqual(images.map((i: any) => i.cle), ['iggy-couleur1', 's01-terrain', 's02-terrain', 's02-coupe', 's02-interview'],
     'le terrain d’abord : la coupe et l’interview en sont tirées')
   assert.equal(images.find((i: any) => i.cle === 's02-interview').sources[0], 'resultats/images/s02-terrain.png')
   const cp = images.find((i: any) => i.cle === 's02-coupe')
@@ -158,6 +160,59 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
   assert.match(cp.consigne, /No four-legged animal anywhere in the image/)
   // … et un plan de coupe signalé par le contrôle n'est pas monté (un faux « FASD FCD » l'avait été).
   assert.match(lire('montage.py'), /seq\["coupe"\] not in signalees/)
+})
+
+test('⭐ Iggy CAMÉLÉON (16/09) : la mouche gobée une à deux fois, la teinte du jour aux coupes franches, rien de perdu si elle rate', () => {
+  // Un Journal à 4 sujets : assez long pour qu’Iggy change de teinte (un lancement sur deux à partir du 3e).
+  const quatre = structuredClone(EXEMPLE)
+  quatre.sujets = [0, 1, 0, 1].map((i: number, k: number) => {
+    const s = structuredClone(EXEMPLE.sujets[i]); s.titre = `Sujet numéro ${k + 1}`; return s
+  })
+  const { r, dossier } = planifier(quatre)
+  assert.equal(r.status, 0, r.stderr)
+  const plans = JSON.parse(readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
+  const images = JSON.parse(readFileSync(join(dossier, 'entrees/images.json'), 'utf8'))
+  // Le présentateur est un CAMÉLÉON, plus un iguane — dans la distribution comme dans le prompt d’animation.
+  const iggy = plans.filter((p: any) => p.prompt.includes('news anchor'))
+  assert.ok(iggy.length >= 6, 'Iggy parle à l’ouverture, à chacun des 4 lancements et à la fermeture')
+  for (const p of iggy) assert.match(p.prompt, /realistic green chameleon with a high curved crest/, p.cle)
+  assert.doesNotMatch(JSON.stringify(plans), /iguana/)
+  assert.match(DISTRIBUTION.iggy.qui, /chameleon-headed news anchor/)
+  // La mouche : une à deux fois par Journal (fondateur, 16/09), et jamais au milieu d’une réplique déjà commencée. Le banc du
+  // même jour a montré que la langue n’est jamais rendue : le prompt décrit la mouche qui tourne, jamais le gobage.
+  const mouches = iggy.filter((p: any) => /circles slowly around his head/.test(p.prompt))
+  assert.doesNotMatch(JSON.stringify(plans), /tongue/, 'ne rien promettre que le modèle ne sait pas rendre')
+  assert.ok(mouches.length >= 1 && mouches.length <= 2, `${mouches.length} mouche(s) : il en faut une ou deux`)
+  for (const p of mouches) assert.ok(!/-\d+$/.test(p.cle), `${p.cle} : la mouche ne tombe pas dans une suite de réplique`)
+  // Les changements de couleur (fondateur, 16/09 : « une à 2 fois aléatoirement ») : des IMAGES de plus (~45 s de carte
+  // chacune), pas des plans de plus, et chaque changement a sa propre teinte.
+  const teintes = images.filter((i: any) => /^iggy-couleur\d$/.test(i.cle))
+  assert.ok(teintes.length >= 1 && teintes.length <= 2, `${teintes.length} teinte(s) : il en faut une ou deux par Journal`)
+  for (const t of teintes) {
+    // Une couleur franche, ou — une fois sur trois — le MOTIF du plateau lui-même (fondateur, 16/09).
+    assert.match(t.consigne, /the chameleon's skin is now|the chameleon's skin now MIMICS/, t.cle)
+    assert.match(t.consigne, /there are no human beings anywhere/, t.cle)
+    assert.match(t.consigne, /Absolutely no text anywhere/, t.cle)
+    // Un présentateur qu’on ne distingue plus de son décor n’est pas un gag, c’est un plan raté.
+    if (/MIMICS/.test(t.consigne)) assert.match(t.consigne, /He must stay clearly visible and readable/, t.cle)
+  }
+  assert.equal(new Set(teintes.map((t: any) => t.consigne)).size, teintes.length, 'deux changements, deux couleurs différentes')
+  // Chaque teinte est contrôlée comme un mimétisme : on vérifie aussi qu’Iggy reste VISIBLE, pas seulement qu’il n’y a ni
+  // humain ni texte — un présentateur fondu dans son décor passerait sinon sans alerte.
+  for (const t of teintes) assert.equal(t.sorte, 'mimetisme', `${t.cle} : contrôlée comme un mimétisme`)
+  assert.match(lire('images_jt.py'), /"mimetisme": \("humain", "texte", "decoupe", "invisible"\)/, 'la lisibilité est vérifiée par Qwen2.5-VL')
+  const colores = plans.filter((p: any) => /iggy-couleur\d\.png$/.test(p.image))
+  assert.equal(colores.length, teintes.length, 'chaque teinte fabriquée est portée par un lancement, et un seul')
+  // Une couleur ratée ne doit JAMAIS coûter la parole d’Iggy sur tout un sujet : la machine se rabat sur la photo validée.
+  for (const p of colores) assert.equal(p.image_repli, 'entrees/persos/iggy.png', `${p.cle} : repli sur la photo de base`)
+  assert.match(lire('lc_lot.py'), /plan\.get\("image_repli"\)/, 'le repli est appliqué sur la machine, pas seulement promis')
+  // Un caméléon ne change de couleur qu’à une coupe franche : dans une même réplique, toutes les parties gardent la teinte.
+  for (const p of colores) {
+    for (const suite of plans.filter((q: any) => q.cle.startsWith(`${p.cle}-`))) assert.equal(suite.image, p.image, suite.cle)
+  }
+  // Le tirage vient de la DATE : deux passages du planificateur donnent le MÊME Journal (une reprise après interruption en est un).
+  assert.equal(readFileSync(join(planifier(quatre).dossier, 'entrees/plans.json'), 'utf8'),
+    readFileSync(join(dossier, 'entrees/plans.json'), 'utf8'))
 })
 
 test('⭐ une réplique longue en PLUSIEURS plans : ni dérive vers le très gros plan, et le reportage change d’angle (15/09)', () => {
@@ -299,7 +354,7 @@ test('⭐ restant.py compte ce qui reste — un plan sans voix n’est pas « à
   const { dossier } = planifier(EXEMPLE)
   const compte = (q: string) => spawnSync('python3', [join(dossier, 'entrees/restant.py'), q], { cwd: dossier, encoding: 'utf8' }).stdout.trim()
   assert.equal(compte('voix'), '8')
-  assert.equal(compte('images'), '3')
+  assert.equal(compte('images'), '4', 'les trois images des sujets, plus la teinte du caméléon')
   assert.equal(compte('plans'), '0', 'aucune voix encore : aucun plan n’est faisable')
   // … mais sept plans restent à rendre : c'est CE compte qui décide d'installer LongCat. Le 1er essai réel (15/09) a
   // décidé sur « plans » (0 sur une machine neuve), sauté l'installation, et l'a attendue pour toujours.

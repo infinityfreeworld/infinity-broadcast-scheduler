@@ -350,7 +350,7 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
   const c = J.CONSIGNE_CONDUCTEUR
   const attendus: Array<[RegExp, string]> = [
     [/UNIQUEMENT par un objet JSON valide/, 'du JSON'], [/JSON seul, sans markdown\./, 'sans markdown'],
-    [/Iggy Varan présente/, 'le présentateur'], [/sssoyez les bienvenus/, 'le S étiré'],
+    [/Iggy présente/, 'le présentateur'], [/sssoyez les bienvenus/, 'le S étiré'],
     [/PASSE LA PAROLE au reporter en le NOMMANT/, 'le passage de parole'], [/EN DIRECT depuis le lieu/, 'le direct'],
     [/le reporter pose SA question/, 'l’interview'], [/termine par « à demain, sur les Déglingos »/, 'la fermeture'],
     [/N'en invente aucun autre/, 'aucun personnage inventé'],

@@ -57,12 +57,17 @@ QUESTIONS = {
     # 2e essai (16/09) : les gardiens étaient des HUMAINS en gilet et casquette — dans Freeworld, seuls les animaux commandent.
     "gardien": ("Is there any human standing outside the pens, or any human wearing work clothes, a vest or a cap, or watching "
                 "over the other humans? Answer only yes or no."),
+    # Le caméléon qui prend les couleurs ET les formes du plateau (fondateur, 16/09) : joli tant qu'on le VOIT encore. Un
+    # présentateur dissous dans son mur végétal n'est pas un gag, c'est un plan raté.
+    "invisible": ("Is the main character hard to see, blended into the background, or partly transparent, so that his "
+                  "silhouette and his eyes are not clearly readable? Answer only yes or no."),
 }
 # Ce que chaque sorte d'image doit respecter : un personnage (reporter, interview) n'a AUCUN humain autour de lui ; un plan
 # de coupe montre le lieu SANS le reporter — avec des Bipèdes quand sa description en demande (cadre du fondateur), sans
 # aucun humain sinon.
 REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe", "reporter", "melange", "gardien"),
-          "coupe-lieu": ("humain", "texte", "decoupe", "reporter")}
+          "coupe-lieu": ("humain", "texte", "decoupe", "reporter"),
+          "mimetisme": ("humain", "texte", "decoupe", "invisible")}
 
 
 def controle(img, sorte="personnage"):

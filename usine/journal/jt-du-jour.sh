@@ -149,7 +149,7 @@ SIGNALEES=$(python3 - "$T/resultats/images/controle.jsonl" 2>/dev/null <<'PY'
 import json, sys
 for ligne in open(sys.argv[1], encoding="utf-8"):
     d = json.loads(ligne)
-    fautes = [k for k in ("humain", "texte", "decoupe", "interdit", "reporter", "melange", "gardien") if d.get(k) is True]
+    fautes = [k for k in ("humain", "texte", "decoupe", "interdit", "reporter", "melange", "gardien", "invisible") if d.get(k) is True]
     if fautes:
         print(f"{d['cle']} ({', '.join(fautes)})", end=" ")
 PY
