@@ -1,0 +1,97 @@
+name: Inventer des voix (Qwen3-TTS VoiceDesign)
+
+# 🎙️ Fabrique des voix À ESSAYER à partir d'une description (usine/voix/voix-a-inventer.json).
+# Fondateur, 16/09/2026 : 4 candidates pour Nora et Malik (Biogame) et une réserve de voix
+# françaises à attribuer depuis l'IHL. Aucune n'imite une personne réelle.
+#
+# Machines GitHub SANS carte graphique : lent, mais gratuit et sans nouvel accès. Les fichiers
+# partent dans un BROUILLON de release (ce dépôt est public, un brouillon ne l'est pas) ; le
+# fondateur écoute, choisit, et `deposer-voix.yml` dépose les retenues au catalogue data-space.
+#
+# `usine/voix/MODE` : « sonde » = une seule voix (mesure du temps) ; « complet » = toutes.
+on:
+  push:
+    branches: [feat/voix-inventees-2]
+    paths: ['usine/voix/**', '.github/workflows/inventer-voix.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inventer-voix
+  cancel-in-progress: true
+
+jobs:
+  inventer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        lot: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mode
+        id: mode
+        run: |
+          MODE=$(cat usine/voix/MODE)
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          if [ "$MODE" = "sonde" ] && [ "${{ matrix.lot }}" != "0" ]; then echo "saute=1" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-python@v5
+        if: steps.mode.outputs.saute != '1'
+        with:
+          python-version: '3.12'
+      - name: Dépendances (torch CPU)
+        if: steps.mode.outputs.saute != '1'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg sox >/dev/null
+          python -m pip install -q --upgrade pip
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q qwen-tts soundfile numpy "huggingface_hub[cli]"
+          pip list 2>/dev/null | grep -iE "^(torch|transformers|qwen|soundfile|numpy|accelerate) " || true
+          nproc; free -g
+      - name: Inventer
+        if: steps.mode.outputs.saute != '1'
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: '1'
+          OMP_NUM_THREADS: '4'
+        run: |
+          ARGS=""
+          if [ "${{ steps.mode.outputs.mode }}" = "sonde" ]; then ARGS="--sonde"; fi
+          python usine/voix/inventer.py usine/voix/voix-a-inventer.json sortie \
+            --lot ${{ matrix.lot }} --lots 8 $ARGS
+          ls -la sortie
+      - uses: actions/upload-artifact@v4
+        if: steps.mode.outputs.saute != '1' && always()
+        with:
+          name: voix-lot-${{ matrix.lot }}
+          path: sortie/
+          retention-days: 3
+          if-no-files-found: warn
+
+  rassembler:
+    needs: inventer
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: lots
+          pattern: voix-lot-*
+      - name: Brouillon de release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p voix
+          find lots -name '*.wav' ! -name '.*' -exec cp {} voix/ \;
+          cat lots/*/journal.jsonl > voix/journal.jsonl 2>/dev/null || true
+          ls -la voix
+          test -n "$(ls voix/*.wav 2>/dev/null)" || { echo "aucune voix produite"; exit 1; }
+          TAG="voix-a-ecouter-${GITHUB_RUN_ID}"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Voix à écouter (${GITHUB_RUN_ID})" \
+            --notes "Voix inventées à écouter — usine/voix/voix-a-inventer.json. Brouillon à supprimer après le choix." \
+            voix/*.wav voix/journal.jsonl
+          echo "brouillon : $TAG"

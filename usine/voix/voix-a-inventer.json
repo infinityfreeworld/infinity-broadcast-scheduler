@@ -1,0 +1,200 @@
+{
+  "_": "Voix à INVENTER (fondateur, 16/09/2026) : 4 candidates pour Nora et Malik (Biogame), et une réserve de voix françaises à attribuer depuis l'IHL. Aucune n'imite une personne réelle. Fabriquées par .github/workflows/inventer-voix.yml (Qwen3-TTS VoiceDesign, Apache-2.0), écoutées par le fondateur, puis déposées par deposer-voix.yml.",
+  "modele": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+  "langue": "French",
+  "texte": "Bonjour et bienvenue sur Infinity. Aujourd'hui, on part à la rencontre de celles et ceux qui construisent, près de chez nous, un monde plus vivant.",
+  "voix": [
+    {
+      "nom": "cand-bg-nora-1",
+      "pour": "bigballs-radio:bg-nora",
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her early thirties. Bright, energetic voice, medium-high pitch, lively fast pace, an audible smile, like an outdoor sports coach cheering a team."
+    },
+    {
+      "nom": "cand-bg-nora-2",
+      "pour": "bigballs-radio:bg-nora",
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her early thirties. Warm mid-range voice with a slight husky grain, confident and direct, dynamic sporty rhythm."
+    },
+    {
+      "nom": "cand-bg-nora-3",
+      "pour": "bigballs-radio:bg-nora",
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman around thirty. Clear, crisp, higher voice, very enthusiastic, punchy delivery with short energetic pauses."
+    },
+    {
+      "nom": "cand-bg-nora-4",
+      "pour": "bigballs-radio:bg-nora",
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her mid thirties. Lower mezzo voice, calm strength, friendly and motivating, steady confident pace."
+    },
+    {
+      "nom": "cand-bg-malik-1",
+      "pour": "bigballs-radio:bg-malik",
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his mid forties. Deep warm baritone, calm measured pace, precise articulation like a referee, with a storyteller's warmth."
+    },
+    {
+      "nom": "cand-bg-malik-2",
+      "pour": "bigballs-radio:bg-malik",
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his late forties. Rich resonant voice with a slight rasp, slow deliberate storytelling pace, friendly and engaging."
+    },
+    {
+      "nom": "cand-bg-malik-3",
+      "pour": "bigballs-radio:bg-malik",
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man around forty. Medium-low voice, clear and authoritative yet kind, the precision of a sports commentator, moderate pace."
+    },
+    {
+      "nom": "cand-bg-malik-4",
+      "pour": "bigballs-radio:bg-malik",
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his early fifties. Soft deep voice, gentle, warm and reassuring, relaxed pace, smiling tone."
+    },
+    {
+      "nom": "inv-fr-f-lumineuse-22",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Young woman of twenty-two. Light, bright, cheerful voice, quick and playful rhythm."
+    },
+    {
+      "nom": "inv-fr-f-voilee-55",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her mid fifties. Low, slightly smoky voice, slow and elegant, a little mysterious."
+    },
+    {
+      "nom": "inv-fr-f-douce-65",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her mid sixties. Gentle, soft, kind grandmotherly voice, slow and tender."
+    },
+    {
+      "nom": "inv-fr-f-intime-30",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman of thirty. Soft breathy intimate voice, close to the microphone, calm late-night radio tone."
+    },
+    {
+      "nom": "inv-fr-f-nette-42",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her early forties. Crisp, precise, neutral newsreader voice, steady pace, very clear diction."
+    },
+    {
+      "nom": "inv-fr-f-malicieuse-26",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman of twenty-six. Playful, quirky, expressive voice with lots of melody and humor."
+    },
+    {
+      "nom": "inv-fr-f-alto-38",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her late thirties. Deep alto voice, grounded and serene, unhurried."
+    },
+    {
+      "nom": "inv-fr-f-conteuse-28",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman of twenty-eight. Warm storyteller voice, expressive, gently rising and falling intonation."
+    },
+    {
+      "nom": "inv-fr-f-savante-50",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman of fifty. Authoritative, articulate lecturer voice, confident and pedagogical, medium pace."
+    },
+    {
+      "nom": "inv-fr-f-rieuse-45",
+      "pour": null,
+      "genre": "female",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Woman in her mid forties. Jovial, warm voice that sounds like it is about to laugh, lively pace."
+    },
+    {
+      "nom": "inv-fr-m-tenor-24",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Young man of twenty-four. Light tenor voice, energetic and enthusiastic, fast pace."
+    },
+    {
+      "nom": "inv-fr-m-velours-34",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his mid thirties. Smooth velvety radio-host voice, relaxed and pleasant, medium pace."
+    },
+    {
+      "nom": "inv-fr-m-rocailleux-55",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his mid fifties. Gravelly, rough, low voice, slow and weighty, a seasoned traveler."
+    },
+    {
+      "nom": "inv-fr-m-sage-66",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his mid sixties. Wise, slow, soft-spoken voice, thoughtful pauses, kind."
+    },
+    {
+      "nom": "inv-fr-m-geek-30",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man of thirty. Quick, slightly nasal, excited voice of a passionate tech enthusiast, fast pace."
+    },
+    {
+      "nom": "inv-fr-m-basse-42",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his early forties. Very deep powerful bass voice, commanding but warm, slow pace."
+    },
+    {
+      "nom": "inv-fr-m-pose-27",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man of twenty-seven. Laid-back, relaxed, casual voice, easygoing rhythm."
+    },
+    {
+      "nom": "inv-fr-m-jovial-58",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his late fifties. Jovial, hearty, generous voice full of good humor, lively pace."
+    },
+    {
+      "nom": "inv-fr-m-voile-36",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his mid thirties. Husky, slightly breathy voice, intimate and calm."
+    },
+    {
+      "nom": "inv-fr-m-lettre-47",
+      "pour": null,
+      "genre": "male",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Man in his late forties. Soft-spoken, refined intellectual voice, precise and measured."
+    },
+    {
+      "nom": "inv-fr-n-douce",
+      "pour": null,
+      "genre": "neutral",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Androgynous adult voice, neither clearly male nor female, soft, calm and neutral, medium pitch."
+    },
+    {
+      "nom": "inv-fr-n-murmure",
+      "pour": null,
+      "genre": "neutral",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Androgynous adult voice, whispery and mysterious, slow, medium-low pitch."
+    },
+    {
+      "nom": "inv-fr-n-claire",
+      "pour": null,
+      "genre": "neutral",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Androgynous young adult voice, bright and clear, friendly, medium-high pitch."
+    },
+    {
+      "nom": "inv-fr-n-grave",
+      "pour": null,
+      "genre": "neutral",
+      "description": "A native French speaker with a neutral Parisian accent, speaking French. Androgynous adult voice, deep and velvety, calm and enigmatic, medium-low pitch."
+    }
+  ]
+}
