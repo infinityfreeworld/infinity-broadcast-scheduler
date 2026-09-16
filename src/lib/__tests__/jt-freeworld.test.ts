@@ -94,9 +94,10 @@ test('⭐ les bornes sont CELLES de planif.py — relues dans le fichier Python,
   // Lancement et terrain prennent la borne PAR DÉFAUT de texte() : MOTS_MAX_REPLIQUE.
   assert.match(PLANIF, /def texte\(v, champ, mots_max=MOTS_MAX_REPLIQUE\)/)
   assert.match(PLANIF, /texte\(s\.get\("lancement"\), f"sujet \{k\} : lancement"\)/)
-  assert.match(PLANIF, /texte\(s\.get\("terrain"\), f"sujet \{k\} : terrain"\)/)
   assert.equal(J.MOTS_MAX.lancement, J.MOTS_MAX_REPLIQUE)
-  assert.equal(J.MOTS_MAX.terrain, J.MOTS_MAX_REPLIQUE)
+  // Le terrain a SA borne (15/09 : « les reportages sont trop courts ») : l'usine le découpe en plans de ~14 s.
+  assert.equal(J.MOTS_MAX.terrain, constante('MOTS_MAX_TERRAIN'))
+  assert.match(PLANIF, /texte\(s\.get\("terrain"\), f"sujet \{k\} : terrain", MOTS_MAX_TERRAIN\)/)
   // Et les règles elles-mêmes : le compte des mots, la date, le nombre de sujets, le total, les emplois.
   assert.match(PLANIF, /len\(re\.findall\(r"\\w\+", v\)\)/)
   assert.match(PLANIF, /re\.fullmatch\(r"\\d\{4\}-\\d\{2\}-\\d\{2\}"/)
@@ -310,7 +311,7 @@ test('⭐ même verdict que planif.py, le vrai, sur les mêmes commandes', () =>
     ["l'exemple de l'usine", EXEMPLE, true],
     ['un terrain à la borne', avec(jt => { jt.sujets[0].terrain = mots(J.MOTS_MAX.terrain) }), true],
     ['neuf sujets pleins', avec(jt => { jt.sujets = Array.from({ length: 9 }, sujetPlein) }), true],
-    ['douze sujets pleins et variés', avec(jt => { jt.sujets = Array.from({ length: 12 }, sujetPlein) }), true],
+    ['dix sujets pleins et variés', avec(jt => { jt.sujets = Array.from({ length: 10 }, sujetPlein) }), true],
     ['tout plein : le total dépasse', tropLong(), false],
     ['un terrain d’un mot de trop', avec(jt => { jt.sujets[0].terrain = mots(J.MOTS_MAX.terrain + 1) }), false],
     ['un reporter inconnu', avec(jt => { jt.sujets[0].reporter = 'personne' }), false],
@@ -359,10 +360,11 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/Rick, le raton laveur : les enquêtes, les ministères, les administrations/, 'Rick'], [/murmure de conspirateur/, 'le murmure'],
     [/Rosa, l'autruche : les grands reportages, le vaste monde/, 'Rosa'], [/Curieuse de tout/, 'Rosa curieuse'],
     [/Gaston Lardon, un cochon ÉLEVEUR DE BIPÈDES : la vie rurale ; excédé par la paperasse/, 'Gaston'],
-    [/Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes/, 'Cramon'],
+    // Fondateur, 15/09 : Cramon est la caricature du président de la France — jamais le chef des moutons jaunes.
+    [/Emmanuel Cramon, loup gris déguisé en berger, PRÉSIDENT DE LA RÉPUBLIQUE : la caricature du président français/, 'Cramon président'],
     [/UNE FOIS AU PLUS par Journal/, 'Cramon une fois'], [/langue de bois absurde/, 'la langue de bois'],
     [/ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle/, 'aucune déclaration réelle'],
-    [/Entre dix et treize sujets, comme un vrai journal télévisé\. Trois interviews au plus/, 'le format'],
+    [/Le NOMBRE DE SUJETS est donné par le message du jour/, 'le format'], [/Trois interviews au plus/, 'les interviews'],
     [/trois sujets au plus par reporter : varie-les/, 'la variété des reporters'],
     [/EN TOUTES LETTRES/, 'les nombres en lettres'], [/« l'eau » compte DEUX mots/, 'le compte de l’usine'],
     [/Aucune didascalie, ni \*entre astérisques\*, ni \[entre crochets\] : TOUT le texte est lu à voix haute/, 'pas de didascalies'],
@@ -402,6 +404,8 @@ test('⭐ la consigne porte le déroulé, la distribution et CHAQUE garde-fou du
     [/"coupe" \(facultatif/, 'le plan de coupe'], [/MONTRER les Bipèdes comme du BÉTAIL/, 'les Bipèdes montrés'],
     [/adultes seulement, de toutes origines/, 'adultes, toutes origines'],
     [/JAMAIS enchaînés, blessés ni nus, jamais d'enfants, jamais de scène de vente/, 'le cadre du bétail'],
+    // Fondateur, 15/09 : « seuls les humains doivent être soumis, en enclos » — pas de moutons avec eux.
+    [/les animaux, en tenue de travail, restent DEHORS et les surveillent — jamais un autre animal dans l'enclos/, 'seuls les Bipèdes dans l’enclos'],
   ]
   for (const [motif, quoi] of attendus) assert.match(c, motif, quoi)
 })
@@ -429,6 +433,11 @@ test('la durée : JT_MINUTES × 150 mots, jamais plus de 2 600 ; le compte à re
   assert.match(m, /plafond absolu : 2600 mots/)
   assert.match(m, /Soulèvement des machines : J-107/)
   assert.match(m, /Une bonne nouvelle/)
+  // Moins de sujets, plus fournis (fondateur, 15/09 : « les reportages sont trop courts ») : un peu moins d'un par minute.
+  assert.match(m, /Nombre de sujets : 11 /)
+  assert.match(J.messageDuJour({ date: DATE, minutes: 5, matiere: '' }), /Nombre de sujets : 4 /)
+  assert.equal(J.sujetsVises(1), 3)
+  assert.equal(J.sujetsVises(60), 12)
   assert.doesNotMatch(J.messageDuJour({ date: '2027-03-01', minutes: 15, matiere: '' }), /Soulèvement/, 'après la bascule, plus de compte à rebours')
   assert.match(J.consigneConducteur(J.lireExemple()), /Les filets fantômes deviennent des bancs/, 'le Journal d’essai, pour le ton')
   assert.match(J.messageCorrection(['sujet 1 : terrain : 81 mots (plus de 80)']), /- sujet 1 : terrain : 81 mots/)

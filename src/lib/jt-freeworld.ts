@@ -48,7 +48,7 @@ export const SUJETS_MAX = 14   // 15/09 : un vrai JT, c'est 10 à 13 sujets d'un
 export const MOTS_MAX = {
   sommaire: 120,
   lancement: MOTS_MAX_REPLIQUE,
-  terrain: MOTS_MAX_REPLIQUE,
+  terrain: 120,   // 15/09 : « les reportages sont trop courts » — l'usine le découpe en plans de ~14 s (planif.py)
   question: 40,
   reponse: 60,
   au_revoir: 60,
@@ -66,6 +66,12 @@ export function minutesJT(valeur?: string): number {
   const m = Number(valeur)
   return Number.isFinite(m) && m > 0 ? Math.min(m, 60) : MINUTES_JT_DEFAUT
 }
+
+/**
+ * Le nombre de sujets visé : un peu moins d'un par minute (fondateur, 15/09, après le Journal de 5 min : « les reportages sont
+ * trop courts ») — 4 sujets pour 5 min, 11 pour 15 : des reportages fournis plutôt que nombreux.
+ */
+export const sujetsVises = (minutes: number): number => Math.max(3, Math.min(12, Math.round(minutes * 0.75)))
 
 /** Les mots visés : 150 par minute, jamais au-delà du budget GPU du hub. */
 export function objectifMots(minutes: number): number {
@@ -384,15 +390,15 @@ Reporters — "reporter" reçoit la clé entre guillemets ; choisis-les par affi
 - "rosa" — Rosa, l'autruche : les grands reportages, le vaste monde. Curieuse de tout.
 Invités — "invite" :
 - "gaston" — Gaston Lardon, un cochon ÉLEVEUR DE BIPÈDES : la vie rurale ; excédé par la paperasse.
-- "cramon" — Emmanuel Cramon, loup gris déguisé en berger, président des moutons jaunes. UNE FOIS AU PLUS par Journal. Il parle une langue de bois absurde, pompeuse et creuse. Il ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle.
+- "cramon" — Emmanuel Cramon, loup gris déguisé en berger, PRÉSIDENT DE LA RÉPUBLIQUE : la caricature du président français, qui règne sur le troupeau des moutons. UNE FOIS AU PLUS par Journal. Il parle une langue de bois absurde, pompeuse et creuse. Il ne cite JAMAIS, ne paraphrase JAMAIS la déclaration réelle d'une personne réelle. Jamais présenté comme le chef d'un parti, étranger ou non, ni comme celui des moutons jaunes.
 Iggy n'est jamais reporter ni invité. Un reporter peut revenir d'un sujet à l'autre — trois sujets au plus chacun.
 
 ═══ LA DURÉE ═══
-- Entre dix et treize sujets, comme un vrai journal télévisé. Trois interviews au plus (Gaston deux fois au plus, Cramon une fois au plus) ; trois sujets au plus par reporter : varie-les.
+- Le NOMBRE DE SUJETS est donné par le message du jour (un peu moins d'un par minute) : des reportages FOURNIS plutôt que nombreux — le fondateur a trouvé les reportages trop courts. Trois interviews au plus (Gaston deux fois au plus, Cramon une fois au plus) ; trois sujets au plus par reporter : varie-les.
 - Le message du jour donne l'objectif de mots. Les PLAFONDS passent avant l'objectif : un Journal un peu court vaut mieux qu'un Journal refusé.
 - Comment l'usine compte : un mot = une suite de lettres ou de chiffres. « l'eau » compte DEUX mots, « aujourd'hui » deux, « quatre-vingt-dix » trois.
 - Plafonds ABSOLUS, au-delà c'est le refus : sommaire ${MOTS_MAX.sommaire} mots · lancement ${MOTS_MAX.lancement} · terrain ${MOTS_MAX.terrain} · question ${MOTS_MAX.question} · réponse ${MOTS_MAX.reponse} · au revoir ${MOTS_MAX.au_revoir} · titre ${MOTS_MAX.titre} · lieu ${MOTS_MAX.lieu} · décor ${MOTS_MAX.decor} · ${SUJETS_MAX} sujets · ${MOTS_MAX_JOURNAL} mots au total.
-- Vise le HAUT de ces fourchettes, sans jamais dépasser les plafonds : sommaire 90 à 115 mots, lancement 62 à 76, terrain 66 à 78, question 22 à 36, réponse 42 à 56, au revoir 35 à 55. Le 15/09, des répliques trop courtes ont donné un Journal de neuf minutes au lieu de quinze.
+- Vise le HAUT de ces fourchettes, sans jamais dépasser les plafonds : sommaire 90 à 115 mots, lancement 62 à 76, terrain 90 à 115, question 22 à 36, réponse 42 à 56, au revoir 35 à 55. Le 15/09, des répliques trop courtes ont donné un Journal de neuf minutes au lieu de quinze.
 - Les nombres s'écrivent EN TOUTES LETTRES (« deux cents », « dix-sept heures ») : le Journal est lu par des voix de synthèse. Ni chiffres, ni abréviations, ni émojis.
 - Aucune didascalie, ni *entre astérisques*, ni [entre crochets] : TOUT le texte est lu à voix haute. Un tic se DIT avec des mots (« Oh, un bruit de foreuse au loin… Pardon. »).
 
@@ -409,7 +415,7 @@ L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
 - Les factions, à convoquer quand elles servent le sujet (pas toutes chaque soir) :
   · l'UERSS et ses directives absurdes et liberticides, dont la vaccination obligatoire des animaux et de leurs troupeaux d'humains. On se moque de la BUREAUCRATIE et des OBLIGATIONS, JAMAIS de la médecine : aucune fausse information de santé, aucun doute semé sur un vaccin ou un soin ;
   · le NAW — New Anormal World — et ses moutons bleus en uniforme : la police ;
-  · les moutons jaunes, présidés par Emmanuel Cramon ;
+  · les moutons jaunes : la colère qui monte du troupeau contre le président Cramon ;
   · le FLH, Front de Libération Humaine : les végans ;
   · PAWS, qui réclame un moratoire sur l'IA ;
   · les Gardiens du Terrier : les écologistes ;
@@ -426,7 +432,7 @@ L'actualité réelle est TRANSPOSÉE dans cet univers satirique :
 
 ═══ LES CHAMPS DE L'IMAGE ═══
 - "decor" : une courte description EN ANGLAIS d'un LIEU, pour un modèle d'image (« a fishing harbour with white boats on the quay, daylight »). Le lieu seul, sa lumière, son moment : le personnage y sera placé ensuite, ne le décris pas. AUCUN être humain (ni foule, ni passants, ni pêcheurs, ni ouvriers), AUCUN journaliste, caméraman ou photographe, AUCUN texte, panneau, affiche ou logo. Ni guillemets, ni accolades, ni chevrons.
-- "coupe" (facultatif, un par sujet quand il apporte quelque chose) : un plan de coupe du lieu, 3 à 4 secondes à l'antenne sous la voix du reporter, décrit EN ANGLAIS, SANS le reporter ni micro, sous un autre angle. Quand le sujet s'y prête (ferme, ville, usine…), il peut MONTRER les Bipèdes comme du BÉTAIL, dans ce cadre fixé par le fondateur : adultes seulement, de toutes origines, en combinaisons beiges identiques, calmes, en enclos ou en stalles, vus de loin, encadrés par des animaux en tenue de travail ; JAMAIS enchaînés, blessés ni nus, jamais d'enfants, jamais de scène de vente ; aucun texte, panneau ni logo ; aucun journaliste ni caméraman.
+- "coupe" (facultatif, un par sujet quand il apporte quelque chose) : un plan de coupe du lieu, 3 à 4 secondes à l'antenne sous la voix du reporter, décrit EN ANGLAIS, SANS le reporter ni micro, sous un autre angle. Quand le sujet s'y prête (une ferme, un élevage), il peut MONTRER les Bipèdes comme du BÉTAIL — écris-le alors en toutes lettres dans la description (« humans in beige overalls… ») ; sinon, le plan de coupe ne montre que le lieu. Le cadre fixé par le fondateur : adultes seulement, de toutes origines, en combinaisons beiges identiques, dociles et soumis, tête basse, serrés comme un troupeau DANS des enclos ou des stalles, vus de loin ; les animaux, en tenue de travail, restent DEHORS et les surveillent — jamais un autre animal dans l'enclos ; JAMAIS enchaînés, blessés ni nus, jamais d'enfants, jamais de scène de vente ; aucun texte, panneau ni logo ; aucun journaliste ni caméraman.
 - "lieu" : le bandeau à l'écran, en français, court (« En direct du port de Brest »).
 - "titre" : le titre du sujet (bandeau et chapitre du programme), court.
 
@@ -452,6 +458,7 @@ export function messageDuJour({ date, minutes, matiere, consigne }: { date: stri
     ...(voulu ? [`LA CONSIGNE DU RÉDACTEUR EN CHEF pour ce Journal — à suivre, toujours dans les règles et les garde-fous : ${voulu}`, ''] : []),
     `Le Journal du ${date} — écris cette date telle quelle dans "date".`,
     `Durée visée : ${minutes} minutes de Journal, soit environ ${objectifMots(minutes)} mots au total — au moins ${seuilLongueur(objectifMots(minutes))} ; plafond absolu : ${plafondMots(minutes)} mots.`,
+    `Nombre de sujets : ${sujetsVises(minutes)} — des reportages fournis plutôt que nombreux.`,
     ...(jours > 0 ? [`Compte à rebours du jour, si tu l'évoques : « Soulèvement des machines : J-${jours} » (en toutes lettres à l'antenne).`] : []),
     '',
     matiere.trim()
@@ -496,7 +503,7 @@ export function prochaineEtape({ erreurs, mots, objectif, essai, essais = ESSAIS
 export function messageAllonger(mots: number, objectif: number, plafond: number): string {
   return [
     `Le conducteur est ACCEPTÉ, mais TROP COURT : ${mots} mots pour environ ${objectif} visés — le Journal ne durerait qu'environ ${Math.round(mots * 0.36 / 60)} minutes de parole.`,
-    `Allonge-le jusqu'à ${seuilLongueur(objectif)} mots au moins, sans jamais dépasser ${plafond} : ajoute un ou deux sujets (onze au plus), donne une interview à un sujet de plus, et étoffe les répliques SOUS leurs plafonds (vise le haut des fourchettes).`,
+    `Allonge-le jusqu'à ${seuilLongueur(objectif)} mots au moins, sans jamais dépasser ${plafond} : étoffe d'abord les reportages et les répliques SOUS leurs plafonds (vise le haut des fourchettes), donne une interview à un sujet de plus, et n'ajoute un sujet qu'en dernier recours.`,
     "Garde tout ce qui est bon : les mêmes règles s'appliquent. Renvoie le conducteur COMPLET — JSON seul, sans markdown.",
   ].join('\n')
 }

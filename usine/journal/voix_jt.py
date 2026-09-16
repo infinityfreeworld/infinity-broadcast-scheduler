@@ -172,6 +172,8 @@ def faire(r):
         if k < len(liste) - 1:   # la pause entre deux phrases : propre, et plus longue après une question ou une exclamation
             morceaux.append(torch.zeros(1, int((0.40 if ph.rstrip().endswith(("?", "!")) else 0.28) * tts.sr)))
     ligne = torch.cat(morceaux, dim=1)
+    if r.get("pause_fin"):   # une réplique coupée en plusieurs plans : la pause de fin de phrase reste, avant le changement de plan
+        ligne = torch.cat([ligne, torch.zeros(1, int(r["pause_fin"] * tts.sr))], dim=1)
     d = ligne.shape[-1] / tts.sr
     attendu = len(mots(r["texte"])) * 0.36
     reste = bruit_restant(ligne, tts.sr)
