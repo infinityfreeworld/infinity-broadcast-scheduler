@@ -58,6 +58,10 @@ elif quoi == "plans-tous":
     # départ d'une machine neuve, aucune voix n'existe encore, donc aucun plan n'est « faisable » (essai du 15/09).
     liste = json.load(open("entrees/plans.json", encoding="utf-8"))
     print(sum(not os.path.exists(f"resultats/clips/{p['cle']}.mp4") for p in liste))
+elif quoi == "secondes":
+    # Les secondes de VOIX qui restent à animer : LongCat en prend ~31 par seconde. Une machine reprise en pleine nuit ne doit
+    # pas être cherchée pour la totalité du travail (2e essai réel, 16/09 : les deux tiers étaient faits, la reprise ne trouvait rien).
+    print(round(sum(sum(duree_wav(v) for v in p["voix"]) for p in json.load(open("entrees/plans.json", encoding="utf-8")) if faisable(p)), 1))
 elif quoi == "lots":
     n = max(1, int(sys.argv[2]) if len(sys.argv) > 2 else 1)
     a_faire = [(sum(duree_wav(v) for v in p["voix"]), p) for p in json.load(open("entrees/plans.json", encoding="utf-8")) if faisable(p)]

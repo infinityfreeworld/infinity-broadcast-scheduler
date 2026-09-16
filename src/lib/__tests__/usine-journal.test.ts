@@ -259,6 +259,13 @@ test('⭐ plusieurs cartes : des lots d’égale durée de voix, et animer.sh la
   assert.deepEqual([...lot(0), ...lot(1)].sort(), ['a', 'b', 'c', 'd', 'e'], 'chaque plan à faire dans UN lot ; ni le rendu, ni l’impossible')
   assert.ok(Math.abs(somme(0) - somme(1)) <= 12, `lots équilibrés : ${somme(0)} s et ${somme(1)} s`)
   assert.equal(spawnSync('python3', ['restant.py', 'lots', '8'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '5', 'jamais plus de lots que de plans')
+  // Les secondes de voix qui RESTENT : 30 + 12 + 11 + 10 + 8 (ni le plan rendu, ni celui dont la voix manque).
+  assert.equal(spawnSync('python3', ['restant.py', 'secondes'], { cwd: S, encoding: 'utf8' }).stdout.trim(), '71.0')
+  // … et jt-du-jour.sh s'en sert pour relouer : le travail restant, et le budget restant du jour (2e essai réel, 16/09).
+  const jdj = lire('jt-du-jour.sh')
+  assert.match(jdj, /"entrees\/restant\.py", "secondes"/)
+  assert.match(jdj, /il reste ~\$ANIM h d'animation et \$BT \\\$ de budget/)
+  assert.match(jdj, /budget du jour épuisé : on monte ce qui est fait/)
   // Deux cartes simulées : nvidia-smi et torchrun factices ; le faux torchrun « rend » les plans de son lot.
   writeFileSync(join(S, 'bin/nvidia-smi'), '#!/bin/bash\necho "GPU 0: H100 (UUID: a)"\necho "GPU 1: H100 (UUID: b)"\n')
   writeFileSync(join(S, 'bin/python3.10'), '#!/bin/bash\nexec python3 "$@"\n')
