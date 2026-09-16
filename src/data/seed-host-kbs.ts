@@ -1,7 +1,7 @@
 /**
  * @module Infinity/Radio/SeedHostKBs
  * @description KBs par défaut pour les animateurs des stations seed
- *   (WTF / Freeworld / Big Balls / Mind Control).
+ *   (WTF / Freeworld / Biogame / Mind Control).
  *
  *   Ces KBs sont **locales** (pas sur NOSTR) — les stations seed n'ont pas
  *   de "creatorPubkey", donc personne ne peut les éditer/republier.
@@ -72,6 +72,33 @@ const KB_FW_LEILA: HostKB = {
     entry('e1', "Premiers pas Bâtisseur", "Tu ne peux pas changer le monde tant que tu n'as pas changé ta journée du lendemain. Liste 3 actions concrètes : 1 producteur local visité, 1 abonnement BigTech coupé, 1 voisin parlé.", ['action-concrète','débuter'], 3),
     entry('e2', "Monnaies libres", "La Ğ1 (June) est une monnaie libre fondée sur le revenu universel. Elle existe depuis 2017, déjà 7000 utilisateurs. Pas une crypto spéculative — un outil d'échange.", ['monnaie','duniter','g1'], 3),
     entry('e3', "Initiatives qui marchent", "Tera, l'Écovillage, les communes en transition, les biorégions citoyennes — il existe déjà des centaines de projets vivants qu'on peut visiter, rejoindre, dupliquer.", ['initiatives','écovillages'], 2),
+  ],
+}
+
+// ── Biogame (16/09/2026) ───────────────────────────────────────────────────
+// Ce que sont les Biogames reprend la fiche d'aide de l'application
+// (module-help-content.ts, « biogame »). ⚠️ Aucun montant de prix : le module
+// n'a pas encore de modèle de dotation — les animateurs n'en inventent pas.
+
+const KB_BG_NORA: HostKB = {
+  hostId: 'bg-nora', stationId: 'bigballs-radio', updatedAt: NOW,
+  personality: "Coach de terrain, voix féminine enjouée et directe. Organise des défis, parle comme quelqu'un qui revient d'une journée dehors. Encourage sans flatter, donne toujours une action concrète à faire dans la semaine.",
+  entries: [
+    entry('e1', "Ce que sont les Biogames", "Jouer pour régénérer le vivant. Les points se gagnent dans le réel, pour ce qui est beau, constructif et vivant — pas pour le temps passé devant l'écran. Tournois, défis, quêtes d'entraide et concours.", ['biogames','principe'], 3),
+    entry('e2', "Run for Life", "Les défis Run for Life : courir, marcher ou pédaler pour une cause du vivant, seul ou en équipe. On rejoint un défi existant ou on en crée un, et on apporte ses preuves de participation.", ['défi','run-for-life','sport'], 3),
+    entry('e3', "Quêtes d'entraide", "Une quête d'entraide, c'est une mission utile près de chez soi : nettoyer une berge, aider un voisin, planter une haie. Petite à l'échelle, grande en effet quand beaucoup la font.", ['quête','entraide','local'], 3),
+    entry('e4', "Monter une équipe", "Une équipe tient quand chacun a un rôle clair et qu'on se donne rendez-vous en vrai. Commencer petit, se retrouver souvent, raconter ce qu'on a fait.", ['équipe','organisation'], 2),
+  ],
+}
+
+const KB_BG_MALIK: HostKB = {
+  hostId: 'bg-malik', stationId: 'bigballs-radio', updatedAt: NOW,
+  personality: "Arbitre et conteur des tournois, voix masculine posée et chaleureuse. Précis sur les règles, aime raconter les moments forts. Rappelle que la preuve compte plus que la parole.",
+  entries: [
+    entry('e1', "Tournois et Ligue", "Les tournois opposent des équipes sur des épreuves du vivant. Les résultats nourrissent la Ligue et le Palmarès, avec des trophées pour les parcours remarquables.", ['tournoi','ligue','palmarès'], 3),
+    entry('e2', "Les preuves de participation", "Dans un Biogame, on ne se contente pas de dire qu'on a agi : on apporte une preuve. La co-présence vérifiée (VPM) montre qu'on était réellement là, ensemble.", ['preuve','vpm','co-présence'], 3),
+    entry('e3', "Concours", "Les concours récompensent les réalisations les plus belles ou les plus utiles. Le soutien et le financement passent par Abondance, le module des projets.", ['concours','abondance'], 2),
+    entry('e4', "L'esprit du jeu", "Un Biogame se gagne ensemble. Le classement motive, mais le vrai score, c'est ce qui reste sur le terrain une fois la partie finie.", ['esprit','fair-play'], 2),
   ],
 }
 
@@ -288,6 +315,8 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   'wtf-diogene': KB_WTF_DIOGENE,
   'fw-aurelien': KB_FW_AURELIEN,
   'fw-leila':    KB_FW_LEILA,
+  'bg-nora':     KB_BG_NORA,
+  'bg-malik':    KB_BG_MALIK,
   'mc-anonyme':  KB_MC_ANONYME,
   // Nouvelles stations seed (R.4)
   'h2-henri':    KB_H2_HENRI,

@@ -77,7 +77,33 @@ export const SEED_STATIONS: RadioStation[] = [
     live: false,
     creatorPubkey: null,
   },
-  // Big Balls Radio (108.5) SUPPRIMÉE le 14/09/2026 à la demande du fondateur, avec ses deux animateurs.
+  // Big Balls Radio (108.5) supprimée le 14/09/2026 avec ses deux animateurs (Rocco, Vince).
+  // 16/09/2026 — le fondateur la REMPLACE : « une nouvelle radio du nom de Biogame, sur le thème
+  // des Biogames organisées ». ⚠️ L'identifiant `bigballs-radio` et le kind `bigballs` restent :
+  // c'est le contrat avec l'application (seed-stations.ts côté Infinity), qui porte déjà ce nom.
+  // Les animateurs, eux, sont NEUFS (identifiants `bg-*`) : rien des anciens n'est repris.
+  {
+    id: 'bigballs-radio',
+    kind: 'bigballs',
+    language: 'fr',
+    frequency: 108.5,
+    name: 'Biogame',
+    tagline: 'Les Biogames, terrain par terrain.',
+    description: "Les Biogames organisées : tournois, défis Run for Life, quêtes d'entraide et concours. Des points qui se gagnent dans le réel, pour ce qui est beau, constructif et vivant. On y prépare, on y raconte, on y donne rendez-vous.",
+    color: '#ffb320',
+    hosts: [
+      { id: 'bg-nora',  name: 'Nora',  gender: 'female', trait: 'coach de terrain, organise les défis, énergie communicative', color: '#ffb320', avatar: '🏃' },
+      { id: 'bg-malik', name: 'Malik', gender: 'male',   trait: 'arbitre et conteur des tournois, précis et chaleureux',      color: '#ffd76a', avatar: '🏆' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://positivr.fr/feed/',                        title: 'Positivr (initiatives)' },
+      { type: 'rss', url: 'https://www.kaizen-magazine.com/feed/',            title: 'Kaizen (faire soi-même, ensemble)' },
+      { type: 'rss', url: 'https://www.colibris-lemouvement.org/rss.xml',     title: 'Colibris (agir localement)' },
+    ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
   {
     id: 'mindctrl-radio',
     kind: 'mindctrl',

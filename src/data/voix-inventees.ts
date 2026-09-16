@@ -65,6 +65,18 @@ export const VOIX_INVENTEES: Readonly<Record<string, string>> = Object.freeze({
   'zi-you-zhi-sheng:zy-jian':        'inv-zy-jian',
 })
 
+/**
+ * Animateurs qui n'ont PAS encore de voix inventée, déclarés ici plutôt qu'oubliés.
+ * Ils parlent avec leur voix Piper (`voix.ts`) jusqu'au choix du fondateur à l'écoute,
+ * puis au dépôt (workflow « deposer-voix ») — alors seulement leur ligne passe au-dessus.
+ *
+ * 16/09/2026 — Biogame remplace Big Balls Radio : Nora et Malik sont neufs.
+ */
+export const ANIMATEURS_SANS_VOIX_INVENTEE: ReadonlyArray<string> = Object.freeze([
+  'bigballs-radio:bg-nora',
+  'bigballs-radio:bg-malik',
+])
+
 export function voixInventee(stationId: string, hostId: string): string | undefined {
   return VOIX_INVENTEES[`${stationId}:${hostId}`]
 }

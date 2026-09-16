@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resoudreVoix } from '../chatterbox'
-import { VOIX_INVENTEES, voixInventee } from '../../data/voix-inventees'
+import { VOIX_INVENTEES, voixInventee, ANIMATEURS_SANS_VOIX_INVENTEE } from '../../data/voix-inventees'
 import { SEED_STATIONS } from '../../data/seed-stations'
 
 test('⭐ le choix fait dans l’ADMIN passe devant la voix inventée (remplacer à tout moment)', () => {
@@ -41,7 +41,15 @@ test('rien d’utilisable → null (Piper), comme avant', () => {
 test('⭐ chaque animateur des radios a SA voix inventée — ni oubli, ni animateur fantôme', () => {
   // Remplie le 14/09/2026 APRÈS le dépôt des 31 références au catalogue (workflow deposer-voix) :
   // une voix absente du catalogue rendrait 404 voice_not_found, puis Piper.
-  const attendues = SEED_STATIONS.flatMap(s => s.hosts.map(h => `${s.id}:${h.id}`)).sort()
+  // Un animateur sans voix inventée doit être DÉCLARÉ en attente, jamais oublié ;
+  // et la liste d'attente ne peut nommer ni un animateur inexistant, ni un déjà servi.
+  const tous = SEED_STATIONS.flatMap(s => s.hosts.map(h => `${s.id}:${h.id}`))
+  const enAttente = new Set(ANIMATEURS_SANS_VOIX_INVENTEE)
+  for (const cle of enAttente) {
+    assert.ok(tous.includes(cle), `en attente mais inexistant : ${cle}`)
+    assert.ok(!(cle in VOIX_INVENTEES), `en attente ET servi : ${cle}`)
+  }
+  const attendues = tous.filter(c => !enAttente.has(c)).sort()
   assert.deepEqual(Object.keys(VOIX_INVENTEES).sort(), attendues)
 })
 
