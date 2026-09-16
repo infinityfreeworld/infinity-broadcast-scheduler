@@ -36,6 +36,7 @@ const RELAIS_SOUVERAIN = 'wss://infinity-radio-relay.digitalforlifeagency.worker
 /** Les kinds de CONFIGURATION. 30093 (les émissions) n'est pas ici : il
  *  était déjà accepté, et son volume est d'un autre ordre. */
 const KINDS_CONFIG: Record<number, string> = {
+  30091: 'fiche de station (musiques, jingles)',
   30092: 'base de connaissances animateur',
   30094: 'voix',
   30095: 'mapping animateur → voix',

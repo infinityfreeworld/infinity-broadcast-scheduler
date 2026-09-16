@@ -41,6 +41,8 @@ export interface NewsSource {
 }
 
 export interface RadioStation {
+  /** 16/09/2026 — jingles de la station (CID data-space collés dans l'IHL, kind 30091). */
+  jingles?: TrackRef[]
   id:           string
   kind:         StationKind
   frequency:    number
@@ -95,6 +97,9 @@ export interface RadioBroadcast {
   audioCid:    string
   audioMime:   string
   turns:       BroadcastTurn[]
+  /** 16/09/2026 — passages de jingle dans l'audio. Optionnel : les versions de
+   *  l'application qui ne le connaissent pas l'ignorent sans casser. */
+  segments?:   Array<{ type: 'jingle'; cid?: string; url?: string; title?: string; tStart: number; tEnd: number }>
   newsRefs:    string[]
   model:       string
   generatedBy: string       // pubkey hex

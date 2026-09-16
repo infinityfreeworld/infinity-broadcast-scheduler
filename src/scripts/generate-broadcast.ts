@@ -53,6 +53,10 @@ import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/hos
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
+import {
+  chargerJingle, debitEmission, exportJinglesToEnv, fetchStationJingles, jinglesDepuisEnv,
+  monter, planJingles, segmentsDuMontage, type SegmentJingle,
+} from '../lib/jingles'
 import { encoderEmission, FORMAT_EMISSION } from '../lib/opus'
 import { dataspacePinFile } from '../lib/dataspace'
 import { jetonDataspace } from '../lib/dataspace-jeton'
@@ -104,6 +108,8 @@ interface GenResult {
   voixAttendues: number
   /** Tours qui ont RÉELLEMENT été dits par cette voix. */
   voixObtenues:  number
+  /** Jingles placés dans l'audio (vide si la station n'en a pas). */
+  segments:      SegmentJingle[]
 }
 
 async function generateBroadcastBytes(opts: {
@@ -432,12 +438,25 @@ async function generateBroadcastBytes(opts: {
     wavEntries.push({ wav })
   }
 
-  // Concat + encode
-  const merged = concatWavs(wavEntries)
+  // Jingles (16/09/2026) : collés par CID dans l'IHL, placés début/milieu/fin.
+  // On ne télécharge que ceux que le plan utilise.
+  const jingles = jinglesDepuisEnv(station.id)
+  const utiles = new Set(planJingles(jingles.length, wavEntries.length).map(p => p.jingle))
+  const tauxVoix = wavEntries[0]?.wav.sampleRate ?? 22050
+  const audiosJingles = await Promise.all(jingles.map((j, i) =>
+    utiles.has(i) ? chargerJingle(j, tauxVoix, readWav) : Promise.resolve(null)))
+  const montage = monter(wavEntries, jingles, audiosJingles)
+  if (jingles.length > 0) console.log(`  📯 ${montage.jingleEn.size} passage(s) de jingle`)
+
+  // Concat + encode — l'alignement tour → audio passe par `indexTour` : un
+  // jingle intercalé ne décale plus le transcript.
+  const merged = concatWavs(montage.entrees)
   for (let i = 0; i < turns.length; i++) {
-    turns[i].tStart = wavEntries[i].tStart ?? 0
-    turns[i].tEnd   = wavEntries[i].tEnd   ?? 0
+    const e = montage.entrees[montage.indexTour[i]]
+    turns[i].tStart = e.tStart ?? 0
+    turns[i].tEnd   = e.tEnd   ?? 0
   }
+  const segments = segmentsDuMontage(montage)
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,
@@ -447,6 +466,7 @@ async function generateBroadcastBytes(opts: {
     costOutputTokens: costOut,
     voixAttendues,
     voixObtenues,
+    segments,
   }
 }
 
@@ -488,6 +508,7 @@ async function assurerConfigNostr(stationIds: string[]): Promise<void> {
   if (chatterboxBranche()) {
     exportHostVoiceMappingsToEnv(await fetchHostVoiceMappings())
   }
+  if (!process.env.RADIO_JINGLES_JSON) exportJinglesToEnv(await fetchStationJingles())
   console.log(`   ✓ ${Object.keys(unifiees.personas).length} persona(s) unifiée(s)`
     + ` · ${guests.size} invité(s) · ${personas.size} persona(s) legacy`
     + ` · Pulse ${pulse.global ? 'publié' : 'par défaut'}`)
@@ -700,7 +721,7 @@ async function main() {
   // pour de la voix Piper. Emballé en WebM, PAS en Ogg : Safari et l'app
   // macOS (WebKit) refusent l'Ogg/Opus — voir FORMAT_EMISSION (lib/opus).
   console.log('\n🎵 Encodage Opus (WebM)…')
-  const opusBlob = await encoderEmission(result.audioBlob, 32)
+  const opusBlob = await encoderEmission(result.audioBlob, debitEmission(result.segments.length > 0))
   const ratio = (opusBlob.byteLength / result.audioBlob.byteLength * 100).toFixed(1)
   console.log(`    ✓ ${(opusBlob.byteLength / 1024 / 1024).toFixed(1)} MB Opus/WebM (${ratio}% du WAV)`)
   // Sauve aussi l'émission encodée en debug
@@ -776,6 +797,7 @@ async function main() {
     audioCid:    pin.cid,
     audioMime:   FORMAT_EMISSION.mime,   // Opus en WebM : l'Ogg est muet sous WebKit
     turns:       result.turns,
+    ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,
     generatedBy: '',   // sera rempli par publishBroadcast

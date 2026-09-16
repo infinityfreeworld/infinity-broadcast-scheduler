@@ -21,6 +21,7 @@ import { promisify } from 'node:util'
 import { delaiStationMs } from '../lib/sortie'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
+import { fetchStationJingles, exportJinglesToEnv } from '../lib/jingles'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { fetchPulse, exportPulseToEnv } from '../lib/pulse'
@@ -73,6 +74,14 @@ async function main() {
       mappings.size > 0 ? ' : ' + [...mappings.entries()].slice(0, 5).map(([k, v]) => `${k}→${v}`).join(', ') + (mappings.size > 5 ? ', …' : '') : ''
     }`)
   }
+
+  // ── Jingles des stations (kind:30091, CID collés dans l'IHL) ─────────
+  // Récoltés une fois ici, hérités par chaque sous-processus. Échec → aucun
+  // jingle : l'émission part quand même.
+  console.log(`\n📯 Fetch jingles des stations (NOSTR kind:30091)…`)
+  const jingles = await fetchStationJingles()
+  exportJinglesToEnv(jingles)
+  console.log(`   ✓ ${Object.keys(jingles).length} station(s) avec jingle(s)`)
 
   // ── Fetch personas animateurs (Phase D.4) ────────────────────────────
   // Publiés sur NOSTR kind:30096 par l'IHL Infinity. Contiennent les
