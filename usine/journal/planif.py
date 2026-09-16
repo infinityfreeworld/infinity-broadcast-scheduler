@@ -53,9 +53,10 @@ INTERVIEW = ("Edit the first photograph: keep EXACTLY the same place, the same l
 # l'enclos — seuls les humains doivent être en situation d'élevage ». Les animaux restent DEHORS et surveillent.
 BETAIL = ("The humans here are LIVESTOCK in this satirical world ruled by animals: only adult humans, of all origins, in identical "
           "plain beige overalls, docile and submissive, heads slightly lowered, crowded together like a herd INSIDE straw pens or "
-          "fenced enclosures, seen from a distance. The animals in charge (pigs, dogs or cows wearing work vests and caps) stand "
-          "OUTSIDE the fence and watch over them; no animal at all is inside the pens, only the humans are penned; never chained, "
-          "never hurt, never naked, no children.")
+          "fenced enclosures, seen from a distance. EVERY human in the image is penned livestock: no human wears work clothes, no "
+          "human stands outside the pens, no human watches over the others. The only keepers are ANTHROPOMORPHIC animals standing "
+          "upright on two legs, in work vests and caps, OUTSIDE the fence. No four-legged animal anywhere in the image, and no "
+          "animal at all inside the pens; never chained, never hurt, never naked, no children.")
 COUPE = ("Using the first photograph only as a reference for the PLACE and the light, show the same place from a different camera "
          "angle, WITHOUT the reporter, without any animal holding a microphone, without any microphone: {coupe}. {regle} "
          "Photorealistic documentary photograph. " + SANS_TEXTE)
