@@ -78,7 +78,23 @@ for essai in 1 2 3; do
   [ -f "$T/resultats/FINI" ] && break
   grep -q "ABANDON : pas de location\|ABANDON : 3 hôtes" "$T/ETAT" 2>/dev/null || break   # une autre fin : ne pas insister
   [ "$(date -u +%H:%M)" \< "$LOCATION_FIN" ] || break
-  journal "aucune machine interruptible ($essai/3) : nouvel essai dans 30 min"; sleep 1800
+  # Ce qui RESTE à fabriquer, et ce qui RESTE du budget du jour. Sans ce calcul (2e essai réel, 16/09), l'usine cherchait une
+  # machine pour la TOTALITÉ du travail alors que les deux tiers étaient faits : la reprise ne trouvait « RIEN », et un nouvel
+  # essai repartait avec un budget tout neuf, au risque de dépasser le plafond du jour.
+  read -r HEURES ANIM BM BT ECH <<<"$(python3 - "$T" "$J/usine.log" "$BT" <<'PY'
+import re, subprocess, sys
+restant = float(subprocess.run([sys.executable, "entrees/restant.py", "secondes"], cwd=sys.argv[1],
+                               capture_output=True, text=True).stdout.strip() or 0)
+depense = sum(float(x) for x in re.findall(r"machine n°\d+ : ~([0-9.]+) \$", open(sys.argv[2], encoding="utf-8").read()))
+anim = round(restant * 31 / 3600 * 1.25, 2)
+heures = max(0.5, round(anim + 0.6, 1))
+reste = max(0.0, round(float(sys.argv[3]) - depense, 2))
+print(heures, anim, min(round(heures * 1.8 + 1.0, 1), reste), reste, int(heures * 60 + 60))
+PY
+)"
+  journal "aucune machine interruptible ($essai/3) : il reste ~$ANIM h d'animation et $BT \$ de budget"
+  python3 -c "import sys; sys.exit(0 if $BT >= 0.5 else 1)" || { journal "budget du jour épuisé : on monte ce qui est fait"; break; }
+  sleep 1800
 done
 N=$(ls "$T"/resultats/clips/*.mp4 2>/dev/null | wc -l)
 [ "$N" -gt 0 ] || echec "aucun plan fabriqué" "$(tail -3 "$T/ETAT" 2>/dev/null)"
