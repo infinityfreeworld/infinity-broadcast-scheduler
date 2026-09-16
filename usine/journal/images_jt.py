@@ -54,11 +54,14 @@ QUESTIONS = {
     # Fondateur, 15/09 : « on voit des moutons à côté des humains dans l'enclos » — seuls les humains sont parqués.
     "melange": ("Are there sheep, cows, goats, pigs or any other animals INSIDE the same pen or enclosure as the humans? "
                 "Answer only yes or no."),
+    # 2e essai (16/09) : les gardiens étaient des HUMAINS en gilet et casquette — dans Freeworld, seuls les animaux commandent.
+    "gardien": ("Is there any human standing outside the pens, or any human wearing work clothes, a vest or a cap, or watching "
+                "over the other humans? Answer only yes or no."),
 }
 # Ce que chaque sorte d'image doit respecter : un personnage (reporter, interview) n'a AUCUN humain autour de lui ; un plan
 # de coupe montre le lieu SANS le reporter — avec des Bipèdes quand sa description en demande (cadre du fondateur), sans
 # aucun humain sinon.
-REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe", "reporter", "melange"),
+REGLES = {"personnage": ("humain", "texte", "decoupe"), "coupe": ("interdit", "texte", "decoupe", "reporter", "melange", "gardien"),
           "coupe-lieu": ("humain", "texte", "decoupe", "reporter")}
 
 

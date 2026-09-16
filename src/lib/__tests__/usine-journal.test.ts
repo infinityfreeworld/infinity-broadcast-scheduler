@@ -112,8 +112,8 @@ test('⭐ la commande d’exemple devient un travail d’usine complet', () => {
   for (const i of images) assert.ok(!/TV news/i.test(i.consigne), `${i.cle} : « TV news » appelle des bandeaux`)
   assert.match(images.find((i: any) => i.cle === 's02-interview').consigne, /ONE single continuous photograph \(not a split screen/)
   const verif = lire('images_jt.py')
-  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"', '"melange"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
-  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter", "melange"\)/, 'chaque faute d’image alerte')
+  for (const regle of ['"humain"', '"texte"', '"decoupe"', '"interdit"', '"reporter"', '"melange"', '"gardien"']) assert.ok(verif.includes(regle), `contrôle ${regle} par Qwen2.5-VL`)
+  assert.match(lire('jt-du-jour.sh'), /for k in \("humain", "texte", "decoupe", "interdit", "reporter", "melange", "gardien"\)/, 'chaque faute d’image alerte')
   for (const f of ['travail.sh', 'montage.json', 'entrees/refs/iggy.wav', 'entrees/persos/gaston.png', 'entrees/lc_lot.py', 'entrees/animer.sh']) {
     assert.ok(existsSync(join(dossier, f)), f)
   }
@@ -149,10 +149,13 @@ test('⭐ ouverture plus large, angles variés, interview TIRÉE du terrain, pla
   assert.match(cl.consigne, /there are no human beings anywhere/)
   assert.doesNotMatch(cl.consigne, /livestock/)
   assert.match(cl.consigne, /without any animal holding a microphone/)
-  assert.match(lire('images_jt.py'), /"coupe": \("interdit", "texte", "decoupe", "reporter", "melange"\),\s+"coupe-lieu": \("humain", "texte", "decoupe", "reporter"\)/)
-  // Fondateur, 15/09 : des Bipèdes SOUMIS, seuls dans l'enclos — les animaux restent dehors.
-  assert.match(cp.consigne, /no animal at all is inside the pens, only the humans are penned/)
+  assert.match(lire('images_jt.py'), /"coupe": \("interdit", "texte", "decoupe", "reporter", "melange", "gardien"\),\s+"coupe-lieu": \("humain", "texte", "decoupe", "reporter"\)/)
+  // Fondateur, 15/09 : des Bipèdes SOUMIS, seuls dans l'enclos. 2e essai (16/09) : les gardiens étaient des HUMAINS en gilet, et
+  // de vrais cochons étaient parqués à côté — dans Freeworld, seuls les animaux commandent, et ils tiennent debout.
   assert.match(cp.consigne, /docile and submissive/)
+  assert.match(cp.consigne, /EVERY human in the image is penned livestock/)
+  assert.match(cp.consigne, /The only keepers are ANTHROPOMORPHIC animals standing upright on two legs/)
+  assert.match(cp.consigne, /No four-legged animal anywhere in the image/)
   // … et un plan de coupe signalé par le contrôle n'est pas monté (un faux « FASD FCD » l'avait été).
   assert.match(lire('montage.py'), /seq\["coupe"\] not in signalees/)
 })
