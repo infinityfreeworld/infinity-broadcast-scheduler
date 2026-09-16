@@ -50,20 +50,24 @@ fi
 # ── 2) Le travail d'usine (les résultats d'un passage précédent du même jour sont gardés : reprise) ──
 python3 "$ICI/planif.py" "$J/jt.json" "$T" >> "$J/ETAT" 2>&1 || echec "commande refusée par le planificateur" "$(tail -1 "$J/ETAT")"
 read -r MOTS HEURES BM BT ECH ANIM FIXE <<<"$(python3 - "$T" "$BUDGET_JOUR_MAX" <<'PY'
-import json, sys
+import json, subprocess, sys
 reps = json.load(open(f"{sys.argv[1]}/entrees/repliques.json", encoding="utf-8"))
 mots = sum(len(r["texte"].split()) for r in reps)
+# Ce qui RESTE à animer, en secondes de voix : un passage repris garde ses plans, et son budget — donc son plancher de crédit —
+# ne doit pas porter sur la totalité du travail (2e essai réel, 16/09 : crédit 39,73 $ contre un plancher de 40 $, location refusée).
+restant = float(subprocess.run([sys.executable, "entrees/restant.py", "secondes"], cwd=sys.argv[1],
+                               capture_output=True, text=True).stdout.strip() or 0)
 # Heures de carte : 0,36 s de parole par mot (Chatterbox) × ~31 s de calcul H100 par seconde de vidéo (15/09), marge
 # 25 %, + ~35 min d'installation et de téléchargements — au dixième d'heure : arrondi à l'heure, le 1er essai réel
 # (15/09) se croyait à 2 h et n'entrait plus dans son budget.
-heures = max(1.0, round(mots * 0.36 * 31 / 3600 * 1.25 + 0.6, 1))
+heures = max(1.0, round(restant * 31 / 3600 * 1.25 + 0.6, 1))
 # Le pire cas d'une machine : jusqu'à 1,8 $/h (enchère H100 du 15/09 après-midi : 1,54 $/h), + ~1 $ de bande passante et
 # de disque. ⚠️ Le moins cher à l'heure (0,76 $/h) facturait 0,038 $/Go : 5,66 $ rien que pour télécharger les modèles.
 machine = round(heures * 1.8 + 1.0, 1)
 total = min(float(sys.argv[2]), round(machine * 1.6, 1))
 # Une machine à N cartes (vast.py, animer.sh) : la part qui se PARTAGE entre les cartes — l'animation — et celle qui ne se
 # partage pas — installation, voix, images : elle compte FIXE + ANIM / N heures. Le budget reste celui d'une carte seule.
-anim = round(mots * 0.36 * 31 / 3600 * 1.25, 2)
+anim = round(restant * 31 / 3600 * 1.25, 2)
 print(mots, heures, min(machine, total), total, int(heures * 60 + 60), anim, 0.6)
 PY
 )"
