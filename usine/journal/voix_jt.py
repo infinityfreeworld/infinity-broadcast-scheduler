@@ -69,6 +69,18 @@ NOMS = {"iggy", "varan", "oscar", "rick", "rosa", "tao", "pistache", "gaston", "
         "machuman", "uerss", "naw", "flh", "paws", "dav", "palatine", "infinity", "manifestaction", "manifestactions", "sssoyez"}
 
 
+# Chatterbox disait mal le prénom (fondateur, 16/09 : « le premier E de Emmanuel a un accent ») : on l'écrit à la voix comme il
+# doit s'entendre. À l'écran, rien ne change (bandeaux et chapitres viennent de montage.json), et l'écoute Whisper compare des
+# mots sans accent : « Émmanuel » et « Emmanuel » y sont le même mot.
+PRONONCIATION = ((re.compile(r"\bEmmanuel\b"), "Émmanuel"),)
+
+
+def prononcer(txt):
+    for motif, remplacement in PRONONCIATION:
+        txt = motif.sub(remplacement, txt)
+    return txt
+
+
 def souples(texte):
     """Les mots de la phrase que Whisper a le droit d'écrire autrement : les sigles (NAW, UERSS, TV…) et les noms de Freeworld."""
     return NOMS | {s.lower() for s in re.findall(r"\b[A-ZÉÈ]{2,6}\b", texte)}
@@ -159,7 +171,7 @@ def noter(ligne):
 
 def faire(r):
     morceaux, bilan = [], []
-    liste = phrases(r["texte"])
+    liste = phrases(prononcer(r["texte"]))
     for k, ph in enumerate(liste):
         p = dire(ph, r)
         bilan.append(p)
