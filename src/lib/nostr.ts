@@ -21,6 +21,12 @@ const DEFAULT_RELAYS = [
   // Avant : les events kind custom étaient purgés rapidement par les relais
   // publics (~quelques heures). Ce relay garde tout définitivement via D1.
   'wss://infinity-radio-relay.digitalforlifeagency.workers.dev',
+  // Relais SOUVERAINS de data-space (22/09/2026) : le relais Cloudflare ci-dessus est le seul
+  // que l'application lit, et jusqu'ici le seul à garder nos émissions. Une copie chez
+  // data-space rend la mémoire de la radio indépendante de Cloudflare. Ces relais sont ceux que
+  // l'application interroge déjà pour le reste (VITE_DATASPACE_PUBLIC_RELAYS).
+  'wss://data-space.world/r/relais-public-1',
+  'wss://data-space.world/r/relais-public-2',
   // Relais publics : redondance + découvrabilité (les bots/clients qui
   // suivent les pubkey Infinity peuvent voir les events publiés ici aussi).
   'wss://relay.damus.io',

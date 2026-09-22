@@ -17,20 +17,27 @@ name: Daily Broadcast Generation
 # Aucun ne s'approche de la limite, et une station qui échoue n'emporte pas
 # les autres (`fail-fast: false`).
 #
-# `max-parallel: 2` — et cette borne est PROVISOIRE, pour une raison qu'il
-# faut écrire ici sinon on la relâchera par erreur.
+# `max-parallel: 1` — UNE station à la fois, et voici la mesure qui l'impose.
 #
 # Nous avions d'abord retiré toute borne, en déférant le débit à la file de
 # data-space : quand elle est pleine, un 429 nous fait patienter et tout
 # s'auto-régule. Le principe est juste. Mais ils nous ont fait remarquer
 # (02/09/2026) que **leur 429 n'existe pas encore** — un parallélisme non
-# borné n'aurait donc rien eu qui le corrige, et nous aurions mesuré des
-# latences ressemblant à une panne sans en être une.
+# borné n'aurait donc rien eu qui le corrige. La borne est passée à 2, sur
+# leur mesure (deux requêtes simultanées donnent 1,6× de débit).
 #
-# 🔴 NE RELÂCHER CETTE BORNE QU'UNE FOIS LEUR FILE CAPABLE DE NOUS FREINER.
+# 🔴 22/09/2026 — DEUX, C'ÉTAIT ENCORE TROP. Relevé sur le hub data-space :
+# 997 travaux de voix la nuit du 21→22, UNE seule RTX 3060 (palier « eco »),
+# **~4 morceaux de texte par minute**, quel que soit le nombre d'appelants.
+# Une émission = 22 tours ≈ 74 morceaux. Seule, elle passe en ~18 min.
+# À deux de front, chacune n'obtient que ~2 morceaux/min → 37 min, au-delà
+# de la fenêtre de 30 min : les 8 à 13 derniers tours de CHAQUE station
+# retombaient en Piper (Pirate 10/22, Voces Libres 13/22, Oasis 12/22),
+# chaque nuit du 18 au 22/09. Sérialiser ne coûte rien : le travail total
+# (~4 h de GPU) est le même, il n'est plus perdu.
 #
-# Deux est aussi leur mesure : deux requêtes simultanées donnent 1,6× de
-# débit, au-delà le rendement s'effondre.
+# 🔴 NE RELÂCHER CETTE BORNE QU'UNE FOIS LEUR DÉBIT RÉELLEMENT SUPÉRIEUR
+# (deuxième instance, ou palier plus puissant) — et le mesurer avant.
 #
 # ⚠️ Borner à deux ramène le risque du refroidissement : leur machine
 # s'éteint dès la file vide, et une nouvelle location coûte 5 min de
@@ -145,11 +152,12 @@ jobs:
     if: needs.preparer.outputs.stations != '[]'
     runs-on: ubuntu-latest
     # Large : une station demande ~20 min de synthèse, mais le réveil du
-    # GPU et la file d'attente s'ajoutent. Loin des 6 h de la limite dure.
-    timeout-minutes: 60
+    # GPU, la file d'attente et la fenêtre de 45 min s'ajoutent. Loin des
+    # 6 h de la limite dure ; en série, la nuit entière tient en ~5 h.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         station: ${{ fromJson(needs.preparer.outputs.stations) }}
 
@@ -177,6 +185,30 @@ jobs:
             piper/
             voices/
           key: piper-${{ hashFiles('src/lib/piper.ts') }}
+
+      # 自由之声 (chinois) : Kokoro est le REPLI natif de la langue (Piper n'a
+      # pas de voix chinoise sous licence). 18→22/09/2026 : la station n'est
+      # JAMAIS sortie du secours — « Kokoro absent », levé avant la moindre
+      # requête Chatterbox. L'environnement s'installe ici, pour elle seule
+      # (~1 min, puis cache) ; le modèle (380 Mo, GitHub) est mis en cache
+      # avec lui. La config vient du dépôt (src/data), plus de Hugging Face.
+      - name: Cache Kokoro (venv + modèle) — station chinoise
+        if: matrix.station == 'zi-you-zhi-sheng'
+        uses: actions/cache@v6
+        with:
+          path: |
+            .venv-kokoro/
+            voices/kokoro/
+          key: kokoro-${{ hashFiles('src/lib/kokoro.ts', 'scripts/kokoro-python.py') }}
+      - name: Installe Kokoro — station chinoise
+        if: matrix.station == 'zi-you-zhi-sheng'
+        run: |
+          if [ ! -x .venv-kokoro/bin/python ]; then
+            python3 -m venv .venv-kokoro
+            .venv-kokoro/bin/pip install -q --upgrade pip
+            .venv-kokoro/bin/pip install -q kokoro-onnx "misaki[zh]"
+          fi
+          .venv-kokoro/bin/python -c "import kokoro_onnx, misaki; print('kokoro-onnx OK')"
 
       - name: Génère ${{ matrix.station }}
         env:
@@ -254,7 +286,12 @@ jobs:
           # débitent leur salve en même temps font patienter la dernière une
           # vingtaine de minutes : un budget de 15 min l'aurait fait retomber
           # sur Piper alors que tout allait bien.
-          CHATTERBOX_QUEUE_BUDGET_S: ${{ vars.CHATTERBOX_QUEUE_BUDGET_S || '1800' }}
+          # 22/09/2026 : 45 min. À 30 min, chaque station butait EXACTEMENT sur la
+          # fenêtre (phase voix mesurée à 29-30 min sur 12 stations) — le budget
+          # coupait des tours que le GPU aurait rendus deux minutes plus tard.
+          # Les deux valeurs restent ÉGALES (chatterbox.ts explique pourquoi).
+          CHATTERBOX_QUEUE_BUDGET_S: ${{ vars.CHATTERBOX_QUEUE_BUDGET_S || '2700' }}
+          CHATTERBOX_ECHEANCE_S:     ${{ vars.CHATTERBOX_ECHEANCE_S || '2700' }}
         run: npm run generate:one -- "${{ matrix.station }}"
 
   # ── Le compte rendu : combien de stations ont vraiment diffusé ───────

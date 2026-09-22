@@ -33,6 +33,7 @@ import { SimplePool } from 'nostr-tools/pool'
 import type { Event as NostrEvent } from 'nostr-tools/core'
 import { getRelays } from './nostr'
 import type { StationLanguage } from './types'
+import { adminPubkeys } from './admins-radio'
 
 /**
  * ⚠️ UN RELAIS SEUL PEUT OMETTRE UN DOCUMENT QU'IL STOCKE POURTANT.
@@ -136,12 +137,6 @@ function getDTag(e: NostrEvent): string | null {
   return e.tags.find(t => t[0] === 'd')?.[1] ?? null
 }
 
-function adminPubkeys(): Set<string> | null {
-  const raw = process.env.RADIO_ADMIN_PUBKEYS
-  if (!raw) return null
-  const set = new Set(raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean))
-  return set.size > 0 ? set : null
-}
 
 function latestByDTag(events: NostrEvent[], allowed: Set<string> | null): Map<string, NostrEvent> {
   const latest = new Map<string, NostrEvent>()

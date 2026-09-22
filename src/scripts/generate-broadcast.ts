@@ -31,6 +31,9 @@ import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } fro
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
+
+/** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
+let kokoroIndisponible = ''
 import {
   synthesizeWithChatterbox, getChatterboxVoiceForHost, reveillerEtVerifier,
   ouvrirSessionDiffusion, preparerAccesChatterbox, ouvrirEcheanceClone,
@@ -416,6 +419,11 @@ async function generateBroadcastBytes(opts: {
       }
     }
     if (!wav) {
+      // Sans Kokoro, un tour chinois dont la voix clonée a échoué n'a AUCUNE voix : on le dit
+      // clairement plutôt que de laisser le pont Python lever une erreur de fichier.
+      if (kokoroIndisponible && estVoixKokoro(plan.voixPiper)) {
+        throw new Error(`tour « ${plan.texte.slice(0, 40)}… » : voix clonée en échec ET Kokoro indisponible (${kokoroIndisponible.slice(0, 120)}) — aucune voix chinoise de repli`)
+      }
       // Voix native de la langue : Kokoro pour le chinois, Piper ailleurs.
       const kokoro = estVoixKokoro(plan.voixPiper)
       const wavPath = kokoro
@@ -613,7 +621,21 @@ async function main() {
     }
   }
   // Le chinois passe par Kokoro (lib/kokoro.ts), toutes les autres langues par Piper.
-  for (const v of uniqueVoices) await (estVoixKokoro(v) ? ensureKokoro() : ensureVoice(v))
+  // Kokoro n'est que le REPLI du chinois : Chatterbox (data-space) est multilingue et porte les
+  // voix de 自由之声. 18→22/09/2026 : la station n'est JAMAIS sortie du secours GitHub, tuée ICI
+  // par « Kokoro absent » avant la moindre requête Chatterbox. Son absence est désormais
+  // annoncée, et ne coûte que le repli — jamais l'émission.
+  for (const v of uniqueVoices) {
+    try {
+      await (estVoixKokoro(v) ? ensureKokoro() : ensureVoice(v))
+    } catch (err) {
+      if (!estVoixKokoro(v)) throw err
+      kokoroIndisponible = (err as Error).message
+      const msg = `Kokoro indisponible — le chinois n'aura PAS de repli local, Chatterbox seul : ${kokoroIndisponible.slice(0, 160)}`
+      console.warn(`    ⚠ ${msg}`)
+      if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`)
+    }
+  }
   const attributions = [...uniqueVoices]
     .map(v => licenceDe(v)?.attribution)
     .filter((a): a is string => !!a)
