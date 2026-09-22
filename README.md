@@ -1,6 +1,6 @@
 # Infinity Broadcast Scheduler
 
-Cron quotidien qui génère les **broadcasts radio pré-enregistrés** pour [Infinity](https://github.com/infinityfreeworld/infinity), tourne en GitHub Actions, publie sur **IPFS (Pinata)** + **NOSTR (kind:30093)**.
+Cron quotidien qui génère les **broadcasts radio pré-enregistrés** pour [Infinity](https://github.com/infinityfreeworld/infinity), tourne en GitHub Actions, publie sur **IPFS (data-space)** + **NOSTR (kind:30093)**.
 
 Stratégie : J-1 pour J. Chaque soir à 22h UTC, le scheduler génère les broadcasts du lendemain pour les 9 stations seed avec l'actu fraîche du jour. Tous les utilisateurs Infinity entendent le même contenu sur la même fréquence — **vraie radio FM décentralisée**.
 
@@ -276,16 +276,34 @@ Deux conséquences dans le code :
 - **Secrets GitHub** : encrypted at rest, jamais loggés
 - **Clé NOSTR privée** : appartient à l'admin scheduler, signe les broadcasts. Compromission = quelqu'un peut publier de faux broadcasts au nom de l'admin (mais pas accéder aux clés Anthropic/Pinata).
 
-## Limites connues V1
+## Musique dans les émissions (22/09/2026)
 
-- **Pas de musique** dans les broadcasts (juste dialogue continu). Insertion de musique = R.7+ (intégration des CIDs IPFS de tracks).
-- **WAV brut** (~1 MB / 10s audio). Migration Opus = R.7 (économise 10× le stockage IPFS).
-- **9 stations FR uniquement**. Ajouter EN/ES/etc. nécessite voix kokoro côté Node (= reécrire piper.ts pour kokoro).
+Chaque émission contient des **pauses musicales cuites dans le fichier** (`src/lib/musique.ts`),
+entre des blocs de dialogue : par défaut **2 pauses de 3 min maximum** pour 22 tours (après le
+7ᵉ et le 15ᵉ tour), tirées de façon déterministe par (station, date) parmi `station.tracks`.
+Les jingles (`station.jingles`) ouvrent et ferment l'émission. Le niveau de la musique est calé
+sur la voix (marge −4 dB), avec fondus. Le manifeste kind 30093 porte les `segments`
+(`music` / `jingle`, CID, titre, tStart/tEnd) pour l'affichage « 🎵 titre » dans l'application.
+
+- Sources : `station.tracks` de la seed, **remplacées** par ce que l'IHL publie (📻 Stations →
+  🎵 Musiques / 📯 Jingles, kind 30091, auteur admin — `src/lib/station-reglages.ts`,
+  `src/lib/admins-radio.ts`). Champs IHL reconnus : `tracks`, `jingles`, `skipMusic`,
+  `pauses` (0-6), `pauseDureeS` (30-600).
+- Réglages d'une nuit : `MUSIQUE_PAUSES`, `MUSIQUE_PAUSE_S`, `MUSIQUE_MARGE_DB`,
+  `MUSIQUE_DESACTIVEE=true` (kill switch).
+- **La musique ne bloque jamais l'émission** : une pause en échec est sautée et annoncée.
+- Épingler les pistes chez data-space (sinon elles ne sont que mises en cache) :
+  `npx tsx src/scripts/epingler-pistes.ts --executer` ou le workflow « Épingler les musiques ».
+- Débit Opus : 64 kbps quand il y a de la musique (32 sinon).
+
+## Limites connues
+
+- Les pistes par défaut (mai 2026) sont d'origine inconnue : à remplacer par des musiques
+  dont les droits sont établis (CC0, productions maison, génération souveraine).
+- Kokoro (chinois) : poids depuis GitHub, vérifiés par empreinte ; pas encore miroités.
 
 ## Roadmap
 
-- R.7 : encodage Opus
-- R.7 : insertion musiques entre dialogues (porter `runMusicPhase` browser → Node)
 - R.8 : multi-langues (en/es/it/pt/hi/ja/zh)
 - R.9 : vraies voix premium ElevenLabs ou cloud TTS (qualité broadcast)
 - R.10 : archive des broadcasts (J-7 disponibles pour replay)
