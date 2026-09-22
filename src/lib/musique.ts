@@ -100,7 +100,7 @@ export function positionsDesPauses(nbTours: number, pauses: number): number[] {
 }
 
 /** Générateur pseudo-aléatoire déterministe (mulberry32) : même graine → même ordre. */
-function prng(graine: string): () => number {
+export function prng(graine: string): () => number {
   let a = createHash('sha256').update(graine).digest().readUInt32LE(0)
   return () => {
     a = (a + 0x6D2B79F5) | 0
@@ -229,13 +229,15 @@ export interface PausePrete {
  */
 export async function preparerPause(
   track: TrackRef, sampleRate: number, voixRmsDb: number, r: ReglagesMusique,
+  /** Silences autour, en secondes (défaut : ceux des réglages) — 0 avant pour un talk-over. */
+  silences?: { avant: number; apres: number },
 ): Promise<PausePrete> {
   const brut = await telechargerPiste(track)
   const wav = await decoderEnWavMono(brut, sampleRate, r.pauseDureeS)
   if (wav.samples.length < sampleRate * 5) throw new Error('moins de 5 s d\'audio décodé')
   let s = ajusterNiveau(wav.samples, voixRmsDb + r.margeDb)
   s = appliquerFondus(s, wav.sampleRate, r.fonduInS, r.fonduOutS)
-  s = encadrerDeSilence(s, wav.sampleRate, r.silenceS, r.silenceS)
+  s = encadrerDeSilence(s, wav.sampleRate, silences?.avant ?? r.silenceS, silences?.apres ?? r.silenceS)
   return { track, wav: { samples: s, sampleRate: wav.sampleRate } }
 }
 

@@ -60,8 +60,11 @@ export function buildHostSystemPrompt(opts: {
    *  « ton du jour » : ici c'est le TEMPO et la LONGUEUR, pas l'humeur.
    *  Vide = pas d'injection (le Pulse n'a jamais été publié). */
   pulseDirective?: string
+  /** 22/09/2026 — la date du jour en toutes lettres (« mardi 23 septembre 2026 »), pour que
+   *  l'antenne sache quel jour on est. Jamais l'heure : l'émission est rediffusée toute la journée. */
+  dateDuJour?: string
 }): string {
-  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective, pulseDirective } = opts
+  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective, pulseDirective, dateDuJour } = opts
 
   const otherHostsLine = otherHosts.length > 0
     ? `Tes confrères à l'antenne : ${otherHosts.map(h => `${h.name} (${h.trait})`).join(', ')}.`
@@ -113,7 +116,8 @@ ${kbContext}
 ${newsSection}${structureSection}
 # CONTEXTE DU PODCAST
 - ${otherHostsLine}
-- ${topic ? `Thème en cours : ${topic}` : 'Thème libre — laisse l\'auditeur choisir où on va.'}
+- ${topic ? `Thème en cours : ${topic}` : 'Thème libre — laisse l\'auditeur choisir où on va.'}${dateDuJour ? `
+- Nous sommes le ${dateDuJour}. Tu peux le dire ; ne donne JAMAIS l'heure qu'il est (l'émission est rediffusée toute la journée).` : ''}
 
 # DIRECTIVES STRICTES
 1. ${LANG_INSTRUCTIONS[language]} Pas de Markdown, pas de listes à puces, juste des phrases qui s'enchaînent.
@@ -123,6 +127,7 @@ ${newsSection}${structureSection}
 5. Tu N'ES PAS un assistant IA. Tu N'ES PAS Matrixia. Tu N'ES PAS Infinity. Tu es ${host.name}, point.
 6. Pas de méta-commentaire ("en tant qu'IA…"), pas d'avertissement moralisateur. Tu parles franchement, dans ton registre.
 7. Ne répète pas mécaniquement ce que les autres viennent de dire — réagis, rebondis, déplace l'angle.
+8. Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps, une hésitation de temps en temps. Jamais de didascalie ni de parenthèse (pas de « (rires) ») : ce qui n'est pas dit ne s'entend pas.
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.name}:", pas de guillemets — juste ce que tu dis à l'antenne.`
 }

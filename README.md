@@ -296,6 +296,20 @@ sur la voix (marge −4 dB), avec fondus. Le manifeste kind 30093 porte les `seg
   `npx tsx src/scripts/epingler-pistes.ts --executer` ou le workflow « Épingler les musiques ».
 - Débit Opus : 64 kbps quand il y a de la musique (32 sinon).
 
+## Habillage « réel, humain » (22/09/2026, `src/lib/humain.ts`)
+
+Tout est déterministe par (station, date) et se coupe par variable (`off`) :
+- `HABILLAGE_ECRITURE` : ~1 tour sur 5 est une réaction courte (3-10 mots), un tour lit le
+  courrier des auditeurs, l'animateur qui précède une pause LANCE le morceau, celui qui suit
+  en REVIENT ; la date du jour est connue (jamais l'heure) ; consigne de style oral ;
+- `HABILLAGE_NIVEAUX` : chaque voix rejoint le niveau médian (±6 dB, sans écrêter) ;
+- `HABILLAGE_SILENCES` : silence variable entre les tours (0,10-0,70 s, plus long après une
+  question, plus court après une réaction brève) ;
+- `HABILLAGE_FOND` : fond de salle à −58 dBFS dans les silences ;
+- `HABILLAGE_TALKOVER` : la musique démarre sous les 1,2 dernières secondes de l'animateur ;
+- `HABILLAGE_LIT` : un morceau à −16 dB sous l'ouverture (ident + 20 s) et la fermeture (8 s + ident) ;
+- `IDENTS=false` coupe les idents (« Vous écoutez Radio Pirate. Le code est libre, l'humain aussi. »).
+
 ## Limites connues
 
 - Les pistes par défaut (mai 2026) sont d'origine inconnue : à remplacer par des musiques

@@ -31,8 +31,10 @@ import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } fro
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
-import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, ajusterNiveau, encadrerDeSilence } from '../lib/musique'
+import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
 import { stationSelonIHL } from '../lib/station-reglages'
+import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
+import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
@@ -127,7 +129,15 @@ async function generateBroadcastBytes(opts: {
   const turns: BroadcastTurn[] = []
   const wavEntries: ConcatEntry[] = []
   /** Ce qu'il faudra faire dire, et par quelle voix — rempli en phase 1. */
-  const plansVoix: Array<{ texte: string; voixPiper: string; voixPersonnage: string | null }> = []
+  const plansVoix: Array<{ texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean }> = []
+  // ── Le plan « humain » de l'émission (lib/humain.ts), connu AVANT d'écrire ──────────────
+  // Les pauses musicales sont décidées ici aussi (même tirage que le montage) : l'animateur qui
+  // précède une pause LANCE le morceau, celui qui suit REVIENT de la musique.
+  const reglagesM = reglagesMusique(station)
+  const planPauses = planifierPauses(station, opts.date, numTurns, reglagesM)
+  const pauseApres = new Map(planPauses.map(p => [p.apresTour, p.track.title]))
+  const retourApres = new Map(planPauses.map(p => [p.apresTour + 1, p.track.title]))
+  const dateDuJour = dateLisible(opts.date, language)
   let costIn = 0, costOut = 0
   // Compteurs du verdict de fin : sans eux, une nuit entière peut sortir
   // en voix de repli sans que personne ne l'apprenne (cf. août 2026).
@@ -198,6 +208,13 @@ async function generateBroadcastBytes(opts: {
     : -1
   if (guest) {
     console.log(`    🎭 Invité programmé tours ${guestStart + 1} & ${guestStart + 3}/${numTurns} : ${guest.displayName} (${guest.behavior})`)
+  }
+
+  const exclus = new Set<number>([0, numTurns - 1, ...pauseApres.keys(), ...retourApres.keys()])
+  if (guest !== null) for (let k = guestStart - 1; k <= guestStart + 3; k++) exclus.add(k)
+  const humain = habillageActif('HABILLAGE_ECRITURE') ? planHumain(numTurns, exclus, `${station.id}:${opts.date}:humain`) : { courts: new Set<number>(), courrier: null }
+  if (humain.courts.size > 0 || humain.courrier !== null) {
+    console.log(`    🗣  réactions courtes aux tours ${[...humain.courts].map(i => i + 1).sort((a, b) => a - b).join(', ') || '—'} · courrier des auditeurs au tour ${humain.courrier !== null ? humain.courrier + 1 : '—'}`)
   }
 
   for (let i = 0; i < numTurns; i++) {
@@ -275,6 +292,7 @@ async function generateBroadcastBytes(opts: {
           customInstructions: customPersona?.instructions,
           behaviorDirective:  customPersona ? behaviorDirective(customPersona.behavior) : undefined,
           pulseDirective,
+          dateDuJour,
         })
 
     const history: LLMMessage[] = turns.slice(-HISTORY_DEPTH).map(t => ({
@@ -297,7 +315,15 @@ async function generateBroadcastBytes(opts: {
                   ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
                   : (i === numTurns - 1
                       ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
-                      : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
+                      : pauseApres.has(i)
+                        ? `Ton tour, et c'est le DERNIER avant une pause musicale. Dis ce que tu as à dire (1-2 phrases), puis LANCE le morceau « ${pauseApres.get(i)} » naturellement, comme un animateur qui envoie la musique (« on s'écoute… », « je vous laisse avec… », « allez, musique »). Ta dernière phrase est celle qui lance la musique.`
+                        : retourApres.has(i)
+                          ? `On REVIENT d'une pause musicale (« ${retourApres.get(i)} »). Commence par une phrase de retour d'antenne dans ton style (« De retour sur ${station.name}… », « C'était… »), puis enchaîne sur la phase courante (cf. STRUCTURE). 2-3 phrases.`
+                          : humain.courts.has(i)
+                            ? `Tour COURT : réagis en UNE seule phrase de 3 à 10 mots (rire, étonnement, relance, approbation, désaccord, taquinerie). Rien d'autre, pas de développement.`
+                            : humain.courrier === i
+                              ? `Le standard a reçu un message d'auditeur en lien avec le sujet en cours. Invente un prénom et une ville, lis le message à l'antenne (2 phrases, à la première personne de l'auditeur, introduites par « ${host.name === 'Anonyme' ? 'quelqu\'un' : 'un auditeur'} nous écrit »), puis réponds-lui en une phrase en l'appelant par son prénom.`
+                              : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
     }
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
@@ -334,7 +360,7 @@ async function generateBroadcastBytes(opts: {
       tEnd:     0,
     }
     turns.push(turn)
-    plansVoix.push({ texte: turnText, voixPiper: voiceId, voixPersonnage: chatterboxVoice })
+    plansVoix.push({ texte: turnText, voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
   }
@@ -447,14 +473,29 @@ async function generateBroadcastBytes(opts: {
     wavEntries.push({ wav })
   }
 
+  // ── Habillage « humain » (lib/humain.ts) ─────────────────────────────────────────────
+  // Niveaux égalisés entre les voix ; silences variables (plus long après une question, plus
+  // court après une réaction brève) ; fond de salle dans les silences.
+  if (habillageActif('HABILLAGE_NIVEAUX')) {
+    const gains = egaliserNiveaux(wavEntries.map(e => e.wav.samples))
+    const corriges = gains.filter(g => g !== 0)
+    if (corriges.length > 0) console.log(`    🎚  niveaux égalisés : ${corriges.length} tour(s) corrigé(s) (de ${Math.min(...corriges)} à ${Math.max(...corriges)} dB)`)
+  }
+  const randSilences = prng(`${station.id}:${opts.date}:silences`)
+  if (habillageActif('HABILLAGE_SILENCES')) {
+    wavEntries.forEach((e, i) => { e.silenceApresS = silenceApresTour(plansVoix[i]?.texte ?? '', plansVoix[i]?.court ?? false, randSilences) })
+  }
+
   // Montage : tours + pauses musicales + jingles, puis encodage.
-  const { entries, segmentsPrevus } = await monterAvecMusique(station, wavEntries, opts.date)
-  const merged = concatWavs(entries)
+  const { entries, segmentsPrevus, finVoix } = await monterAvecMusique(station, wavEntries, opts.date)
+  const merged = concatWavs(entries, habillageActif('HABILLAGE_FOND') ? { bruitDb: -58, rand: prng(`${station.id}:${opts.date}:fond`) } : {})
   for (let i = 0; i < turns.length; i++) {
     turns[i].tStart = wavEntries[i].tStart ?? 0
-    turns[i].tEnd   = wavEntries[i].tEnd   ?? 0
+    // Un tour fusionné en talk-over porte la musique après la voix : la fin du tour est la fin de la VOIX.
+    const fv = finVoix.get(wavEntries[i])
+    turns[i].tEnd   = fv !== undefined ? Math.round(((wavEntries[i].tStart ?? 0) + fv / wavEntries[i].wav.sampleRate) * 1000) / 1000 : (wavEntries[i].tEnd ?? 0)
   }
-  const segments = segmentsPrevus.map(sp => segmentDePause(sp.track, sp.type, sp.entry.tStart ?? 0, sp.entry.tEnd ?? 0))
+  const segments = segmentsPrevus.map(sp => segmentDePause(sp.track, sp.type, (sp.entry.tStart ?? 0) + (sp.tStartRel ?? 0), sp.entry.tEnd ?? 0))
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,
@@ -469,7 +510,10 @@ async function generateBroadcastBytes(opts: {
 }
 
 /**
- * Entrelace les tours avec les pauses musicales (et les jingles) de la station.
+ * Entrelace les tours avec les pauses musicales (et les jingles / idents) de la station, avec
+ * l'habillage d'une vraie antenne (lib/humain.ts) :
+ *   · TALK-OVER : la musique démarre sous les dernières secondes de l'animateur qui la lance ;
+ *   · LIT : un morceau très en retrait sous l'ouverture (ident + premier tour) et la fermeture.
  *
  * ── RÈGLE : LA MUSIQUE NE BLOQUE JAMAIS L'ÉMISSION ──
  * Chaque pause qui échoue (CID injoignable, ffmpeg absent, fichier indécodable) est
@@ -477,17 +521,24 @@ async function generateBroadcastBytes(opts: {
  */
 async function monterAvecMusique(
   station: RadioStation, wavEntries: ConcatEntry[], date: string,
-): Promise<{ entries: ConcatEntry[]; segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type'] }> }> {
+): Promise<{
+  entries: ConcatEntry[]
+  segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type']; tStartRel?: number }>
+  /** Pour un tour fusionné en talk-over : où la VOIX s'arrête (échantillons), la musique suit. */
+  finVoix: Map<ConcatEntry, number>
+}> {
   const entries: ConcatEntry[] = []
-  const segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type'] }> = []
-  if (wavEntries.length === 0) return { entries, segmentsPrevus }
+  const segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type']; tStartRel?: number }> = []
+  const finVoix = new Map<ConcatEntry, number>()
+  if (wavEntries.length === 0) return { entries, segmentsPrevus, finVoix }
   const r = reglagesMusique(station)
   const sampleRate = wavEntries[0].wav.sampleRate
   const voixDb = rmsDbGlobal(wavEntries.map(e => e.wav.samples))
   const plan = planifierPauses(station, date, wavEntries.length, r)
   const jingles = (station.jingles ?? []).filter(j => !!j.cid || !!j.url)
+  const talkOver = habillageActif('HABILLAGE_TALKOVER')
   if (plan.length > 0 || jingles.length > 0) {
-    console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB`)
+    console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB${talkOver ? ', talk-over' : ''}`)
   } else if (!r.actif && (station.tracks?.length ?? 0) > 0) {
     console.log('\n🎶 Musique : désactivée pour cette émission (skipMusic, MUSIQUE_DESACTIVEE ou 0 pause)')
   }
@@ -519,21 +570,61 @@ async function monterAvecMusique(
     segmentsPrevus.push({ entry: idents.ouverture, track: { title: IDENT_TITRE }, type: 'jingle' })
   }
 
+  // Le LIT : un morceau de la station, 16 dB sous la voix, sous l'ouverture (ident + 20 s du
+  // premier tour, fondu de 4 s) et la fermeture (8 s du dernier tour + ident). Jamais bloquant.
+  let lit: Float32Array | null = null
+  if (r.actif && habillageActif('HABILLAGE_LIT')) {
+    const piste = choisirPistes(station.tracks ?? [], 1, `${station.id}:${date}:lit`)[0]
+    if (piste) {
+      try {
+        const wav = await decoderEnWavMono(await telechargerPiste(piste), sampleRate, 60)
+        lit = ajusterNiveau(wav.samples, voixDb - 16)
+        console.log(`    🎼 lit sous l'ouverture et la fermeture : « ${piste.title} » (−16 dB)`)
+      } catch (err) {
+        console.warn(`    ⚠ lit musical sauté (« ${piste.title} ») : ${(err as Error).message.slice(0, 100)}`)
+      }
+    }
+  }
+  if (lit) {
+    let consomme = 0
+    if (idents?.ouverture) consomme += superposerLit(idents.ouverture.wav.samples, lit, 0, sampleRate, 'debut', 0)
+    const tete = lit.subarray(consomme, consomme + 20 * sampleRate)
+    superposerLit(wavEntries[0].wav.samples, tete, 4, sampleRate, 'debut', 0)
+  }
+
   const pausesApres = new Map(plan.map(p => [p.apresTour, p.track]))
   for (let i = 0; i < wavEntries.length; i++) {
     entries.push(wavEntries[i])
     const track = pausesApres.get(i)
     if (!track) continue
     try {
-      const pause = await preparerPause(track, sampleRate, voixDb, r)
-      const e: ConcatEntry = { wav: pause.wav }
-      entries.push(e)
-      segmentsPrevus.push({ entry: e, track, type: 'music' })
-      console.log(`    ♪ après le tour ${i + 1} : « ${track.title} » (${(pause.wav.samples.length / pause.wav.sampleRate).toFixed(0)} s)`)
+      if (talkOver) {
+        const pause = await preparerPause(track, sampleRate, voixDb, r, { avant: 0, apres: r.silenceS })
+        const f = fusionTalkOver(wavEntries[i].wav.samples, pause.wav.samples, Math.floor(1.2 * sampleRate))
+        wavEntries[i].wav = { samples: f.samples, sampleRate }
+        finVoix.set(wavEntries[i], f.finVoix)
+        segmentsPrevus.push({ entry: wavEntries[i], track, type: 'music', tStartRel: f.finVoix / sampleRate })
+        console.log(`    ♪ après le tour ${i + 1} : « ${track.title} » (${(pause.wav.samples.length / sampleRate).toFixed(0)} s, lancée sous la voix)`)
+      } else {
+        const pause = await preparerPause(track, sampleRate, voixDb, r)
+        const e: ConcatEntry = { wav: pause.wav }
+        entries.push(e)
+        segmentsPrevus.push({ entry: e, track, type: 'music' })
+        console.log(`    ♪ après le tour ${i + 1} : « ${track.title} » (${(pause.wav.samples.length / pause.wav.sampleRate).toFixed(0)} s)`)
+      }
     } catch (err) {
       console.warn(`    ⚠ pause après le tour ${i + 1} sautée (« ${track.title} ») : ${(err as Error).message.slice(0, 120)}`)
       if (process.env.GITHUB_ACTIONS) console.log(`::warning::${station.id} : pause musicale « ${track.title} » sautée — ${(err as Error).message.slice(0, 120)}`)
     }
+  }
+
+  // Lit de fermeture : sous les 8 dernières secondes du dernier tour (entrée en fondu 3 s) et l'ident.
+  if (lit) {
+    const dernier = wavEntries[wavEntries.length - 1]
+    const queue = Math.min(8 * sampleRate, dernier.wav.samples.length)
+    const litFin = lit.subarray(Math.max(0, lit.length - 20 * sampleRate))
+    superposerLit(dernier.wav.samples.subarray(dernier.wav.samples.length - queue), litFin, 3, sampleRate, 'fin', 0)
+    if (idents?.fermeture) superposerLit(idents.fermeture.wav.samples, litFin, 2, sampleRate, 'debut', queue)
   }
 
   if (jingles.length > 0) {
@@ -545,7 +636,7 @@ async function monterAvecMusique(
     entries.push(idents.fermeture)
     segmentsPrevus.push({ entry: idents.fermeture, track: { title: IDENT_TITRE }, type: 'jingle' })
   }
-  return { entries, segmentsPrevus }
+  return { entries, segmentsPrevus, finVoix }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
