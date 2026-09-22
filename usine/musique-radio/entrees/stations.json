@@ -1,0 +1,21 @@
+{
+  "commun": "instrumental, no vocals, radio interlude, clean mix, steady groove, no fade in",
+  "stations": {
+    "wtf-radio":       { "nom": "WTF Radio",       "style": "energetic indie rock, punchy drums, electric guitars, playful, upbeat", "bpm": 128 },
+    "freeworld-radio": { "nom": "Freeworld Radio", "style": "world fusion, warm acoustic guitar, hand percussion, kora, uplifting, organic", "bpm": 100 },
+    "mindctrl-radio":  { "nom": "Mind Control Radio", "style": "dark ambient electronica, deep pads, slow pulse, mysterious, cinematic", "bpm": 80 },
+    "hydrogene-radio": { "nom": "H2 Radio",        "style": "clean modern electronic, bright synth arpeggios, optimistic, scientific, crisp", "bpm": 118 },
+    "g1-radio":        { "nom": "G1 Libre",        "style": "acoustic folk, fingerpicked guitar, light strings, warm, hopeful, community", "bpm": 96 },
+    "deglingos-radio": { "nom": "Les Deglingos",   "style": "funky comedy groove, slap bass, brass stabs, clavinet, cheeky, big fun", "bpm": 112 },
+    "diginomad-radio": { "nom": "Diginomad",       "style": "lo-fi chillhop, mellow rhodes, vinyl texture, laid-back beat, travel vibes", "bpm": 84 },
+    "tech-radio":      { "nom": "Cryptozor",       "style": "melodic techno, driving bassline, glitchy percussion, futuristic, focused", "bpm": 126 },
+    "pirate-radio":    { "nom": "Radio Pirate",    "style": "chiptune synthwave, 8-bit leads, retro arpeggios, hacker mood, neon night drive", "bpm": 120 },
+    "oasis-fm":        { "nom": "Oasis FM",        "style": "desert ambient, oud and ney flute, soft hand drums, water textures, serene", "bpm": 76 },
+    "free-press-fm":   { "nom": "Free Press FM",   "style": "americana, upright bass, brushed drums, harmonica, honest, newsroom energy", "bpm": 104 },
+    "voces-libres":    { "nom": "Voces Libres",    "style": "latin jazz, nylon guitar, congas, trumpet, warm and lively, caribbean", "bpm": 108 },
+    "svoboda-fm":      { "nom": "Svoboda FM",      "style": "slavic folk rock, accordion, balalaika accents, driving drums, melancholic yet strong", "bpm": 110 },
+    "zi-you-zhi-sheng":{ "nom": "Zi You Zhi Sheng","style": "modern chinese instrumental, guzheng, erhu, soft electronic beat, elegant, flowing", "bpm": 92 }
+  },
+  "pistes_par_station": 6,
+  "duree_s": [150, 180, 200, 165, 190, 175]
+}
