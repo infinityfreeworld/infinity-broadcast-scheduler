@@ -19,14 +19,14 @@
  *   environnement partagé aurait pu casser la voix de treize stations pour
  *   en servir une.
  *
- *   ── SOUVERAINETÉ : À MOITIÉ ──
- *   Les poids du modèle viennent de GitHub. Ils sont FIGÉS et vérifiés par
- *   empreinte, mais pas encore déposés chez data-space : 380 Mo ne passent
- *   pas la limite de 100 s de Cloudflare sur une connexion de téléphone
- *   (524 mesuré le 11/09/2026 sur 39 Mo). Tout téléchargement est ANNONCÉ.
- *   Le vocabulaire (config.json, 3 Ko, Apache-2.0) est EMBARQUÉ dans le
- *   dépôt depuis le 22/09/2026 : plus aucune requête Hugging Face sur le
- *   chemin d'une nuit radio. L'empreinte reste vérifiée, copie ou non.
+ *   ── SOUVERAINETÉ (22/09/2026) ──
+ *   Les poids viennent D'ABORD de NOTRE miroir (models.data-space.world,
+ *   servi par le disque du hub, repli IPFS), GitHub n'étant plus qu'un
+ *   REPLI annoncé. Ils sont FIGÉS et vérifiés par empreinte, quelle que
+ *   soit la source. Le vocabulaire (config.json, 3 Ko, Apache-2.0) est
+ *   EMBARQUÉ dans le dépôt : plus aucune requête Hugging Face sur le chemin
+ *   d'une nuit radio. (Le miroir sert aussi par Range, donc une connexion
+ *   fragile reprend là où elle s'est arrêtée — le 524 du 11/09 est derrière nous.)
  */
 
 import { execFile } from 'node:child_process'
@@ -56,10 +56,16 @@ export function nomKokoro(voix: string): string {
 export interface FichierFige {
   nom: string
   sha256: string
+  /** Source d'origine (GitHub / Hugging Face) : REPLI seulement. */
   source: string
+  /** Notre miroir (models.data-space.world) : essayé en PREMIER. */
+  miroir?: string
   /** Copie figée dans le dépôt : lue AVANT toute tentative de téléchargement. */
   embarque?: string
 }
+
+/** Hôte du miroir de poids ; `MODELES_HOST` le remplace pour un banc d'essai. */
+export const MIROIR_MODELES = process.env.MODELES_HOST ?? 'https://models.data-space.world'
 
 /**
  * Release DATÉE (`model-files-v1.1`), jamais « la dernière » : un modèle
@@ -71,11 +77,13 @@ export const FICHIERS_KOKORO: Record<'modele' | 'voix' | 'config', FichierFige> 
     nom: 'kokoro-v1.1-zh.onnx',
     sha256: '859f9ded9f53be16c24857cdab3254a45da53c3afd5ba6ef134c7de3f822e326',
     source: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.1-zh.onnx',
+    miroir: `${MIROIR_MODELES}/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.1-zh.onnx`,
   },
   voix: {
     nom: 'voices-v1.1-zh.bin',
     sha256: '14cb6186c99e4f6016871405f62046c5df863ae27465cbdc4ee08be7dd703acd',
     source: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.1-zh.bin',
+    miroir: `${MIROIR_MODELES}/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.1-zh.bin`,
   },
   config: {
     nom: 'config-v1.1-zh.json',
@@ -127,10 +135,23 @@ export async function ensureKokoro(): Promise<void> {
       if (copie && existsSync(copie)) {
         copyFileSync(copie, p)
       } else {
-        console.warn(`  [kokoro] ⚠ ${f.nom} absent — téléchargé depuis ${new URL(f.source).host} (pas encore chez data-space)`)
-        const r = await fetch(f.source)
-        if (!r.ok) throw new Error(`[kokoro] HTTP ${r.status} en téléchargeant ${f.nom}`)
-        writeFileSync(p, Buffer.from(await r.arrayBuffer()))
+        // Notre miroir d'abord ; la source d'origine seulement s'il ne répond pas — et on le dit.
+        const sources = [...(f.miroir ? [f.miroir] : []), f.source]
+        let obtenu = false
+        for (const url of sources) {
+          const hote = new URL(url).host
+          try {
+            const r = await fetch(url, { signal: AbortSignal.timeout(600_000) })
+            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+            writeFileSync(p, Buffer.from(await r.arrayBuffer()))
+            console.log(`  [kokoro] ${f.nom} téléchargé depuis ${hote}${url === f.source ? ' (REPLI — le miroir n\'a pas répondu)' : ''}`)
+            obtenu = true
+            break
+          } catch (err) {
+            console.warn(`  [kokoro] ⚠ ${f.nom} depuis ${hote} : ${(err as Error).message.slice(0, 80)}`)
+          }
+        }
+        if (!obtenu) throw new Error(`[kokoro] ${f.nom} : aucune source n'a répondu`)
       }
     }
     const e = await empreinte(p)
