@@ -67,6 +67,12 @@ test('le modèle est ÉPINGLÉ : release datée et empreinte, jamais « la derni
     assert.match(f.sha256, /^[0-9a-f]{64}$/, `${f.nom} sans empreinte`)
     assert.doesNotMatch(f.source, /\/latest\//, `${f.nom} pointe vers une version mouvante`)
   }
+  // 22/09/2026 : les poids viennent de NOTRE miroir d'abord, GitHub n'est que le repli.
+  for (const f of [FICHIERS_KOKORO.modele, FICHIERS_KOKORO.voix]) {
+    assert.match(f.miroir ?? '', /^https:\/\/models\.data-space\.world\//, `${f.nom} sans miroir`)
+    assert.equal(new URL(f.miroir!).pathname, new URL(f.source).pathname, 'même chemin, seul l’hôte change')
+  }
+  assert.match(code('src/lib/kokoro.ts'), /const sources = \[\.\.\.\(f\.miroir \? \[f\.miroir\] : \[\]\), f\.source\]/, 'le miroir est essayé en premier')
   assert.match(FICHIERS_KOKORO.modele.source, /model-files-v1\.1\/kokoro-v1\.1-zh\.onnx$/)
   assert.equal(TAUX_KOKORO, 24000)
 })
