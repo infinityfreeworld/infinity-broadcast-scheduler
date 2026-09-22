@@ -113,6 +113,7 @@ test('🔴 l’écriture sait où sont les pauses : lancer la musique, en reveni
   assert.match(gb, /humain\.courts\.has\(i\)\s*\?\s*`Tour COURT/)
   assert.match(gb, /humain\.courrier === i\s*\?\s*`Le standard a reçu un message d'auditeur/)
   assert.match(gb, /dateDuJour,\n/, 'la date est passée au prompt')
+  assert.match(gb, /plansVoix\[j\]\.court \? \{ emotionExaggeration: 0\.70 \} : \{\}/, 'une réaction courte se dit avec plus d’élan')
   const pe = readFileSync('src/lib/personas.ts', 'utf8')
   assert.match(pe, /8\. Parle comme à l'ORAL/)
   assert.match(pe, /ne donne JAMAIS l'heure qu'il est/)

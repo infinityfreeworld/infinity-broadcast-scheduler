@@ -397,6 +397,9 @@ async function generateBroadcastBytes(opts: {
       text:     plansVoix[j].texte,
       language,
       format:   'wav',
+      // Une réaction brève se dit avec plus d'élan qu'un développement : l'exagération
+      // émotionnelle monte de 0,55 à 0,70 pour ces tours-là (lib/humain.ts, 22/09/2026).
+      ...(plansVoix[j].court ? { emotionExaggeration: 0.70 } : {}),
     }),
   )
   if (aSynthetiser > 0) {
