@@ -90,6 +90,18 @@ export interface ConcatEntry {
   tStart?: number
   /** Calculé : fin dans le buffer final (s). */
   tEnd?:   number
+  /**
+   * Silence APRÈS cette entrée, en secondes (22/09/2026 — lib/humain.ts : variable, plus long
+   * après une question, plus court après une réaction brève). Absent : INTER_TURN_SILENCE_S.
+   */
+  silenceApresS?: number
+}
+
+export interface OptionsConcat {
+  /** Fond de salle dans les silences, en dBFS (ex. −58) ; absent = silence numérique. */
+  bruitDb?: number
+  /** Tirage du bruit (déterministe par graine). */
+  rand?:    () => number
 }
 
 /**
@@ -99,13 +111,13 @@ export interface ConcatEntry {
  *
  * Mute en place les `tStart`/`tEnd` des entries pour le transcript.
  */
-export function concatWavs(entries: ConcatEntry[]): DecodedWav {
+export function concatWavs(entries: ConcatEntry[], opts: OptionsConcat = {}): DecodedWav {
   if (entries.length === 0) {
     return { samples: new Float32Array(0), sampleRate: 22050 }
   }
 
   const targetRate = entries[0].wav.sampleRate
-  const silenceSamples = Math.floor(INTER_TURN_SILENCE_S * targetRate)
+  const silenceDe = (e: ConcatEntry) => Math.floor((e.silenceApresS ?? INTER_TURN_SILENCE_S) * targetRate)
 
   // Calcul tailles + timings
   let totalSamples = 0
@@ -118,7 +130,7 @@ export function concatWavs(entries: ConcatEntry[]): DecodedWav {
     entries[i].tStart = totalSamples / targetRate
     totalSamples += len
     entries[i].tEnd = totalSamples / targetRate
-    if (i < entries.length - 1) totalSamples += silenceSamples
+    if (i < entries.length - 1) totalSamples += silenceDe(entries[i])
   }
 
   const out = new Float32Array(totalSamples)
@@ -126,7 +138,14 @@ export function concatWavs(entries: ConcatEntry[]): DecodedWav {
   for (let i = 0; i < entries.length; i++) {
     const written = writeInto(entries[i].wav, targetRate, out, offset)
     offset += written
-    if (i < entries.length - 1) offset += silenceSamples
+    if (i < entries.length - 1) {
+      const gap = silenceDe(entries[i])
+      if (opts.bruitDb !== undefined && opts.rand && gap > 0) {
+        const amp = Math.pow(10, opts.bruitDb / 20) * 2
+        for (let k = offset; k < offset + gap; k++) out[k] = amp * ((opts.rand() + opts.rand() + opts.rand() + opts.rand()) / 4 - 0.5)
+      }
+      offset += gap
+    }
   }
 
   return { samples: out, sampleRate: targetRate }

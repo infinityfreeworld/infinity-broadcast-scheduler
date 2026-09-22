@@ -30,10 +30,17 @@ export const PHRASES_IDENT: Record<string, { ouverture: string; fermeture: strin
   zh: { ouverture: '您正在收听{n}。',               fermeture: '以上是{n}，稍后回来。' },
 }
 
-/** La phrase d'ident pour une langue (repli : français). Pure. */
-export function phraseIdent(langue: string | undefined, nom: string, quoi: 'ouverture' | 'fermeture'): string {
+/**
+ * La phrase d'ident pour une langue (repli : français). Pure. À l'ouverture, le slogan de la
+ * station suit le nom quand il est court (« Vous écoutez Radio Pirate. Le code est libre,
+ * l'humain aussi. ») — c'est l'habillage d'une vraie antenne.
+ */
+export function phraseIdent(langue: string | undefined, nom: string, quoi: 'ouverture' | 'fermeture', slogan?: string): string {
   const p = PHRASES_IDENT[langue ?? 'fr'] ?? PHRASES_IDENT.fr
-  return p[quoi].replace('{n}', nom)
+  const base = p[quoi].replace('{n}', nom)
+  const s = (slogan ?? '').trim()
+  if (quoi === 'ouverture' && s && s.length <= 70) return `${base} ${/[.!?。！？]$/.test(s) ? s : s + '.'}`
+  return base
 }
 
 async function direAvecVoix(station: RadioStation, texte: string): Promise<DecodedWav | null> {
@@ -68,7 +75,7 @@ export async function identsDeStation(
 ): Promise<{ ouverture: ConcatEntry | null; fermeture: ConcatEntry | null }> {
   if (process.env.IDENTS === 'false') return { ouverture: null, fermeture: null }
   const preparer = async (quoi: 'ouverture' | 'fermeture'): Promise<ConcatEntry | null> => {
-    const wav = await direAvecVoix(station, phraseIdent(station.language, station.name, quoi))
+    const wav = await direAvecVoix(station, phraseIdent(station.language, station.name, quoi, station.tagline))
     if (!wav || wav.samples.length < wav.sampleRate * 0.5) return null
     let s = ajusterNiveau(wav.samples, voixRmsDb)
     s = encadrerDeSilence(s, wav.sampleRate, quoi === 'ouverture' ? 0.2 : 0.6, quoi === 'ouverture' ? 0.7 : 0.4)
