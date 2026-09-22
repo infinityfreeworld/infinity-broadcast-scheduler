@@ -129,6 +129,9 @@ export async function publishBroadcast(
       audioCid:    finalBroadcast.audioCid,
       audioMime:   finalBroadcast.audioMime,
       turns:       finalBroadcast.turns,
+      // Pauses musicales / jingles : seulement quand il y en a (l'appli tolère l'absence).
+      ...(finalBroadcast.segments && finalBroadcast.segments.length > 0
+        ? { segments: finalBroadcast.segments } : {}),
       newsRefs:    finalBroadcast.newsRefs,
       model:       finalBroadcast.model,
       generatedAt: finalBroadcast.generatedAt,

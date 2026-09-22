@@ -1,0 +1,35 @@
+name: Épingler les musiques des stations chez data-space
+
+# 📌 Épingle sur le compte du générateur les musiques/jingles déclarés par les stations
+# (seed + réglages IHL kind 30091) — sur demande. La clé du générateur vit ici en secret.
+# 22/09/2026 : les 10 pistes par défaut n'étaient épinglées par AUCUN compte data-space.
+on:
+  workflow_dispatch:
+    inputs:
+      station:
+        description: 'Une seule station (vide = toutes)'
+        required: false
+        default: ''
+
+jobs:
+  epingler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Épingle
+        env:
+          DATASPACE_NOSTR_KEY: ${{ secrets.DATASPACE_NOSTR_KEY }}
+          STATION: ${{ github.event.inputs.station }}
+        run: |
+          if [ -n "$STATION" ]; then
+            npx tsx src/scripts/epingler-pistes.ts --executer --station "$STATION"
+          else
+            npx tsx src/scripts/epingler-pistes.ts --executer
+          fi

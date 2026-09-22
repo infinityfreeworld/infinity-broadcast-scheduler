@@ -45,8 +45,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install espeak-ng + opus-tools
-        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools
+      # ffmpeg : réemballage WebM (opus.ts) ET décodage des musiques de pause (musique.ts).
+      # Sans lui, la répétition s'arrêtait à l'encodage — avant d'avoir écrit le moindre fichier.
+      - name: Install espeak-ng + opus-tools + ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools ffmpeg
 
       - name: Install deps
         run: npm ci

@@ -55,6 +55,15 @@ export interface RadioStation {
   sources?:     NewsSource[]
   description?: string
   skipMusic?:   boolean
+  /**
+   * Jingles (CID) joués au début et à la fin de l'émission — distincts des `tracks`
+   * (musiques de pause). Déclarés dans l'IHL (📯 Jingles, kind 30091).
+   */
+  jingles?:     TrackRef[]
+  /** Nombre de pauses musicales DANS l'émission (IHL, kind 30091) ; défaut : MUSIQUE_PAUSES ou 2. */
+  pauses?:      number
+  /** Durée maximale d'une pause, en secondes (IHL, kind 30091) ; défaut : MUSIQUE_PAUSE_S ou 180. */
+  pauseDureeS?: number
   /** Phase H.3 — IDs des guests (kind:30098) invitables par cette station. */
   guestIds?:    string[]
 }
@@ -87,6 +96,19 @@ export interface BroadcastTurn {
   tEnd:     number
 }
 
+/**
+ * Un passage NON parlé de l'émission, cuit dans l'audio : pause musicale ou jingle.
+ * Contrat avec l'application (`src/modules/radio/broadcast/types.ts`, 16/09/2026 pour
+ * `jingle`, 22/09/2026 pour `music`) : elle s'en sert pour afficher « 🎵 titre ».
+ */
+export interface BroadcastSegment {
+  type:   'music' | 'jingle'
+  cid?:   string
+  title?: string
+  tStart: number
+  tEnd:   number
+}
+
 export interface RadioBroadcast {
   stationId:   string
   date:        string       // YYYY-MM-DD
@@ -95,6 +117,8 @@ export interface RadioBroadcast {
   audioCid:    string
   audioMime:   string
   turns:       BroadcastTurn[]
+  /** Pauses musicales et jingles (absent quand l'émission n'en a pas). */
+  segments?:   BroadcastSegment[]
   newsRefs:    string[]
   model:       string
   generatedBy: string       // pubkey hex

@@ -25,12 +25,14 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
-import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem } from '../lib/types'
+import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem, BroadcastSegment } from '../lib/types'
 import { appelerLLM, maillonsDisponibles, bilanDesMaillons, type LLMMessage } from '../lib/llm'
 import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
+import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, ajusterNiveau, encadrerDeSilence } from '../lib/musique'
+import { stationSelonIHL } from '../lib/station-reglages'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
 let kokoroIndisponible = ''
@@ -101,6 +103,8 @@ interface GenResult {
   audioBlob:   Buffer
   durationSec: number
   turns:       BroadcastTurn[]
+  /** Pauses musicales et jingles cuits dans l'audio (vide sans musique). */
+  segments:    BroadcastSegment[]
   costInputTokens:  number
   costOutputTokens: number
   /** Tours pour lesquels une voix de personnage était attribuée. */
@@ -114,6 +118,8 @@ async function generateBroadcastBytes(opts: {
   numTurns: number
   topic:    string
   news:     NewsItem[]
+  /** Date de l'émission : graine du tirage des musiques (Mac et secours tirent les mêmes). */
+  date:     string
 }): Promise<GenResult> {
   const { station, numTurns, topic, news } = opts
   const language = station.language ?? 'fr'
@@ -440,22 +446,92 @@ async function generateBroadcastBytes(opts: {
     wavEntries.push({ wav })
   }
 
-  // Concat + encode
-  const merged = concatWavs(wavEntries)
+  // Montage : tours + pauses musicales + jingles, puis encodage.
+  const { entries, segmentsPrevus } = await monterAvecMusique(station, wavEntries, opts.date)
+  const merged = concatWavs(entries)
   for (let i = 0; i < turns.length; i++) {
     turns[i].tStart = wavEntries[i].tStart ?? 0
     turns[i].tEnd   = wavEntries[i].tEnd   ?? 0
   }
+  const segments = segmentsPrevus.map(sp => segmentDePause(sp.track, sp.type, sp.entry.tStart ?? 0, sp.entry.tEnd ?? 0))
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,
     durationSec: durationOf(merged),
     turns,
+    segments,
     costInputTokens:  costIn,
     costOutputTokens: costOut,
     voixAttendues,
     voixObtenues,
   }
+}
+
+/**
+ * Entrelace les tours avec les pauses musicales (et les jingles) de la station.
+ *
+ * ── RÈGLE : LA MUSIQUE NE BLOQUE JAMAIS L'ÉMISSION ──
+ * Chaque pause qui échoue (CID injoignable, ffmpeg absent, fichier indécodable) est
+ * SAUTÉE et annoncée ; le dialogue reste intact. Voir lib/musique.ts.
+ */
+async function monterAvecMusique(
+  station: RadioStation, wavEntries: ConcatEntry[], date: string,
+): Promise<{ entries: ConcatEntry[]; segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type'] }> }> {
+  const entries: ConcatEntry[] = []
+  const segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type'] }> = []
+  if (wavEntries.length === 0) return { entries, segmentsPrevus }
+  const r = reglagesMusique(station)
+  const sampleRate = wavEntries[0].wav.sampleRate
+  const voixDb = rmsDbGlobal(wavEntries.map(e => e.wav.samples))
+  const plan = planifierPauses(station, date, wavEntries.length, r)
+  const jingles = (station.jingles ?? []).filter(j => !!j.cid || !!j.url)
+  if (plan.length > 0 || jingles.length > 0) {
+    console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB`)
+  } else if (!r.actif && (station.tracks?.length ?? 0) > 0) {
+    console.log('\n🎶 Musique : désactivée pour cette émission (skipMusic, MUSIQUE_DESACTIVEE ou 0 pause)')
+  }
+
+  // Jingle : au début (le premier), et à la fin (le dernier) quand il y en a au moins un.
+  const jingle = async (t: import('../lib/types').TrackRef, ou: string): Promise<ConcatEntry | null> => {
+    try {
+      const brut = await telechargerPiste(t)
+      const wav = await decoderEnWavMono(brut, sampleRate, 30)
+      let sam = ajusterNiveau(wav.samples, voixDb)
+      sam = encadrerDeSilence(sam, wav.sampleRate, 0.3, 0.6)
+      return { wav: { samples: sam, sampleRate: wav.sampleRate } }
+    } catch (err) {
+      console.warn(`    ⚠ jingle ${ou} « ${t.title} » sauté : ${(err as Error).message.slice(0, 120)}`)
+      return null
+    }
+  }
+  if (jingles.length > 0) {
+    const e = await jingle(jingles[0], 'd\'ouverture')
+    if (e) { entries.push(e); segmentsPrevus.push({ entry: e, track: jingles[0], type: 'jingle' }) }
+  }
+
+  const pausesApres = new Map(plan.map(p => [p.apresTour, p.track]))
+  for (let i = 0; i < wavEntries.length; i++) {
+    entries.push(wavEntries[i])
+    const track = pausesApres.get(i)
+    if (!track) continue
+    try {
+      const pause = await preparerPause(track, sampleRate, voixDb, r)
+      const e: ConcatEntry = { wav: pause.wav }
+      entries.push(e)
+      segmentsPrevus.push({ entry: e, track, type: 'music' })
+      console.log(`    ♪ après le tour ${i + 1} : « ${track.title} » (${(pause.wav.samples.length / pause.wav.sampleRate).toFixed(0)} s)`)
+    } catch (err) {
+      console.warn(`    ⚠ pause après le tour ${i + 1} sautée (« ${track.title} ») : ${(err as Error).message.slice(0, 120)}`)
+      if (process.env.GITHUB_ACTIONS) console.log(`::warning::${station.id} : pause musicale « ${track.title} » sautée — ${(err as Error).message.slice(0, 120)}`)
+    }
+  }
+
+  if (jingles.length > 0) {
+    const dernier = jingles[jingles.length - 1]
+    const e = await jingle(dernier, 'de fin')
+    if (e) { entries.push(e); segmentsPrevus.push({ entry: e, track: dernier, type: 'jingle' }) }
+  }
+  return { entries, segmentsPrevus }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
@@ -545,9 +621,12 @@ async function main() {
   // ~150ms pacing).
   const numTurns = Number.parseInt(process.env.NUM_TURNS ?? '22', 10)
 
-  const station = SEED_STATIONS.find(s => s.id === stationId)
-  if (!station) throw new Error(`Station inconnue : ${stationId}`)
-  if (station.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
+  const seed = SEED_STATIONS.find(s => s.id === stationId)
+  if (!seed) throw new Error(`Station inconnue : ${stationId}`)
+  if (seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
+  // Les réglages posés dans l'IHL (musiques, jingles, pauses — kind 30091) passent devant la
+  // seed. Sans relais ni admin reconnu : la seed, et on le dit (lib/station-reglages.ts).
+  const station = await stationSelonIHL(seed)
 
   // Aucune voix commercialisable dans cette langue ⇒ on RENONCE, avant
   // d'avoir dépensé un seul jeton. Publier quand même reviendrait à
@@ -702,10 +781,15 @@ async function main() {
   console.log('\n🤖 Dialogue + TTS…')
   const t0 = Date.now()
   const result = await generateBroadcastBytes({
-    station, numTurns, topic: '', news,
+    station, numTurns, topic: '', news, date: targetDate,
   })
   const genSec = (Date.now() - t0) / 1000
   console.log(`    ✓ ${result.turns.length} tours, ${(result.durationSec / 60).toFixed(1)} min audio (${genSec.toFixed(0)}s wall)`)
+  if (result.segments.length > 0) {
+    const musique = result.segments.filter(sg => sg.type === 'music')
+    const dureeMusique = musique.reduce((acc, sg) => acc + (sg.tEnd - sg.tStart), 0)
+    console.log(`    ♪ ${musique.length} pause(s) musicale(s) = ${(dureeMusique / 60).toFixed(1)} min, ${result.segments.length - musique.length} jingle(s)`)
+  }
   console.log(`    Tokens : ${result.costInputTokens} in / ${result.costOutputTokens} out`)
   // Sans cette ligne, on croirait tourner sur le gratuit alors qu'on paye —
   // ou l'inverse. Le maillon qui sert doit être DIT, pas supposé.
@@ -722,7 +806,8 @@ async function main() {
   // pour de la voix Piper. Emballé en WebM, PAS en Ogg : Safari et l'app
   // macOS (WebKit) refusent l'Ogg/Opus — voir FORMAT_EMISSION (lib/opus).
   console.log('\n🎵 Encodage Opus (WebM)…')
-  const opusBlob = await encoderEmission(result.audioBlob, 32)
+  // 32 kbps suffisent à la voix ; la musique demande le double (lib/opus.ts).
+  const opusBlob = await encoderEmission(result.audioBlob, result.segments.length > 0 ? 64 : 32)
   const ratio = (opusBlob.byteLength / result.audioBlob.byteLength * 100).toFixed(1)
   console.log(`    ✓ ${(opusBlob.byteLength / 1024 / 1024).toFixed(1)} MB Opus/WebM (${ratio}% du WAV)`)
   // Sauve aussi l'émission encodée en debug
@@ -798,6 +883,7 @@ async function main() {
     audioCid:    pin.cid,
     audioMime:   FORMAT_EMISSION.mime,   // Opus en WebM : l'Ogg est muet sous WebKit
     turns:       result.turns,
+    ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,
     generatedBy: '',   // sera rempli par publishBroadcast
