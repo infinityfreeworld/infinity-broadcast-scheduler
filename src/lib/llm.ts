@@ -38,6 +38,7 @@
  */
 
 import { callAnthropic, type LLMMessage, type LLMResponse } from './anthropic'
+import { jetonDataspace } from './dataspace-jeton'
 
 export type { LLMMessage }
 
@@ -53,7 +54,7 @@ export interface ReponseLLM extends LLMResponse {
   maillon: string
 }
 
-interface Maillon {
+export interface Maillon {
   nom:         string
   /** Pourquoi ce maillon est hors course, ou null s'il est utilisable. */
   indisponible(): string | null
@@ -61,6 +62,22 @@ interface Maillon {
 }
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions'
+/**
+ * Le LLM SOUVERAIN : la station GPU de data-space, derrière son shim compatible OpenAI
+ * (Qwen3-4B, llama.cpp). Directive du fondateur (16/09/2026) : « on oublie complètement
+ * Hugging Face, on doit être complètement souverain ».
+ *
+ * 🔴 POURQUOI IL EST DÉBRANCHÉ PAR DÉFAUT (22/09/2026, lu dans le code du shim)
+ *   · le prompt est COUPÉ à 3 000 caractères — un animateur reçoit persona + base de
+ *     connaissances + actualité, bien plus ; la consigne finale tomberait dans la coupe ;
+ *   · la sortie est plafonnée à 256 jetons, l'attente à 60 s, et un seul nœud « llm » ;
+ *   · un modèle de 4 milliards de paramètres n'écrit pas 22 tours tenus.
+ * Le maillon existe pour que la voie souveraine soit à UNE variable de distance le jour où
+ * la station porte un modèle plus grand et un prompt entier ; il n'écrit pas la radio en
+ * cachette. `DATASPACE_LLM_ORDRE=avant-anthropic` (après Mistral et la passerelle) ou
+ * `premier` (en tête) l'enrôle ; absent ou `non` : hors course, et le journal le dit.
+ */
+const DATASPACE_LLM_URL = 'https://data-space.world/api/v1/gpu/chat/completions'
 const HL_URL = 'https://infinity-llm-gateway.digitalforlifeagency.workers.dev/v1/chat/completions'
 
 /** Corps commun aux deux maillons compatibles OpenAI. */
@@ -106,7 +123,28 @@ export async function lireOpenAI(res: Response, nom: string): Promise<LLMRespons
   }
 }
 
-const MAILLONS: Maillon[] = [
+const MAILLON_DATASPACE: Maillon = {
+  nom: 'data-space',
+  indisponible: () => {
+    const ordre = (process.env.DATASPACE_LLM_ORDRE ?? '').trim()
+    if (ordre !== 'avant-anthropic' && ordre !== 'premier') return 'hors course (DATASPACE_LLM_ORDRE absent — prompt coupé à 3 000 car., 256 jetons, Qwen3-4B)'
+    if (!process.env.DATASPACE_NOSTR_KEY && !process.env.DATASPACE_API_KEY) return 'aucune clé data-space'
+    return null
+  },
+  async appeler(a) {
+    const jeton = await jetonDataspace()
+    const res = await fetch(DATASPACE_LLM_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}` },
+      // 256 jetons de sortie au plus côté station : au-delà, le shim borne et le dit.
+      body:    corpsOpenAI({ ...a, maxTokens: Math.min(a.maxTokens ?? 400, 256) }, 'dataspace-gpu-llm'),
+      signal:  AbortSignal.timeout(90_000),
+    })
+    return lireOpenAI(res, 'data-space')
+  },
+}
+
+const MAILLONS_BASE: Maillon[] = [
   {
     nom: 'mistral',
     indisponible: () => process.env.MISTRAL_API_KEY ? null : 'MISTRAL_API_KEY absente',
@@ -154,6 +192,23 @@ const MAILLONS: Maillon[] = [
   },
 ]
 
+/**
+ * L'ordre effectif des maillons. Le maillon souverain n'entre en course que sur demande
+ * (`DATASPACE_LLM_ORDRE`, voir plus haut) ; sinon il figure en fin de liste, hors course,
+ * pour que le journal dise pourquoi. Recalculé à chaque appel : un test peut poser la
+ * variable après l'import.
+ */
+export function maillons(): Maillon[] {
+  const ordre = (process.env.DATASPACE_LLM_ORDRE ?? '').trim()
+  if (ordre === 'premier') return [MAILLON_DATASPACE, ...MAILLONS_BASE]
+  if (ordre === 'avant-anthropic') {
+    const i = MAILLONS_BASE.findIndex(m => m.nom === 'anthropic')
+    const coupe = i >= 0 ? i : MAILLONS_BASE.length
+    return [...MAILLONS_BASE.slice(0, coupe), MAILLON_DATASPACE, ...MAILLONS_BASE.slice(coupe)]
+  }
+  return [...MAILLONS_BASE, MAILLON_DATASPACE]
+}
+
 /** Combien de fois chaque maillon a servi, pour le bilan de fin d'émission. */
 const service = new Map<string, number>()
 
@@ -168,7 +223,7 @@ export function reinitialiserBilan(): void {
 
 /** Maillons réellement utilisables, dans l'ordre — pour l'annoncer AVANT de générer. */
 export function maillonsDisponibles(): Array<{ nom: string; raison: string | null }> {
-  return MAILLONS.map(m => ({ nom: m.nom, raison: m.indisponible() }))
+  return maillons().map(m => ({ nom: m.nom, raison: m.indisponible() }))
 }
 
 /**
@@ -182,7 +237,7 @@ export function maillonsDisponibles(): Array<{ nom: string; raison: string | nul
 export async function appelerLLM(a: AppelLLM): Promise<ReponseLLM> {
   const tentatives: string[] = []
 
-  for (const m of MAILLONS) {
+  for (const m of maillons()) {
     const raison = m.indisponible()
     if (raison) { tentatives.push(`${m.nom} écarté (${raison})`); continue }
     try {

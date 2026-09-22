@@ -84,18 +84,45 @@ export function formaterRefus(r: unknown): string | undefined {
 }
 
 /** Lit `job_id`, `error.code` et `last_refusal` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
-export function lireCorpsErreur(detail: string): { jobId?: string; code?: string; refus?: string } {
+export function lireCorpsErreur(detail: string): { jobId?: string; code?: string; refus?: string; voices?: string[] } {
   try {
-    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown }; last_refusal?: unknown }
+    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown }; last_refusal?: unknown; voices?: unknown }
     return {
       jobId: typeof j.job_id === 'string' ? j.job_id : undefined,
       code: typeof j.error?.code === 'string' ? j.error.code : undefined,
       refus: formaterRefus(j.last_refusal),
+      // `404 voice_not_found` livre le catalogue : c'est ce qui permet de retenir un alias.
+      ...(Array.isArray(j.voices) ? { voices: j.voices.filter((v): v is string => typeof v === 'string') } : {}),
     }
   } catch {
     return {}
   }
 }
+
+/**
+ * L'alias d'une voix ABSENTE du catalogue : la seule entrée qui porte son nom en préfixe.
+ *
+ * 🔴 22/09/2026 — l'invité « alain » demandait « alain.wav » ; le catalogue porte
+ * « alain-morale.wav ». Chaque émission le faisait retomber en Piper, et `nomDemande()`
+ * rappelait à raison qu'aucune normalisation ne peut DEVINER un nom. Elle n'a pas à deviner :
+ * le 404 rend la liste. Quand UNE seule voix commence par « alain- » (ou « alain_ »), c'est
+ * elle ; deux candidates ou aucune → null, on ne choisit pas à la place du fondateur.
+ * Pure, pour être éprouvée sans réseau.
+ */
+export function aliasDeVoix(voix: string, catalogue: readonly string[]): string | null {
+  const base = voix.replace(/\.wav$/i, '').toLowerCase()
+  if (!base) return null
+  const exact = catalogue.find(v => v.toLowerCase() === `${base}.wav` || v.toLowerCase() === base)
+  if (exact) return exact
+  const candidates = catalogue.filter(v => {
+    const n = v.toLowerCase().replace(/\.wav$/i, '')
+    return n.startsWith(`${base}-`) || n.startsWith(`${base}_`)
+  })
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+/** Alias retenus pour cette exécution : une voix résolue une fois l'est pour toute la nuit. */
+const ALIAS_VOIX = new Map<string, string>()
 
 /** Une mise en file refusée plus de N fois d'affilée n'est plus un accident : on la signale. */
 export const MAX_FILES_RATEES = 3
@@ -705,12 +732,13 @@ async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer>
   }
 }
 
-async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer> {
+async function synthetiserUneFois(opts: ChatterboxSpeakOptions, dejaAlias = false): Promise<Buffer> {
   const { url, apiKey } = getEndpoint()
+  const voixDemandee = ALIAS_VOIX.get(opts.voice) ?? opts.voice
   const body = {
     model:                'chatterbox',
     input:                opts.text,
-    voice:                opts.voice.endsWith('.wav') ? opts.voice : `${opts.voice}.wav`,
+    voice:                voixDemandee.endsWith('.wav') ? voixDemandee : `${voixDemandee}.wav`,
     // 🔴 Défaut WAV DÉLIBÉRÉ. data-space propose l'Opus pour alléger le
     // transfert, et c'est juste pour une sonde ou une livraison finale.
     // Mais le montage décode chaque tour avec `readWav`, qui exige du
@@ -756,7 +784,17 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions): Promise<Buffer>
   if (!res.ok) {
     let detail = ''
     try { detail = await res.text() } catch { /* */ }
-    const { jobId, code, refus } = lireCorpsErreur(detail)
+    const { jobId, code, refus, voices } = lireCorpsErreur(detail)
+    // Voix absente, mais une seule homonyme au catalogue : on la retient pour la nuit et on
+    // réessaie UNE fois. Deux candidates ou aucune : l'erreur suit son cours (repli Piper).
+    if (res.status === 404 && code === 'voice_not_found' && voices && !dejaAlias) {
+      const alias = aliasDeVoix(voixDemandee, voices)
+      if (alias) {
+        console.warn(`  [chatterbox] voix « ${voixDemandee} » absente du catalogue — « ${alias} » retenue (seule correspondance)`)
+        ALIAS_VOIX.set(opts.voice, alias)
+        return synthetiserUneFois(opts, true)
+      }
+    }
     // ⚠️ LE job_id EN TÊTE : l'appelant tronque le message à 120 caractères. En fin de
     // message, l'identifiant qu'on doit citer à data-space tombait précisément dans la
     // partie coupée.
