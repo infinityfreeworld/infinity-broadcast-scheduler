@@ -153,3 +153,28 @@ test('🔴 la cause d’un échec vient du signal et de stderr, pas de la ligne 
 test('le rejet d’un essai porte la cause EN PREMIÈRE ligne — celle que la reprise affiche', () => {
   assert.match(code('src/lib/kokoro.ts'), /reject\(new Error\(`\$\{causeDEchec\(err, lignes\)\}\\n\$\{err\.message\}`\)\)/)
 })
+
+// ── 22/09/2026 : le vocabulaire vient du dépôt, et l'absence de Kokoro n'est plus fatale.
+
+test('🔴 la config Kokoro est EMBARQUÉE, identique à l’empreinte figée — plus de Hugging Face sur le chemin radio', async () => {
+  const f = FICHIERS_KOKORO.config
+  assert.ok(f.embarque, 'chemin de la copie embarquée')
+  const p = resolve(process.cwd(), f.embarque!)
+  assert.ok(existsSync(p), `${f.embarque} manquant`)
+  assert.equal(await empreinte(p), f.sha256, 'la copie doit être octet pour octet celle qui est vérifiée')
+  assert.match(code('src/lib/kokoro.ts'), /copyFileSync\(copie, p\)/, 'copie AVANT tout téléchargement')
+})
+
+test('🔴 « Kokoro absent » n’arrête plus la station : Chatterbox est essayé, l’absence est annoncée', () => {
+  const gb = code('src/scripts/generate-broadcast.ts')
+  assert.match(gb, /catch \(err\) \{\s*if \(!estVoixKokoro\(v\)\) throw err\s*kokoroIndisponible = /, 'Piper absent reste fatal, Kokoro absent devient un avertissement')
+  assert.match(gb, /if \(kokoroIndisponible && estVoixKokoro\(plan\.voixPiper\)\) \{\s*throw new Error/, 'un tour sans aucune voix se dit clairement')
+})
+
+test('le secours GitHub installe Kokoro pour la station chinoise, et pour elle seule', () => {
+  const wf = readFileSync(resolve(process.cwd(), '.github/workflows/daily-broadcast.yml'), 'utf8')
+  assert.match(wf, /if: matrix\.station == 'zi-you-zhi-sheng'\s*\n\s*run: \|\s*\n\s*if \[ ! -x \.venv-kokoro\/bin\/python \]/)
+  assert.match(wf, /max-parallel: 1\b/, 'une station à la fois : mesuré le 22/09/2026, ~4 morceaux/min sur une RTX 3060')
+  assert.match(wf, /CHATTERBOX_ECHEANCE_S:\s+\$\{\{ vars\.CHATTERBOX_ECHEANCE_S \|\| '2700' \}\}/)
+  assert.match(wf, /CHATTERBOX_QUEUE_BUDGET_S: \$\{\{ vars\.CHATTERBOX_QUEUE_BUDGET_S \|\| '2700' \}\}/)
+})

@@ -19,17 +19,19 @@
  *   environnement partagé aurait pu casser la voix de treize stations pour
  *   en servir une.
  *
- *   ── SOUVERAINETÉ : PAS ENCORE ──
- *   Les fichiers du modèle viennent de GitHub (le vocabulaire, de Hugging
- *   Face). Ils sont FIGÉS et vérifiés par empreinte, mais pas encore
- *   déposés chez data-space : 380 Mo ne passent pas la limite de 100 s de
- *   Cloudflare sur une connexion de téléphone (524 mesuré le 11/09/2026
- *   sur 39 Mo). Tout téléchargement de secours est ANNONCÉ.
+ *   ── SOUVERAINETÉ : À MOITIÉ ──
+ *   Les poids du modèle viennent de GitHub. Ils sont FIGÉS et vérifiés par
+ *   empreinte, mais pas encore déposés chez data-space : 380 Mo ne passent
+ *   pas la limite de 100 s de Cloudflare sur une connexion de téléphone
+ *   (524 mesuré le 11/09/2026 sur 39 Mo). Tout téléchargement est ANNONCÉ.
+ *   Le vocabulaire (config.json, 3 Ko, Apache-2.0) est EMBARQUÉ dans le
+ *   dépôt depuis le 22/09/2026 : plus aucune requête Hugging Face sur le
+ *   chemin d'une nuit radio. L'empreinte reste vérifiée, copie ou non.
  */
 
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -51,7 +53,13 @@ export function nomKokoro(voix: string): string {
   return voix.slice(PREFIXE_KOKORO.length)
 }
 
-export interface FichierFige { nom: string; sha256: string; source: string }
+export interface FichierFige {
+  nom: string
+  sha256: string
+  source: string
+  /** Copie figée dans le dépôt : lue AVANT toute tentative de téléchargement. */
+  embarque?: string
+}
 
 /**
  * Release DATÉE (`model-files-v1.1`), jamais « la dernière » : un modèle
@@ -73,6 +81,7 @@ export const FICHIERS_KOKORO: Record<'modele' | 'voix' | 'config', FichierFige> 
     nom: 'config-v1.1-zh.json',
     sha256: 'bc333efa5ce4ceff433c8c8e5d027a1eca0166001e4e4a62bea2d26ff7a46890',
     source: 'https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh/raw/main/config.json',
+    embarque: 'src/data/kokoro-config-v1.1-zh.json',
   },
 }
 
@@ -80,6 +89,16 @@ function dossier(): string { return join(process.env.VOICES_DIR ?? join(process.
 function chemin(f: FichierFige): string { return join(dossier(), f.nom) }
 function python(): string { return join(process.cwd(), '.venv-kokoro', 'bin', 'python') }
 function pont(): string { return join(process.cwd(), 'scripts', 'kokoro-python.py') }
+
+/**
+ * Kokoro est-il installé sur CETTE machine ? Sans réseau, sans lever.
+ * Kokoro n'est que le REPLI du chinois : Chatterbox (data-space) est
+ * multilingue et porte les voix de 自由之声. Son absence doit être ANNONCÉE,
+ * pas fatale — c'est ce qui a tué la station chaque nuit du 18 au 22/09/2026.
+ */
+export function kokoroDisponible(): boolean {
+  return existsSync(python()) && existsSync(pont())
+}
 
 export function empreinte(fichier: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -104,10 +123,15 @@ export async function ensureKokoro(): Promise<void> {
   for (const f of Object.values(FICHIERS_KOKORO)) {
     const p = chemin(f)
     if (!existsSync(p)) {
-      console.warn(`  [kokoro] ⚠ ${f.nom} absent — téléchargé depuis ${new URL(f.source).host} (pas encore chez data-space)`)
-      const r = await fetch(f.source)
-      if (!r.ok) throw new Error(`[kokoro] HTTP ${r.status} en téléchargeant ${f.nom}`)
-      writeFileSync(p, Buffer.from(await r.arrayBuffer()))
+      const copie = f.embarque ? join(process.cwd(), f.embarque) : null
+      if (copie && existsSync(copie)) {
+        copyFileSync(copie, p)
+      } else {
+        console.warn(`  [kokoro] ⚠ ${f.nom} absent — téléchargé depuis ${new URL(f.source).host} (pas encore chez data-space)`)
+        const r = await fetch(f.source)
+        if (!r.ok) throw new Error(`[kokoro] HTTP ${r.status} en téléchargeant ${f.nom}`)
+        writeFileSync(p, Buffer.from(await r.arrayBuffer()))
+      }
     }
     const e = await empreinte(p)
     if (e !== f.sha256) {

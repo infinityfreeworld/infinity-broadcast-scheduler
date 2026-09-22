@@ -21,6 +21,7 @@
 import { SimplePool } from 'nostr-tools/pool'
 import type { Event as NostrEvent } from 'nostr-tools/core'
 import { getRelays } from './nostr'
+import { adminPubkeys } from './admins-radio'
 
 /**
  * ⚠️ UN RELAIS SEUL PEUT OMETTRE UN DOCUMENT QU'IL STOCKE POURTANT.
@@ -66,12 +67,6 @@ export function mappingKey(stationId: string, hostId: string): string {
  * liste pour les trois, sinon on en durcit un et on oublie les autres —
  * ce qui est exactement ce qui est arrivé à ce module-ci.
  */
-function adminPubkeys(): Set<string> | null {
-  const raw = process.env.RADIO_ADMIN_PUBKEYS
-  if (!raw) return null
-  const set = new Set(raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean))
-  return set.size > 0 ? set : null
-}
 
 /**
  * Résout les events en « d-tag → event retenu », par AUTEUR.
