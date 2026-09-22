@@ -33,6 +33,7 @@ import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, ajusterNiveau, encadrerDeSilence } from '../lib/musique'
 import { stationSelonIHL } from '../lib/station-reglages'
+import { identsDeStation, IDENT_TITRE } from '../lib/idents'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
 let kokoroIndisponible = ''
@@ -509,6 +510,15 @@ async function monterAvecMusique(
     if (e) { entries.push(e); segmentsPrevus.push({ entry: e, track: jingles[0], type: 'jingle' }) }
   }
 
+  // Idents en voix d'animateur (22/09/2026) : « Vous écoutez Radio Pirate. » dit par le premier
+  // animateur, à l'ouverture et à la fermeture — SEULEMENT quand la station n'a pas de jingle
+  // déposé (le jingle du fondateur passe devant). Deux courtes synthèses, jamais bloquantes.
+  const idents = jingles.length === 0 ? await identsDeStation(station, sampleRate, voixDb) : null
+  if (idents?.ouverture) {
+    entries.push(idents.ouverture)
+    segmentsPrevus.push({ entry: idents.ouverture, track: { title: IDENT_TITRE }, type: 'jingle' })
+  }
+
   const pausesApres = new Map(plan.map(p => [p.apresTour, p.track]))
   for (let i = 0; i < wavEntries.length; i++) {
     entries.push(wavEntries[i])
@@ -530,6 +540,10 @@ async function monterAvecMusique(
     const dernier = jingles[jingles.length - 1]
     const e = await jingle(dernier, 'de fin')
     if (e) { entries.push(e); segmentsPrevus.push({ entry: e, track: dernier, type: 'jingle' }) }
+  }
+  if (idents?.fermeture) {
+    entries.push(idents.fermeture)
+    segmentsPrevus.push({ entry: idents.fermeture, track: { title: IDENT_TITRE }, type: 'jingle' })
   }
   return { entries, segmentsPrevus }
 }
