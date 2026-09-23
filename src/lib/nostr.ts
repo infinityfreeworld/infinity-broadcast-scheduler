@@ -85,6 +85,31 @@ export function pubkeyDe(privKeyHex: string): string {
   return getPublicKey(hexToBytes(privKeyHex))
 }
 
+/**
+ * Les relais DURABLES : ceux dont l'absence rend l'émission inaudible — le relais Cloudflare
+ * (le seul lu explicitement par l'application, rétention permanente) et ceux de data-space.
+ * Les relais publics ne sont que de la redondance ; un échec chez eux ne se retente pas.
+ */
+export function estRelaisDurable(url: string): boolean {
+  const u = url.replace(/\/+$/, '')
+  return u.includes('infinity-radio-relay') || u.startsWith('wss://data-space.world/')
+}
+
+/** Lit un résultat de `pool.publish` en un verdict ; pure. */
+export function lireResultatPublication(url: string, r: PromiseSettledResult<string>): { url: string; ok: boolean; reason?: string } {
+  if (r.status === 'rejected') {
+    return { url, ok: false, reason: String((r.reason as { message?: string })?.message ?? r.reason) }
+  }
+  const value = String(r.value ?? '')
+  if (value.startsWith('connection failure')) return { url, ok: false, reason: value }
+  return { url, ok: true, reason: value || 'ok' }
+}
+
+/** Les relais durables encore en échec dans un bilan ; pure. */
+export function relaisDurablesEnEchec(summary: Array<{ url: string; ok: boolean }>): string[] {
+  return summary.filter(s => !s.ok && estRelaisDurable(s.url)).map(s => s.url)
+}
+
 export function broadcastDTag(stationId: string, date: string): string {
   return `${stationId}:${date}`
 }
@@ -148,19 +173,26 @@ export async function publishBroadcast(
   // r.status === 'fulfilled' on a un faux positif. Un vrai OK est le reason
   // renvoyé par le relay (ex: "Event saved successfully" ou ""), donc on rejette
   // explicitement les valeurs qui commencent par "connection failure".
-  const summary = results.map((r, i) => {
-    const url = relays[i]
-    if (r.status === 'rejected') {
-      return { url, ok: false, reason: String(r.reason?.message ?? r.reason) }
-    }
-    const value = String(r.value ?? '')
-    if (value.startsWith('connection failure')) {
-      return { url, ok: false, reason: value }
-    }
-    return { url, ok: true, reason: value || 'ok' }
-  })
+  let summary = results.map((r, i) => lireResultatPublication(relays[i], r))
 
   pool.close(relays)
+
+  // 🔴 23/09/2026 — LES RELAIS DURABLES SE RETENTENT. Diginomad et WTF ont été « publiées sur
+  // 7/9 relais » : les deux qui manquaient étaient le relais Cloudflare (celui que l'application
+  // lit en premier) — « connection timed out ». Une émission absente du relais durable est une
+  // émission que personne n'entend, quel que soit le score. Un événement signé se republie sans
+  // risque (remplaçable) : trois essais espacés, sur les seuls relais durables en échec.
+  for (let essai = 1; essai <= 3; essai++) {
+    const aRetenter = relaisDurablesEnEchec(summary)
+    if (aRetenter.length === 0) break
+    await new Promise(r => setTimeout(r, essai * 8_000))
+    const p2 = new SimplePool()
+    const res2 = await Promise.allSettled(p2.publish(aRetenter, signed))
+    p2.close(aRetenter)
+    const nouveaux = res2.map((r, i) => lireResultatPublication(aRetenter[i], r))
+    summary = summary.map(s => nouveaux.find(n => n.url === s.url) ?? s)
+    for (const n of nouveaux) console.log(`    ${n.ok ? '✓' : '✗'} relais durable, essai ${essai + 1} : ${n.url} → ${n.reason}`)
+  }
 
   if (!summary.some(s => s.ok)) {
     throw new Error(`Tous les relays ont rejeté le publish:\n${summary.map(s => `- ${s.url}: ${s.reason}`).join('\n')}`)

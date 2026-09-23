@@ -389,6 +389,7 @@ async function generateBroadcastBytes(opts: {
   // chômer ~80 % du temps entre deux « 429 not_ready ». L'ordre, le décodage et les replis restent
   // ceux de la boucle ci-dessous, tour par tour.
   const enVolMax = Number.parseInt(process.env.CHATTERBOX_EN_VOL ?? '3', 10)
+  let fenetreRelancee = false
   const file = fileEnVol(
     plansVoix.length, enVolMax,
     j => !!plansVoix[j].voixPersonnage,
@@ -414,6 +415,17 @@ async function generateBroadcastBytes(opts: {
     if (plan.voixPersonnage) {
       try {
         const buf = await file.prendre(i)
+        // 🔴 23/09/2026 — LA FENÊTRE REPART AU PREMIER TOUR REÇU. Freeworld, première station de la
+        // nuit, a payé 26 min d'allumage du GPU (« file pleine », tentative 11) sur ses 45 min :
+        // 10 tours sur 22 en Piper. Le mur ouvert avant le réveil borne bien le réveil (avec
+        // CHATTERBOX_WAKE_TIMEOUT_S), mais il ne doit pas facturer l'allumage à la synthèse. Dès
+        // qu'un premier tour cloné revient, la station est prouvée vivante : 45 min de synthèse
+        // pleines à partir de là. La nuit reste bornée par CHATTERBOX_FIN_NUIT.
+        if (!fenetreRelancee) {
+          fenetreRelancee = true
+          ouvrirEcheanceClone()
+          console.log('  [chatterbox] premier tour cloné reçu — la fenêtre de synthèse repart de zéro')
+        }
         // Écrit le buffer dans un tmpfile WAV pour réutiliser readWav.
         const tmpPath = join(tmpdir(), `chatterbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
         writeFileSync(tmpPath, buf)
