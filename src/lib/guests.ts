@@ -13,7 +13,8 @@
  */
 
 import { SimplePool } from 'nostr-tools/pool'
-import type { Event as NostrEvent } from 'nostr-tools/core'
+import { adminPubkeys } from './admins-radio'
+import { latestByDTag } from './radio-personas'
 import { getRelays } from './nostr'
 import type { StationLanguage } from './types'
 
@@ -78,13 +79,9 @@ export async function fetchRadioGuests(timeoutMs = 8000): Promise<Map<string, Ra
       { kinds: [KIND_RADIO_GUEST], limit: LIMITE_REQUETE },
       { maxWait: timeoutMs },
     )
-    const latest = new Map<string, NostrEvent>()
-    for (const e of events) {
-      const dTag = e.tags.find(t => t[0] === 'd')?.[1]
-      if (!dTag) continue
-      const existing = latest.get(dTag)
-      if (!existing || e.created_at > existing.created_at) latest.set(dTag, e)
-    }
+    // 🔴 30/09/2026 — seuls les administrateurs radio comptent : sans ce filtre, n'importe qui publiait un
+    // animateur/invité (et ses INSTRUCTIONS) que la nuit reprenait à l'antenne. Même règle que radio-personas.ts.
+    const latest = latestByDTag(events, adminPubkeys())
     const result = new Map<string, RadioGuest>()
     for (const [dTag, event] of latest.entries()) {
       try {

@@ -138,7 +138,9 @@ function getDTag(e: NostrEvent): string | null {
 }
 
 
-function latestByDTag(events: NostrEvent[], allowed: Set<string> | null): Map<string, NostrEvent> {
+/** Le plus récent par d-tag PARMI les auteurs autorisés (`allowed` null = tous, via `RADIO_ADMIN_PUBKEYS=*`). Partagé avec
+ *  `host-personas.ts` et `guests.ts` (30/09/2026 : ils n'avaient AUCUN filtre d'auteur). */
+export function latestByDTag(events: NostrEvent[], allowed: Set<string> | null): Map<string, NostrEvent> {
   const latest = new Map<string, NostrEvent>()
   for (const e of events) {
     if (allowed && !allowed.has(e.pubkey.toLowerCase())) continue
