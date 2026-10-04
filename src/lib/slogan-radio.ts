@@ -231,6 +231,13 @@ export function consigneSloganPourTour(
   position: PositionTour,
 ): string {
   const phrase = phraseSlogan(nomStation, langue)
+  // Hors français, la consigne est en ANGLAIS : une consigne française poussait le modèle vers le
+  // français sur les stations étrangères (Free Press FM, 04/10/2026 — cf. langue-station.ts).
+  if (langue !== 'fr') {
+    return position === 'milieu'
+      ? `Do NOT say the sentence « ${phrase} » in this turn: it is reserved for the opening and the closing.`
+      : `End your turn by saying, word for word: « ${phrase} »`
+  }
   if (position === 'milieu') {
     return `Ne dis PAS la phrase « ${phrase} » dans ce tour : elle est réservée à l'ouverture et à la clôture.`
   }

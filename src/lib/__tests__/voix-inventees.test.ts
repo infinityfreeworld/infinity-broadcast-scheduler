@@ -54,6 +54,7 @@ test('le nom au catalogue est inv-<animateur>, sans .wav (le client l’ajoute)'
 test('getChatterboxVoiceForHost passe bien par resoudreVoix, l’admin en premier', () => {
   const src = readFileSync(new URL('../chatterbox.ts', import.meta.url), 'utf8')
   const corps = src.slice(src.indexOf('export function getChatterboxVoiceForHost'), src.indexOf('export interface SourcesVoix'))
-  assert.match(corps, /return resoudreVoix\(\{\s*admin: getNostrVoiceForHost\(stationId, hostId\)/)
+  assert.match(corps, /let admin = getNostrVoiceForHost\(stationId, hostId\)/)
+  assert.match(corps, /return resoudreVoix\(\{\s*admin,/)
   assert.match(corps, /inventee: voixInventee\(stationId, hostId\)/)
 })
