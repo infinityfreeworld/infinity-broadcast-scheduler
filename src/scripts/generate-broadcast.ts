@@ -36,6 +36,10 @@ import { stationSelonIHL } from '../lib/station-reglages'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
 import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
+import {
+  appliquerSlogan, consigneSloganPourTour, positionDuTour, positionPourConsigne, prononcerDomaine,
+} from '../lib/slogan-radio'
+import { resteADire } from '../lib/tts-sanitize'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
 let kokoroIndisponible = ''
@@ -217,6 +221,11 @@ async function generateBroadcastBytes(opts: {
     console.log(`    🗣  réactions courtes aux tours ${[...humain.courts].map(i => i + 1).sort((a, b) => a - b).join(', ') || '—'} · courrier des auditeurs au tour ${humain.courrier !== null ? humain.courrier + 1 : '—'}`)
   }
 
+  // Phrase d'appel « Rejoignez <station> sur Infinity-freeworld.com » (Bâtisseur,
+  // 04/10/2026) : une ou deux fois par émission, jamais plus — à l'ouverture et à
+  // la clôture. Compteur de l'émission ; la garantie est dans `appliquerSlogan`.
+  let slogansDits = 0
+
   for (let i = 0; i < numTurns; i++) {
     const isGuestTurn1   = guest !== null && i === guestStart        // réponse Q1
     const isGuestTurn2   = guest !== null && i === guestStart + 2    // réponse Q2
@@ -295,6 +304,11 @@ async function generateBroadcastBytes(opts: {
           dateDuJour,
         })
 
+    // Place du tour pour la phrase d'appel : ouverture = premier tour PRODUIT,
+    // clôture = dernier tour prévu (cf. slogan-radio.ts).
+    const position = positionDuTour(isFirstTurn, i === numTurns - 1)
+    const consigneSlogan = consigneSloganPourTour(station.name, language, positionPourConsigne(position, slogansDits))
+
     const history: LLMMessage[] = turns.slice(-HISTORY_DEPTH).map(t => ({
       role: 'assistant',
       content: `[${t.hostName}] ${t.text}`,
@@ -323,7 +337,8 @@ async function generateBroadcastBytes(opts: {
                             ? `Tour COURT : réagis en UNE seule phrase de 3 à 10 mots (rire, étonnement, relance, approbation, désaccord, taquinerie). Rien d'autre, pas de développement.`
                             : humain.courrier === i
                               ? `Le standard a reçu un message d'auditeur en lien avec le sujet en cours. Invente un prénom et une ville, lis le message à l'antenne (2 phrases, à la première personne de l'auditeur, introduites par « ${host.name === 'Anonyme' ? 'quelqu\'un' : 'un auditeur'} nous écrit »), puis réponds-lui en une phrase en l'appelant par son prénom.`
-                              : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).')),
+                              : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).'))
+        + ' ' + consigneSlogan,
     }
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
@@ -334,11 +349,27 @@ async function generateBroadcastBytes(opts: {
     })
     costIn += resp.inputTokens
     costOut += resp.outputTokens
-    const turnText = resp.text.trim()
+    let turnText = resp.text.trim()
     if (!turnText) {
       console.log('(vide, skip)')
       continue
     }
+    // Rien que des emojis ou des symboles : une fois nettoyé par le moteur, il ne
+    // resterait RIEN à dire (synthèse vide = échec ou silence). Même sort qu'un tour vide.
+    if (!resteADire(turnText)) {
+      console.log(`(rien à dire une fois nettoyé : « ${turnText.slice(0, 30)} », skip)`)
+      continue
+    }
+
+    // Garantie déterministe de la phrase d'appel : ajoutée si le modèle l'a oubliée
+    // à l'ouverture ou à la clôture, retirée au-delà de la 2ᵉ mention. Le transcript
+    // garde la forme ÉCRITE ; la voix reçoit la forme parlée (plansVoix ci-dessous).
+    const slogan = appliquerSlogan({
+      texte: turnText, nomStation: station.name, langue: language,
+      dejaDits: slogansDits, position,
+    })
+    turnText = slogan.texte
+    slogansDits = slogan.dits
 
     // ── PHASE 1 : on n'écrit que le TEXTE ────────────────────────────
     // La synthèse est repoussée à la phase 2. Voir l'en-tête de la boucle
@@ -360,7 +391,9 @@ async function generateBroadcastBytes(opts: {
       tEnd:     0,
     }
     turns.push(turn)
-    plansVoix.push({ texte: turnText, voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
+    // La VOIX reçoit le domaine sous sa forme parlée (« Infiniti tiret Friwourld point
+    // com ») ; le nettoyage (astérisques, didascalies…) est fait à l'entrée de chaque moteur.
+    plansVoix.push({ texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
   }
