@@ -40,6 +40,7 @@ import {
   appliquerSlogan, consigneSloganPourTour, positionDuTour, positionPourConsigne, prononcerDomaine,
 } from '../lib/slogan-radio'
 import { resteADire } from '../lib/tts-sanitize'
+import { ligneMotsAnglaisNonCouverts } from '../lib/releve-anglais'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
 let kokoroIndisponible = ''
@@ -544,6 +545,10 @@ async function generateBroadcastBytes(opts: {
     turns[i].tEnd   = fv !== undefined ? Math.round(((wavEntries[i].tStart ?? 0) + fv / wavEntries[i].wav.sampleRate) * 1000) / 1000 : (wavEntries[i].tEnd ?? 0)
   }
   const segments = segmentsPrevus.map(sp => segmentDePause(sp.track, sp.type, (sp.entry.tStart ?? 0) + (sp.tStartRel ?? 0), sp.entry.tEnd ?? 0))
+  // Fin d'émission : les mots anglais que les voix françaises ont dû dire sans entrée du
+  // dictionnaire (frenchify-english.ts), à écouter puis à ajouter — app ET générateur.
+  const releveAnglais = ligneMotsAnglaisNonCouverts(plansVoix.map(p => p.texte), language)
+  if (releveAnglais) console.log(`\n🔤 ${releveAnglais}`)
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,

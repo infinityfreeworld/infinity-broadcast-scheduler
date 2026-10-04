@@ -37,6 +37,7 @@ import { getNostrVoiceForHost } from './host-voice-mappings'
 import { voixInventee } from '../data/voix-inventees'
 import { jetonDataspace } from './dataspace-jeton'
 import { sanitizeForSpeech } from './tts-sanitize'
+import { frenchifyEnglishWords } from './frenchify-english'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -659,7 +660,15 @@ export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions
   // nettoyé À L'ENTRÉE du moteur (Markdown, didascalies, emojis, URL : cf. tts-sanitize.ts),
   // après le mur (qui refuse avant tout travail) et AVANT le découpage : radio, idents et
   // sondes y passent tous.
-  const opts: ChatterboxSpeakOptions = { ...optsBruts, text: sanitizeForSpeech(optsBruts.text) }
+  // 🔴 04/10/2026 — « les voix françaises doivent prononcer correctement les mots anglais »
+  // (Bâtisseur) : une voix clonée qui parle FRANÇAIS (même langue que celle envoyée à data-space
+  // plus bas) reçoit ensuite les mots anglais ré-épelés — même ordre que l'app.
+  const langueVoix = optsBruts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr'
+  const propre = sanitizeForSpeech(optsBruts.text)
+  const opts: ChatterboxSpeakOptions = {
+    ...optsBruts,
+    text: langueVoix === 'fr' ? frenchifyEnglishWords(propre) : propre,
+  }
   // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
   // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons
   // finales) sont courts et partent d'un bloc.

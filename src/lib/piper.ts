@@ -26,6 +26,7 @@ import { mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { sanitizeForSpeech } from './tts-sanitize'
+import { frenchifyEnglishWords } from './frenchify-english'
 
 const exec = promisify(execFile)
 
@@ -366,6 +367,21 @@ export async function avecReprises<T>(
   throw new Error(`piper failed (${quoi}) après ${tentatives} essais: ${derniere?.message}`)
 }
 
+/** Une voix Piper française : son nom commence par `fr_` (fr_FR-siwis-medium…). */
+export function estVoixPiperFrancaise(voiceId: string): boolean {
+  return voiceId.startsWith('fr_')
+}
+
+/**
+ * Ce que Piper DIT : le texte nettoyé (toutes langues), puis, pour une voix
+ * française, les mots anglais ré-épelés. La langue est celle de la VOIX, qui
+ * est celle de la station (`voixPourLangue`) ou du programme TV (voix fr fixes).
+ */
+export function textePourVoixPiper(text: string, voiceId: string): string {
+  const propre = sanitizeForSpeech(text)
+  return estVoixPiperFrancaise(voiceId) ? frenchifyEnglishWords(propre) : propre
+}
+
 export async function synthesize(text: string, voiceId: string): Promise<string> {
   if (!isVoiceSupported(voiceId)) {
     throw new Error(`Voix non supportée : ${voiceId}`)
@@ -373,7 +389,10 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
   // 🔴 04/10/2026 — « certains animateurs prononcent astérisque » (Bâtisseur).
   // Nettoyage À L'ENTRÉE du moteur : radio, TV (tv-voice), idents et tout
   // appelant futur y passent sans pouvoir l'oublier (cf. tts-sanitize.ts).
-  const dit = sanitizeForSpeech(text)
+  // 🔴 04/10/2026 — « les voix françaises doivent prononcer correctement les mots
+  // anglais » (Bâtisseur) : une voix Piper française (`fr_*`) reçoit ensuite les
+  // mots anglais ré-épelés (frenchify-english.ts), dans le même ordre que l'app.
+  const dit = textePourVoixPiper(text, voiceId)
   await ensurePiperBinary()
   await ensureVoice(voiceId)
 

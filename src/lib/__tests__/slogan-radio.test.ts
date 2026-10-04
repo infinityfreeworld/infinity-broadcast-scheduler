@@ -1,6 +1,7 @@
 /**
  * Copie des tests de l'app Infinity (`ai/__tests__/slogan-radio.test.ts`, 04/10/2026).
- * Seule différence : la forme parlée française est déjà francisée ici (pas de frenchify).
+ * Seule différence : la forme parlée française est écrite déjà francisée ici ; l'étape
+ * frenchify des moteurs (04/10/2026) la laisse intacte.
  */
 import { describe, it, expect } from './vitest-cale'
 import {
@@ -9,6 +10,7 @@ import {
   DOMAINE_INFINITY, MAX_SLOGANS_PAR_EMISSION, type PositionTour,
 } from '../slogan-radio'
 import { sanitizeForSpeech } from '../tts-sanitize'
+import { frenchifyEnglishWords } from '../frenchify-english'
 import type { StationLanguage } from '../types'
 
 const LANGUES: StationLanguage[] = ['fr', 'en', 'es', 'it', 'pt', 'hi', 'ja', 'zh', 'ru']
@@ -66,6 +68,8 @@ describe('prononcerDomaine (texte envoyé à la synthèse)', () => {
   it('survit au nettoyage des moteurs, sans un symbole, déjà francisée', () => {
     const t = sanitizeForSpeech(prononcerDomaine(phraseSlogan('Radio Pirate', 'fr'), 'fr'))
     expect(t).toBe('Rejoignez Radio Pirate sur Infiniti tiret Friwourld point com.')
+    // pas de seconde francisation : c'est aussi ce que dit la voix de l'app
+    expect(frenchifyEnglishWords(t)).toBe('Rejoignez Radio Pirate sur Infiniti tiret Friwourld point com.')
   })
 })
 

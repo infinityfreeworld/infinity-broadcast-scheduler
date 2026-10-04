@@ -3,9 +3,11 @@
  * @description PORT du module de l'app Infinity (`src/modules/radio/ai/slogan-radio.ts`,
  *   commit 62fafcd2b du 04/10/2026) : les émissions automatiques sont fabriquées
  *   ICI (`scripts/generate-broadcast.ts`), pas dans l'app. Seule différence : la
- *   forme parlée française est déjà francisée (« Infiniti tiret Friwourld point
- *   com »), parce que ce dépôt n'a pas l'étape `frenchify-english` de l'app —
- *   c'est exactement ce que la voix de l'app prononce après cette étape.
+ *   forme parlée française est écrite déjà francisée (« Infiniti tiret Friwourld
+ *   point com ») — c'est exactement ce que la voix de l'app prononce après son
+ *   étape `frenchify-english`. Depuis le 04/10/2026 ce dépôt a cette étape aussi
+ *   (à l'entrée de Piper et Chatterbox) : elle laisse cette forme intacte, sans
+ *   la franciser une seconde fois (testé dans slogan-radio.test.ts).
  *
  *   La phrase d'appel de chaque émission :
  *   « Rejoignez <nom de la radio> sur Infinity-freeworld.com ».
@@ -68,8 +70,8 @@ const PHRASES: Record<StationLanguage, (nom: string) => string> = {
 /**
  * Forme PARLÉE du domaine, pour la synthèse. Le tiret et le point sont dits
  * en toutes lettres, dans la langue de la station. En français, la forme est
- * DÉJÀ francisée (ce dépôt n'a pas `frenchify-english`) : une voix française
- * lirait sinon « Free-world » à la française.
+ * DÉJÀ francisée, identique à la sortie de `frenchify-english` dans l'app ;
+ * l'étape `frenchify-english` des moteurs de ce dépôt la laisse intacte.
  */
 const DOMAINE_PARLE: Record<StationLanguage, string> = {
   fr: 'Infiniti tiret Friwourld point com',

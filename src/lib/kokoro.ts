@@ -214,6 +214,7 @@ export const kokoroInterne = { assurer: ensureKokoro, essai: unEssai }
 export async function synthesizeKokoro(texte: string, voix: string): Promise<string> {
   // 🔴 04/10/2026 — même nettoyage que Piper et Chatterbox, à l'entrée du moteur
   // (« astérisque », didascalies, emojis, URL : cf. tts-sanitize.ts).
+  // Pas de francisation ici : Kokoro ne sert que le CHINOIS dans ce dépôt (voix `kokoro-zh:*`).
   const dit = sanitizeForSpeech(texte)
   await kokoroInterne.assurer()
   let derniere: Error | undefined
