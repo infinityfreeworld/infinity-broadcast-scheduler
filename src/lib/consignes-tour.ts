@@ -50,8 +50,14 @@ function fr(t: GenreTour): string {
 
 /** Anglais : pour TOUTES les stations non françaises (les exemples à dire sont en anglais pour
  *  une station anglaise, et explicitement « dans la langue de la station » pour les autres). */
-function en(t: GenreTour, anglais: boolean): string {
+function en(t: GenreTour, anglais: boolean, ecriturePropre = false): string {
   const ex = (s: string) => anglais ? s : `${s} — translated into the station's language`
+  // 🔴 04/10/2026 — 自由之声 disait « Default Track 07 » à chaque pause : un titre en lettres latines
+  // qu'aucune voix chinoise ne sait lire (Kokoro le supprime, la voix clonée l'écorche). Sur une
+  // station à écriture propre, on ne fait PAS dire un titre latin : « un morceau » suffit.
+  const titre = (m: string) => ecriturePropre && /[A-Za-z]/.test(m)
+    ? `a piece of music — do NOT say its title "${m}", which is not in the station's script; just say "a piece of music" in the station's language`
+    : `"${m}"`
   switch (t.type) {
     case 'invite-reponse-1': return `Your guest turn (1/2). The host just asked you their FIRST question DIRECTLY — ANSWER it explicitly (1-2 sentences). You may then add ONE short satirical quip in your style. Total: 1-3 sentences max.`
     case 'invite-reponse-2': return `Your guest turn (2/2 — LAST). The host just asked you a 2nd question (another angle). ANSWER it (1-2 sentences), then start your EXIT from the show (1 sentence, like "thanks for having me", in your satirical style). Total: 2-3 sentences max.`
@@ -60,19 +66,22 @@ function en(t: GenreTour, anglais: boolean): string {
     case 'post-invite': return `Your turn. ${t.invite} is leaving — thank them briefly (1 sentence, in your style), then move on to the next topic (1 sentence). 2 sentences max.`
     case 'ouverture': return `You open the show. Follow the INTRO instruction of the STRUCTURE section.`
     case 'cloture': return `Last turn: wrap-up + teaser for tomorrow. Follow the CONCLUSION instruction.`
-    case 'avant-pause': return `Your turn, and it's the LAST one before a music break. Say what you have to say (1-2 sentences), then LAUNCH the track "${t.morceau}" naturally, like a host sending the music (${ex('"let\'s listen to…", "I\'ll leave you with…", "here\'s some music"')}). Your last sentence is the one that launches the music.`
-    case 'retour-pause': return `We're BACK from a music break ("${t.morceau}"). Start with a back-on-air sentence in your style (${ex(`"Back on ${t.station}…", "That was…"`)}), then continue with the current phase (see STRUCTURE). 2-3 sentences.`
+    case 'avant-pause': return `Your turn, and it's the LAST one before a music break. Say what you have to say (1-2 sentences), then LAUNCH the track ${ecriturePropre && /[A-Za-z]/.test(t.morceau) ? `(${titre(t.morceau)})` : titre(t.morceau)} naturally, like a host sending the music (${ex('"let\'s listen to…", "I\'ll leave you with…", "here\'s some music"')}). Your last sentence is the one that launches the music.`
+    case 'retour-pause': return `We're BACK from a music break (${titre(t.morceau)}). Start with a back-on-air sentence in your style (${ex(`"Back on ${t.station}…", "That was…"`)}), then continue with the current phase (see STRUCTURE). 2-3 sentences.`
     case 'court': return `SHORT turn: react in ONE single sentence of 3 to 10 words (laugh, surprise, follow-up, agreement, disagreement, teasing). Nothing else, no development.`
     case 'courrier': return `The switchboard received a listener message related to the current topic. Make up a first name and a city, read the message on air (2 sentences, in the listener's first person, introduced by ${ex(t.anonyme ? '"someone writes to us"' : '"a listener writes in"')}), then answer them in one sentence, calling them by their first name.`
     case 'courant': return 'Your turn. Keep the dialogue going, following the current phase (see STRUCTURE).'
   }
 }
 
+/** Langues dont la voix ne sait pas lire l'alphabet latin. */
+const ECRITURE_PROPRE: ReadonlySet<StationLanguage> = new Set(['zh', 'ja', 'ru', 'hi'])
+
 /**
  * Le message du tour. `complement` (la consigne de la phrase d'appel) s'insère avant la consigne
  * de langue, qui vient TOUJOURS en dernier : c'est la dernière chose que le modèle lit.
  */
 export function consigneTour(t: GenreTour, langue: StationLanguage, complement = ''): string {
-  const corps = langue === 'fr' ? fr(t) : en(t, langue === 'en')
+  const corps = langue === 'fr' ? fr(t) : en(t, langue === 'en', ECRITURE_PROPRE.has(langue))
   return `${corps}${complement ? ` ${complement}` : ''} ${consigneLangueTour(langue)}`
 }
