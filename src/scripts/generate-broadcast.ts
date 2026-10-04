@@ -73,6 +73,7 @@ import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_K
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
+import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
@@ -453,11 +454,13 @@ async function generateBroadcastBytes(opts: {
   if (aSynthetiser > 0) {
     console.log(`\n🎤 Synthèse groupée — ${aSynthetiser} tour(s) en voix de personnage, d'un seul trait (${enVolMax} en vol)`)
   }
+  const controleVoix = new ControleQualiteVoix({ langue: language, moteurs: moteursReels(language) })
   for (let i = 0; i < plansVoix.length; i++) {
     const plan = plansVoix[i]
     let wav: import('../lib/audio').DecodedWav | null = null
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
     file.remplir(i)
+    const obtenuesAvant = voixObtenues
 
     if (plan.voixPersonnage) {
       try {
@@ -532,8 +535,16 @@ async function generateBroadcastBytes(opts: {
       wav = piperWav
       if (!plan.voixPersonnage) process.stdout.write(`${kokoro ? '' : 'piper:'}${plan.voixPiper}\n`)
     }
+    // 🔍 Contrôle qualité de la réplique AVANT le montage (lib/controle-voix.ts) : blancs,
+    // chuchotements, texte non dit → régénération, voix de secours, ou rognage. Ne lève jamais.
+    wav = await controleVoix.controler({
+      numero: i + 1, locuteur: turns[i].hostName, texte: plan.texte, wav,
+      viaClone: voixObtenues > obtenuesAvant, voixPersonnage: plan.voixPersonnage, voixLocale: plan.voixPiper,
+    })
     wavEntries.push({ wav })
   }
+  const bilanVoix = controleVoix.ligneBilan()
+  if (bilanVoix) console.log(`\n${bilanVoix}`)
 
   // ── Habillage « humain » (lib/humain.ts) ─────────────────────────────────────────────
   // Niveaux égalisés entre les voix ; silences variables (plus long après une question, plus
