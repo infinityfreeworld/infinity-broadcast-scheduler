@@ -34,6 +34,7 @@ import { createHash } from 'node:crypto'
 import { copyFileSync, createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { sanitizeForSpeech } from './tts-sanitize'
 
 export const PREFIXE_KOKORO = 'kokoro-zh:'
 
@@ -202,14 +203,25 @@ function unEssai(texte: string, voix: string, sortie: string): Promise<void> {
   })
 }
 
+/**
+ * Les deux appels lourds de `synthesizeKokoro`, regroupés pour qu'un test puisse
+ * les remplacer (Kokoro exige un venv Python et 300 Mo de poids vérifiés par
+ * empreinte : impossible à simuler par des fichiers, contrairement à Piper).
+ */
+export const kokoroInterne = { assurer: ensureKokoro, essai: unEssai }
+
 /** Synthétise un tour → chemin d'un WAV 24 kHz. Réessaie ; ne relit jamais la sortie d'un essai raté. */
 export async function synthesizeKokoro(texte: string, voix: string): Promise<string> {
-  await ensureKokoro()
+  // 🔴 04/10/2026 — même nettoyage que Piper et Chatterbox, à l'entrée du moteur
+  // (« astérisque », didascalies, emojis, URL : cf. tts-sanitize.ts).
+  // Pas de francisation ici : Kokoro ne sert que le CHINOIS dans ce dépôt (voix `kokoro-zh:*`).
+  const dit = sanitizeForSpeech(texte)
+  await kokoroInterne.assurer()
   let derniere: Error | undefined
   for (let essai = 1; essai <= TENTATIVES; essai++) {
     const sortie = join(tmpdir(), `kokoro-${nomKokoro(voix)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
     try {
-      await unEssai(texte, voix, sortie)
+      await kokoroInterne.essai(dit, voix, sortie)
       if (essai > 1) console.error(`[kokoro] ${voix} : réussi au ${essai}e essai`)
       return sortie
     } catch (err) {

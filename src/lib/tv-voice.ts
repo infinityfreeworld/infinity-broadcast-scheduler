@@ -23,6 +23,7 @@
  *   avec la radio pour la même machine.
  */
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice, isVoiceSupported } from './piper'
+import { resteADire } from './tts-sanitize'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry, type DecodedWav } from './audio'
 import type { TvConductor } from './tv-types'
 
@@ -172,7 +173,9 @@ export async function synthesizeConductor(
     const role = roleDuPlan(seg.role, index)
     const voixDuPlan = dialogue && role === 'terrain' ? VOIX_TERRAIN : voiceId
     const texte = (seg.narration ?? '').trim()
-    if (!texte) {
+    // Une narration faite seulement de symboles ou d'emojis n'a rien à dire une fois
+    // nettoyée par le moteur (04/10/2026) : le plan reste, muet, plutôt qu'une synthèse vide.
+    if (!texte || !resteADire(texte)) {
       // Plan muet (illustration, ouverture) : il tient sa durée prévue.
       entries.push({ wav: silence(Math.max(PLAN_MIN_S, seg.durationSec || PLAN_MIN_S), rate) })
       continue

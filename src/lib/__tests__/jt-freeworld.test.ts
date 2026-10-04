@@ -634,3 +634,21 @@ test('le workflow : trois horaires, les tests d’abord, les bonnes clés — et
   assert.equal(pkg.scripts['jt:commande'], 'tsx src/scripts/jt-freeworld.ts commande')
   assert.equal(pkg.scripts['jt:publier'], 'tsx src/scripts/jt-freeworld.ts publier')
 })
+
+test('⭐ 04/10/2026 — la commande publiée ne porte aucun symbole qu’une voix lirait (« astérisque »)', () => {
+  // La voix du Journal est fabriquée par le hub : la commande publiée est le dernier
+  // endroit où ce dépôt peut nettoyer ce qui sera DIT.
+  const n = J.normaliserCommande(avec(jt => {
+    jt.sommaire = '**Bonsoir** ! Voici le Journal 🎉 #ce-soir'
+    jt.sujets[0].terrain = 'Oui, ici le port — https://exemple.org/port à vous.'
+    jt.au_revoir = 'À demain ✨, sur Freeworld TV.'
+  }) as J.CommandeJT)
+  for (const t of [n.sommaire, n.sujets[0].terrain, n.au_revoir]) {
+    assert.doesNotMatch(t, /[*#@]|https?:|\p{Extended_Pictographic}/u, `« ${t} »`)
+  }
+  assert.equal(n.sommaire, 'Bonsoir ! Voici le Journal ce-soir')
+  assert.equal(n.au_revoir, 'À demain, sur Freeworld TV.')
+  // Une réplique déjà propre ne change pas (l'exemple d'essai passe tel quel).
+  const e = J.normaliserCommande(EXEMPLE as J.CommandeJT)
+  assert.equal(e.sommaire, EXEMPLE.sommaire.replace(/\s+/g, ' ').trim())
+})

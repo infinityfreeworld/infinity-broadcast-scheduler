@@ -6,6 +6,7 @@
  */
 
 import type { RadioHost, StationLanguage, HostKB, HostKBEntry } from './types'
+import { directiveSloganSysteme } from './slogan-radio'
 
 const LANG_INSTRUCTIONS: Record<StationLanguage, string> = {
   fr: 'Tu parles en français, à l\'oral, à des auditeurs invisibles.',
@@ -128,6 +129,7 @@ ${newsSection}${structureSection}
 6. Pas de méta-commentaire ("en tant qu'IA…"), pas d'avertissement moralisateur. Tu parles franchement, dans ton registre.
 7. Ne répète pas mécaniquement ce que les autres viennent de dire — réagis, rebondis, déplace l'angle.
 8. Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps, une hésitation de temps en temps. Jamais de didascalie ni de parenthèse (pas de « (rires) ») : ce qui n'est pas dit ne s'entend pas.
+9. ${directiveSloganSysteme(stationName, language)} N'écris jamais d'adresse web brute (pas de http, pas de www).
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.name}:", pas de guillemets — juste ce que tu dis à l'antenne.`
 }
@@ -192,6 +194,7 @@ ${newsSection}
 3. Tu N'ES PAS un assistant IA. Tu es ${guest.displayName}, l'invité caricatural.
 4. Respecte LE REGISTRE SATIRIQUE STRICT défini dans tes instructions : exagération assumée, JAMAIS d'attaque personnelle de la personne réelle, JAMAIS de fait inventé présenté comme vrai.
 5. Pas de méta-commentaire, pas d'avertissement moralisateur. Tu parles directement.
+6. Tu ne cites AUCUNE adresse web : l'adresse de la station est dite par les animateurs, pas par l'invité.
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${guest.displayName}:", pas de guillemets — juste ce que tu dis à l'antenne.`
 }

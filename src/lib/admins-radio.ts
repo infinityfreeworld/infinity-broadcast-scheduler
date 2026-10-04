@@ -15,7 +15,12 @@
  *   · 6e008304… — 8 stations (kind 30091, 16/06/2026) et la pierre tombale de Big Balls ;
  *   · 4ade0dd1… — Radio Pirate et Voces Libres (30091, 31/05/2026) ;
  *   · f1abc0b8… — voix de Cyril (WTF) et Hex (Pirate) (30095, 25/05/2026) ;
- *   · 6f290e57… — la racine de l'IHL (`VITE_IHL_ROOT_PUBKEY` d'Infinity).
+ *   · 6f290e57… — la racine de l'IHL (`VITE_IHL_ROOT_PUBKEY` d'Infinity) ;
+ *   · db02f94a… — la CO-RACINE du Bâtisseur (ajoutée le 04/10/2026) : ses personas
+ *     (Emmanuel Cramon, Ki Jun Couille, Donald Trompe, kind 30104) et ses voix étaient
+ *     écartées chaque nuit parce que cette clé manquait ici ;
+ *   · 889951cc… — la clé de SECOURS du Bâtisseur (04/10/2026), pour qu'un passage
+ *     sur elle ne fasse pas disparaître ses réglages de l'antenne.
  * La clé du générateur lui-même (9a8098f0…, ère Hugging Face) n'y est PAS : ses anciens
  * mappings pointaient vers des voix anglaises livrées avec le Space, et ne doivent plus
  * passer devant la table des voix inventées.
@@ -28,6 +33,8 @@ export const ADMINS_RADIO_PAR_DEFAUT: readonly string[] = [
   '4ade0dd1fe5da781fd3e40060a6807e3e290490a730b9f995146cb7219b96d80',
   'f1abc0b871f6870489391d47ca1fe2a216ddc854c6a6fe5b619c5f7f2381ef3c',
   '6f290e57b8a032237ee84e06de5d6dbcef9c24c08e28e7e4615588141189d1fd',
+  'db02f94a66c3845bcdc6b6d4488112920fdd82cf9d20edd341df00b326a37241',
+  '889951cce124cbad13c32c8b83199337eea207416bd3b47d6fedc7ec971d3724',
 ]
 
 /**
