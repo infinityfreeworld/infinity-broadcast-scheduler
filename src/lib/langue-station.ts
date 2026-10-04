@@ -255,3 +255,37 @@ export const MAX_REECRITURES_LANGUE = 2
 export function retirerEtiquetteLocuteur(texte: string): string {
   return texte.replace(/^\s*\[[^\]\n]{1,40}\]\s*/u, '').trim()
 }
+
+/** Ce que rend `garantirLangue`. */
+export interface TexteGaranti {
+  /** Le texte retenu (réécrit le cas échéant), étiquette de locuteur retirée. */
+  texte:        string
+  /** La langue étrangère détectée sur le DERNIER essai, ou null : le texte est dans la langue
+   *  de la station (ou indécidable). Non null = le tour doit être ÉCARTÉ, jamais diffusé. */
+  horsLangue:   LangueStation | null
+  /** Nombre de réécritures demandées au modèle. */
+  reecritures:  number
+}
+
+/**
+ * Le contrôle complet d'un tour : détection, puis jusqu'à `max` réécritures demandées au modèle
+ * (`reecrire` reçoit le texte fautif et la demande à lui adresser, et rend le nouveau texte).
+ * Le même chemin dans l'app et dans le générateur.
+ */
+export async function garantirLangue(
+  texteBrut: string,
+  langue: LangueStation,
+  reecrire: (texteFautif: string, demande: string) => Promise<string>,
+  max = MAX_REECRITURES_LANGUE,
+): Promise<TexteGaranti> {
+  let texte = retirerEtiquetteLocuteur(texteBrut)
+  let ailleurs = horsLangue(texte, langue)
+  let reecritures = 0
+  while (ailleurs && reecritures < max) {
+    reecritures++
+    const candidat = retirerEtiquetteLocuteur((await reecrire(texte, demandeReecriture(langue, ailleurs))).trim())
+    if (candidat) texte = candidat
+    ailleurs = horsLangue(texte, langue)
+  }
+  return { texte, horsLangue: ailleurs, reecritures }
+}

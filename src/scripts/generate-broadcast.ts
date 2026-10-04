@@ -72,7 +72,7 @@ import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
-import { horsLangue, demandeReecriture, retirerEtiquetteLocuteur, MAX_REECRITURES_LANGUE } from '../lib/langue-station'
+import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
@@ -351,23 +351,21 @@ async function generateBroadcastBytes(opts: {
     // 🔴 RÈGLE D'OR (04/10/2026) : tout se dit dans la langue de la station. Un tour produit dans
     // une autre langue est RÉÉCRIT (jusqu'à MAX_REECRITURES_LANGUE fois), puis ÉCARTÉ s'il reste
     // étranger : jamais diffusé, et jamais repassé dans l'historique (qui entraînerait la suite).
-    let ailleurs = horsLangue(turnText, language)
-    for (let essai = 1; ailleurs && essai <= MAX_REECRITURES_LANGUE; essai++) {
-      process.stdout.write(`(en ${ailleurs} au lieu de ${language} — réécriture ${essai}/${MAX_REECRITURES_LANGUE}) `)
+    const garanti = await garantirLangue(turnText, language, async (fautif, demande) => {
+      process.stdout.write(`(hors langue ${language} — réécriture) `)
       const reecrit = await appelerLLM({
         systemPrompt,
         messages: [...history, userMessage,
-          { role: 'assistant', content: turnText },
-          { role: 'user', content: demandeReecriture(language, ailleurs) }],
+          { role: 'assistant', content: fautif },
+          { role: 'user', content: demande }],
       })
       costIn += reecrit.inputTokens
       costOut += reecrit.outputTokens
-      const candidat = retirerEtiquetteLocuteur(reecrit.text.trim())
-      if (candidat) turnText = candidat
-      ailleurs = horsLangue(turnText, language)
-    }
-    if (ailleurs) {
-      console.log(`(toujours en ${ailleurs} après ${MAX_REECRITURES_LANGUE} réécritures, tour ÉCARTÉ : « ${turnText.slice(0, 40)}… »)`)
+      return reecrit.text
+    })
+    turnText = garanti.texte
+    if (garanti.horsLangue) {
+      console.log(`(toujours en ${garanti.horsLangue} après ${garanti.reecritures} réécriture(s), tour ÉCARTÉ : « ${turnText.slice(0, 40)}… »)`)
       continue
     }
     // Rien que des emojis ou des symboles : une fois nettoyé par le moteur, il ne

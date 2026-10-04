@@ -8,7 +8,7 @@
 import { describe, it, expect } from './vitest-cale'
 import {
   horsLangue, detecterLangue, consigneLangueTour, enteteLangueSysteme, demandeReecriture,
-  retirerEtiquetteLocuteur, type LangueStation,
+  retirerEtiquetteLocuteur, garantirLangue, type LangueStation,
 } from '../langue-station'
 
 const ANGLAIS_REELS = [
@@ -107,5 +107,34 @@ describe('retirerEtiquetteLocuteur', () => {
   it("retire « [Sarah] » recopié de l'historique", () => {
     expect(retirerEtiquetteLocuteur('[Sarah] Exactly, Malik.')).toBe('Exactly, Malik.')
     expect(retirerEtiquetteLocuteur('Exactly, [Malik] knows.')).toBe('Exactly, [Malik] knows.')
+  })
+})
+
+describe('garantirLangue — le chemin complet d\'un tour', () => {
+  it('un tour anglais passe sans appel au modèle', async () => {
+    let appels = 0
+    const r = await garantirLangue('[Sarah] Exactly, Malik, and that is the whole point of this show.', 'en', async () => { appels++; return '' })
+    expect(r.horsLangue).toBe(null)
+    expect(r.texte).toBe('Exactly, Malik, and that is the whole point of this show.')
+    expect(appels).toBe(0)
+  })
+  it('un tour français est réécrit en anglais', async () => {
+    const demandes: string[] = []
+    const r = await garantirLangue('De retour sur Free Press FM, et ne vous y trompez pas, ces pots ont dansé sous les fenêtres.', 'en',
+      async (_fautif, demande) => { demandes.push(demande); return 'Back on Free Press FM, and make no mistake, those pots were banging under the bank windows.' })
+    expect(r.horsLangue).toBe(null)
+    expect(r.reecritures).toBe(1)
+    expect(r.texte).toContain('Back on Free Press FM')
+    expect(demandes[0]).toContain('ENTIRELY in English')
+  })
+  it('un modèle qui s\'obstine en français : tour signalé hors langue après 2 réécritures', async () => {
+    let appels = 0
+    const r = await garantirLangue('Ah, là tu parles, Malik !', 'en', async () => { appels++; return 'Ah ouais, Sarah, tu as encore raison sur ce point.' })
+    expect(r.horsLangue).toBe('fr')
+    expect(appels).toBe(2)
+  })
+  it('une station française garde ses tours français', async () => {
+    const r = await garantirLangue('Ah, là tu parles, Marina ! Et franchement, ça fait du bien.', 'fr', async () => { throw new Error('aucun appel attendu') })
+    expect(r.horsLangue).toBe(null)
   })
 })

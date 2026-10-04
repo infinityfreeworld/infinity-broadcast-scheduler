@@ -113,13 +113,12 @@ test('voix attribuée dans l\'admin pour une AUTRE langue : sautée', () => {
 
 test('le générateur contrôle la langue de CHAQUE tour, réécrit, puis écarte', () => {
   const src = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
-  assert.match(src, /let ailleurs = horsLangue\(turnText, language\)/)
-  assert.match(src, /for \(let essai = 1; ailleurs && essai <= MAX_REECRITURES_LANGUE; essai\+\+\)/)
-  assert.match(src, /demandeReecriture\(language, ailleurs\)/)
-  assert.match(src, /if \(ailleurs\) \{[\s\S]{0,200}continue/)
+  assert.match(src, /const garanti = await garantirLangue\(turnText, language, async \(fautif, demande\) =>/)
+  assert.match(src, /\{ role: 'assistant', content: fautif \},\s*\{ role: 'user', content: demande \}/)
+  assert.match(src, /if \(garanti\.horsLangue\) \{[\s\S]{0,200}continue/)
   assert.match(src, /content: consigneTour\(genreTour, language, consigneSlogan\)/)
   // Le contrôle passe AVANT l'entrée dans l'historique (turns.push) : un tour étranger n'entraîne pas la suite.
-  assert.ok(src.indexOf('let ailleurs = horsLangue') < src.indexOf('turns.push(turn)'))
+  assert.ok(src.indexOf('await garantirLangue(') < src.indexOf('turns.push(turn)'))
   // Plus aucun exemple français en dur dans la boucle.
   assert.ok(!src.includes('`On REVIENT d\'une pause musicale'))
 })
