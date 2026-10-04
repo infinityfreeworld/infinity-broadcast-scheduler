@@ -37,6 +37,31 @@ const DEFAULT_RELAYS = [
   'wss://relay.primal.net',
 ]
 
+/**
+ * Le contenu JSON du kind 30093. `titre` et `resume` (04/10/2026) sont OPTIONNELS : présents
+ * seulement quand ils existent, les lecteurs actuels les ignorent.
+ */
+export function contenuEmission(finalBroadcast: RadioBroadcast): string {
+  return JSON.stringify({
+    stationId:   finalBroadcast.stationId,
+    date:        finalBroadcast.date,
+    language:    finalBroadcast.language,
+    durationSec: finalBroadcast.durationSec,
+    audioCid:    finalBroadcast.audioCid,
+    audioMime:   finalBroadcast.audioMime,
+    turns:       finalBroadcast.turns,
+    // Pauses musicales / jingles : seulement quand il y en a (l'appli tolère l'absence).
+    ...(finalBroadcast.segments && finalBroadcast.segments.length > 0
+      ? { segments: finalBroadcast.segments } : {}),
+    newsRefs:    finalBroadcast.newsRefs,
+    model:       finalBroadcast.model,
+    generatedAt: finalBroadcast.generatedAt,
+    // « Émissions précédentes » : titre et résumé du thème, dans la langue de la station.
+    ...(finalBroadcast.titre ? { titre: finalBroadcast.titre } : {}),
+    ...(finalBroadcast.resume ? { resume: finalBroadcast.resume } : {}),
+  })
+}
+
 export function getRelays(): string[] {
   const fromEnv = process.env.NOSTR_RELAYS
   if (fromEnv) return fromEnv.split(',').map(s => s.trim()).filter(Boolean)
@@ -146,21 +171,7 @@ export async function publishBroadcast(
       // Qui a fabriqué la nuit : le Mac, le secours GitHub, l'usine de nuit (anti-doublon, 14/09/2026).
       ['producteur', process.env.PRODUCTEUR || 'inconnu'],
     ],
-    content: JSON.stringify({
-      stationId:   finalBroadcast.stationId,
-      date:        finalBroadcast.date,
-      language:    finalBroadcast.language,
-      durationSec: finalBroadcast.durationSec,
-      audioCid:    finalBroadcast.audioCid,
-      audioMime:   finalBroadcast.audioMime,
-      turns:       finalBroadcast.turns,
-      // Pauses musicales / jingles : seulement quand il y en a (l'appli tolère l'absence).
-      ...(finalBroadcast.segments && finalBroadcast.segments.length > 0
-        ? { segments: finalBroadcast.segments } : {}),
-      newsRefs:    finalBroadcast.newsRefs,
-      model:       finalBroadcast.model,
-      generatedAt: finalBroadcast.generatedAt,
-    }),
+    content: contenuEmission(finalBroadcast),
   }
 
   const signed = finalizeEvent(eventTpl, sk)

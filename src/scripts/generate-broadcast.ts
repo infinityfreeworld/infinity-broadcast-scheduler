@@ -73,6 +73,7 @@ import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_K
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
+import { resumerEmission, ligneJournalResume } from '../lib/resume-emission'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
@@ -968,6 +969,16 @@ async function main() {
   const costUsd = (result.costInputTokens / 1e6) * 0.80 + (result.costOutputTokens / 1e6) * 4
   console.log(`    Coût estimé Haiku 4.5 : $${costUsd.toFixed(4)}`)
 
+  // Titre + résumé pour la liste « Émissions précédentes » (04/10/2026). UN appel court au
+  // modèle, dans la langue de la station ; ne fait JAMAIS échouer l'émission (repli déterministe).
+  const resumeEm = await resumerEmission({
+    turns: result.turns, langue: station.language ?? 'fr', nomStation: station.name, appeler: appelerLLM,
+  })
+  console.log(`    ${ligneJournalResume(resumeEm)}`)
+  if (resumeEm.inputTokens + resumeEm.outputTokens > 0) {
+    console.log(`    Tokens résumé : ${resumeEm.inputTokens} in / ${resumeEm.outputTokens} out`)
+  }
+
   // Optionnel : sauve le WAV localement (debug)
   const localWavPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.wav`)
   writeFileSync(localWavPath, result.audioBlob)
@@ -1057,6 +1068,8 @@ async function main() {
     ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,
+    ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
+    ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
     generatedBy: '',   // sera rempli par publishBroadcast
     generatedAt: Math.floor(Date.now() / 1000),
   }
