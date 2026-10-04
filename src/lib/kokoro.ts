@@ -35,6 +35,7 @@ import { copyFileSync, createReadStream, existsSync, mkdirSync, unlinkSync, writ
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { sanitizeForSpeech } from './tts-sanitize'
+import { textePourVoixChinoise } from './prononciation-zh'
 
 export const PREFIXE_KOKORO = 'kokoro-zh:'
 
@@ -215,7 +216,9 @@ export async function synthesizeKokoro(texte: string, voix: string): Promise<str
   // 🔴 04/10/2026 — même nettoyage que Piper et Chatterbox, à l'entrée du moteur
   // (« astérisque », didascalies, emojis, URL : cf. tts-sanitize.ts).
   // Pas de francisation ici : Kokoro ne sert que le CHINOIS dans ce dépôt (voix `kokoro-zh:*`).
-  const dit = sanitizeForSpeech(texte)
+  // 🔴 04/10/2026 — sigles, chiffres et lettres latines rendus prononçables (prononciation-zh.ts) :
+  // la phonétique chinoise supprimait sans rien dire tout ce qui était en lettres latines.
+  const dit = textePourVoixChinoise(sanitizeForSpeech(texte))
   await kokoroInterne.assurer()
   let derniere: Error | undefined
   for (let essai = 1; essai <= TENTATIVES; essai++) {
