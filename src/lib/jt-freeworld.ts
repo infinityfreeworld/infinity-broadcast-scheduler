@@ -24,6 +24,7 @@
 import { readFileSync } from 'node:fs'
 import { verifyEvent } from 'nostr-tools/pure'
 import { programDTag } from './tv-nostr'
+import { sanitizeForSpeech } from './tts-sanitize'
 import type { TvProgram } from './tv-types'
 
 // ── Les évènements et le canal ─────────────────────────────────────────
@@ -321,32 +322,40 @@ export function motsCommande(jt: CommandeJT): number {
 }
 
 const net = (s: string): string => s.replace(/\s+/g, ' ').trim()
+/**
+ * Une RÉPLIQUE (texte lu à voix haute par le hub) : nettoyée comme le font nos moteurs
+ * (04/10/2026 — « certains animateurs prononcent astérisque »). La voix du Journal est
+ * fabriquée par l'usine du hub, hors de ce dépôt : c'est donc ICI, dans la commande
+ * publiée, que passe le dernier nettoyage. La validation refuse déjà les didascalies ;
+ * ceci rattrape le reste (gras, emojis, URL, symboles isolés).
+ */
+const dit = (s: string): string => net(sanitizeForSpeech(s))
 // Comme planif.py : le décor part dans une consigne entre guillemets — ni guillemets, ni accolades, ni chevrons.
 const netDecor = (s: string): string => net(s).replace(/["{}<>]/g, '')
 
-/** La commande PUBLIÉE : les seuls champs du contrat, espaces resserrés et décors nettoyés comme le hub les lira. */
+/** La commande PUBLIÉE : les seuls champs du contrat, espaces resserrés, répliques nettoyées pour la voix, décors nettoyés comme le hub les lira. */
 export function normaliserCommande(jt: CommandeJT): CommandeJT {
   return {
     date: jt.date,
-    sommaire: net(jt.sommaire),
+    sommaire: dit(jt.sommaire),
     sujets: jt.sujets.map(s => ({
       titre: net(s.titre),
-      lancement: net(s.lancement),
+      lancement: dit(s.lancement),
       reporter: s.reporter,
       lieu: net(s.lieu),
       decor: netDecor(s.decor),
-      terrain: net(s.terrain),
+      terrain: dit(s.terrain),
       ...(s.coupe ? { coupe: netDecor(s.coupe) } : {}),
       interview: s.interview
         ? {
             invite: s.interview.invite,
-            question: net(s.interview.question),
-            reponse: net(s.interview.reponse),
+            question: dit(s.interview.question),
+            reponse: dit(s.interview.reponse),
             ...(s.interview.decor ? { decor: netDecor(s.interview.decor) } : {}),
           }
         : null,
     })),
-    au_revoir: net(jt.au_revoir),
+    au_revoir: dit(jt.au_revoir),
   }
 }
 

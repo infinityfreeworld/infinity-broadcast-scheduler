@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
+import { sanitizeForSpeech } from './tts-sanitize'
 
 const exec = promisify(execFile)
 
@@ -369,6 +370,10 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
   if (!isVoiceSupported(voiceId)) {
     throw new Error(`Voix non supportée : ${voiceId}`)
   }
+  // 🔴 04/10/2026 — « certains animateurs prononcent astérisque » (Bâtisseur).
+  // Nettoyage À L'ENTRÉE du moteur : radio, TV (tv-voice), idents et tout
+  // appelant futur y passent sans pouvoir l'oublier (cf. tts-sanitize.ts).
+  const dit = sanitizeForSpeech(text)
   await ensurePiperBinary()
   await ensureVoice(voiceId)
 
@@ -383,7 +388,7 @@ export async function synthesize(text: string, voiceId: string): Promise<string>
       `piper-${voiceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`,
     )
     try {
-      await unEssaiDeSynthese(moteur, voicePath, outPath, text)
+      await unEssaiDeSynthese(moteur, voicePath, outPath, dit)
       return outPath
     } catch (e) {
       try { if (existsSync(outPath)) unlinkSync(outPath) } catch { /* déjà parti */ }

@@ -36,6 +36,7 @@ import { decodeWav, concatWavs, encodeWav, type ConcatEntry } from './audio'
 import { getNostrVoiceForHost } from './host-voice-mappings'
 import { voixInventee } from '../data/voix-inventees'
 import { jetonDataspace } from './dataspace-jeton'
+import { sanitizeForSpeech } from './tts-sanitize'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -637,7 +638,7 @@ export function decouperTexte(texte: string, max = maxCaracteres()): string[] {
  * Nous respectons donc `Retry-After` et réessayons dans un budget borné,
  * plutôt que de nous acharner.
  */
-export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Promise<Buffer> {
+export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions): Promise<Buffer> {
   if (echeanceNuitPassee()) {
     throw new ChatterboxError(
       'échéance de la NUIT dépassée — plus de voix clonée ce soir, repli Piper', 408,
@@ -654,6 +655,11 @@ export async function synthesizeWithChatterbox(opts: ChatterboxSpeakOptions): Pr
   const restant = echeanceClone > 0
     ? Math.max(1_000, echeanceClone - Date.now())
     : Number.parseInt(process.env.CHATTERBOX_ECHEANCE_S ?? '1800', 10) * 1000
+  // 🔴 04/10/2026 — « certains animateurs prononcent astérisque » (Bâtisseur). Le texte est
+  // nettoyé À L'ENTRÉE du moteur (Markdown, didascalies, emojis, URL : cf. tts-sanitize.ts),
+  // après le mur (qui refuse avant tout travail) et AVANT le découpage : radio, idents et
+  // sondes y passent tous.
+  const opts: ChatterboxSpeakOptions = { ...optsBruts, text: sanitizeForSpeech(optsBruts.text) }
   // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
   // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons
   // finales) sont courts et partent d'un bloc.
