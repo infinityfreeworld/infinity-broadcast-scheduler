@@ -257,10 +257,10 @@ export function horsLangue(texte: string, langue: LangueStation): LangueStation 
 export function intrusionsLatines(texte: string, langue: LangueStation): string[] {
   if (!ECRITURE_DE[langue]) return []
   const propre = texte.replace(/\[[^\]\n]*\]/g, ' ')
-  const groupes = propre.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*(?:[ \-]+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*)*/g) ?? []
+  const groupes = propre.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*(?:[ -]+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*)*/g) ?? []
   const intrus: string[] = []
   for (const g of groupes) {
-    const m = g.split(/[ \-]+/).filter(Boolean)
+    const m = g.split(/[ -]+/).filter(Boolean)
     const sigle = (w: string) => /^[A-Z]{1,6}s?$/.test(w)
     const minuscule = (w: string) => /^[a-zà-ÿ]/.test(w)
     const utiles = m.filter(w => !sigle(w))
