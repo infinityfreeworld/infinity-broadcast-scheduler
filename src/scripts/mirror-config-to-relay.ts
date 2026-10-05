@@ -2,7 +2,13 @@
 /**
  * @module InfinityScheduler/Scripts/MirrorConfigToRelay
  * @description Recopie la CONFIGURATION radio (personas, voix, invités,
- *   Pulse) des relais publics vers notre relais souverain.
+ *   Pulse, stations) des relais publics vers nos relais DURABLES : le relais
+ *   Cloudflare ET les deux relais de data-space.
+ *
+ *   05/10/2026 : le relais Cloudflare dépasse chaque jour le quota gratuit des
+ *   Durable Objects et cesse de répondre. data-space (gratuit, sans quota)
+ *   devient le relais de rétention de la radio ; il n'avait reçu AUCUNE
+ *   station, faute d'être visé par ce script.
  *
  *   ── POURQUOI ──
  *   Jusqu'au 01/09/2026, le relais souverain REFUSAIT ces kinds
@@ -23,6 +29,7 @@
  *     tsx src/scripts/mirror-config-to-relay.ts --executer # écrit vraiment
  *
  *   Le mode à blanc liste ce qui serait recopié, sans rien écrire.
+ *   `RELAIS_CIBLES=wss://…,wss://…` remplace la liste des cibles.
  */
 
 import 'dotenv/config'
@@ -31,11 +38,19 @@ import type { Event as NostrEvent } from 'nostr-tools/core'
 import { getRelays } from '../lib/nostr'
 import { SEED_STATIONS } from '../data/seed-stations'
 
-const RELAIS_SOUVERAIN = 'wss://infinity-radio-relay.digitalforlifeagency.workers.dev'
+const CIBLES_PAR_DEFAUT = [
+  'wss://data-space.world/r/relais-public-1',
+  'wss://data-space.world/r/relais-public-2',
+  'wss://infinity-radio-relay.digitalforlifeagency.workers.dev',
+]
+const RELAIS_CIBLES = process.env.RELAIS_CIBLES
+  ? process.env.RELAIS_CIBLES.split(',').map(s => s.trim()).filter(Boolean)
+  : CIBLES_PAR_DEFAUT
 
 /** Les kinds de CONFIGURATION. 30093 (les émissions) n'est pas ici : il
  *  était déjà accepté, et son volume est d'un autre ordre. */
 const KINDS_CONFIG: Record<number, string> = {
+  30091: 'station',
   30092: 'base de connaissances animateur',
   30094: 'voix',
   30095: 'mapping animateur → voix',
@@ -98,18 +113,18 @@ async function main() {
     : null
 
   console.log(`\n╔═══════════════════════════════════════════════════════════════╗`)
-  console.log(`║  Miroir de la configuration radio → relais souverain          ║`)
+  console.log(`║  Miroir de la configuration radio → relais durables           ║`)
   console.log(`║  Mode : ${(executer ? 'ÉCRITURE RÉELLE' : 'À BLANC (rien ne sera écrit)').padEnd(53)}║`)
   console.log(`╚═══════════════════════════════════════════════════════════════╝`)
   if (auteursConnus) console.log(`Filtre d'auteur actif : ${auteursConnus.size} pubkey(s)`)
   else console.log(`Pas de RADIO_ADMIN_PUBKEYS : filtrage par la FORME des events.`)
 
-  // ── Récolte : tous les relais SAUF le souverain (c'est la cible) ──
-  const sources = getRelays().filter(r => r !== RELAIS_SOUVERAIN)
+  // ── Récolte : partout, cibles comprises (chacune peut détenir ce qui manque aux autres) ──
+  const sources = [...new Set([...getRelays(), ...RELAIS_CIBLES])]
   const pool = new SimplePool()
   const kinds = Object.keys(KINDS_CONFIG).map(Number)
 
-  console.log(`\n📥 Récolte sur ${sources.length} relais publics…`)
+  console.log(`\n📥 Récolte sur ${sources.length} relais…`)
   const trouves = await pool.querySync(sources, { kinds, limit: 500 }, { maxWait: 15000 })
   console.log(`   ${trouves.length} event(s) vus, tous kinds confondus`)
 
@@ -124,25 +139,45 @@ async function main() {
     if (!prec || e.created_at > prec.created_at) retenus.set(cle, e)
   }
 
-  // ── Ce que le relais souverain a DÉJÀ ──
-  //
-  // Comparé par IDENTIFIANT d'event, pas par (kind, d-tag, date) : l'id est
-  // l'empreinte du document, c'est la seule clé qui ne peut pas rater une
-  // correspondance. Une première version comparait le triplet et ne
-  // reconnaissait rien — l'outil renvoyait alors « 37 échecs » sur une
-  // recopie pourtant réussie, ce qui est pire qu'un silence.
-  //
-  // Interrogé kind par kind : une requête portant les 11 kinds d'un coup se
-  // fait tronquer par le relais.
+  pool.close(sources)
+  const documents = [...retenus.values()]
+  console.log(`\n📋 ${documents.length} document(s) de configuration reconnus`)
+
+  let echecsTotal = 0
+  let okTotal = 0
+  for (const cible of RELAIS_CIBLES) {
+    const { ok, echecs } = await recopierVers(cible, documents, kinds, executer)
+    okTotal += ok
+    echecsTotal += echecs
+  }
+  if (executer && okTotal === 0 && echecsTotal > 0) process.exit(1)
+}
+
+/**
+ * Recopie vers UNE cible ce qu'elle n'a pas encore.
+ *
+ * Comparé par IDENTIFIANT d'event, pas par (kind, d-tag, date) : l'id est
+ * l'empreinte du document, c'est la seule clé qui ne peut pas rater une
+ * correspondance. Une première version comparait le triplet et ne
+ * reconnaissait rien — l'outil renvoyait alors « 37 échecs » sur une
+ * recopie pourtant réussie, ce qui est pire qu'un silence.
+ *
+ * Interrogé kind par kind : une requête portant tous les kinds d'un coup se
+ * fait tronquer par le relais.
+ */
+async function recopierVers(
+  cible: string, documents: NostrEvent[], kinds: number[], executer: boolean,
+): Promise<{ ok: number; echecs: number }> {
+  const pool = new SimplePool()
   const dejaLa = new Set<string>()
   for (const k of kinds) {
-    const presents = await pool.querySync([RELAIS_SOUVERAIN], { kinds: [k], limit: 500 }, { maxWait: 8000 })
+    const presents = await pool.querySync([cible], { kinds: [k], limit: 500 }, { maxWait: 8000 })
     for (const e of presents) dejaLa.add(e.id)
   }
+  pool.close([cible])
 
-  const aRecopier = [...retenus.values()].filter(e => !dejaLa.has(e.id))
-
-  console.log(`\n📋 ${retenus.size} document(s) de configuration reconnus · ${aRecopier.length} à recopier\n`)
+  const aRecopier = documents.filter(e => !dejaLa.has(e.id))
+  console.log(`\n── ${cible} : ${aRecopier.length} à recopier`)
   const parKind = new Map<number, NostrEvent[]>()
   for (const e of aRecopier) parKind.set(e.kind, [...(parKind.get(e.kind) ?? []), e])
   for (const k of kinds) {
@@ -154,25 +189,21 @@ async function main() {
     }
   }
 
-  pool.close(sources)
-  pool.close([RELAIS_SOUVERAIN])
-
   if (!executer) {
-    console.log(`\n· Mode à blanc — rien n'a été écrit. Relancer avec --executer pour recopier.`)
-    return
+    console.log(`  · Mode à blanc — rien n'a été écrit. Relancer avec --executer pour recopier.`)
+    return { ok: 0, echecs: 0 }
   }
   if (aRecopier.length === 0) {
-    console.log(`\n✅ Rien à recopier : le relais souverain a déjà tout.`)
-    return
+    console.log(`  ✅ Rien à recopier : ce relais a déjà tout.`)
+    return { ok: 0, echecs: 0 }
   }
 
   // ── Écriture, une par une, en lisant chaque réponse ──
-  console.log(`\n📤 Recopie sur ${RELAIS_SOUVERAIN}…`)
   let ok = 0
   const echecs: string[] = []
   for (const e of aRecopier) {
     const dTag = e.tags.find(t => t[0] === 'd')?.[1] ?? '?'
-    const reponse = await envoyer(e)
+    const reponse = await envoyer(cible, e)
     // « duplicate » n'est pas un échec : le document EST sur le relais,
     // c'est-à-dire exactement le but recherché.
     const dejaPresent = /duplicate/i.test(reponse.message)
@@ -186,17 +217,15 @@ async function main() {
     await new Promise(r => setTimeout(r, DELAI_ENTRE_ENVOIS_MS))
   }
 
-  console.log(`\n╔═══════════════════════════════════════════════════════════════╗`)
-  console.log(`║  ${String(ok).padStart(3)} en sûreté sur le relais · ${String(echecs.length).padStart(3)} échec(s)`.padEnd(64) + `║`)
-  console.log(`╚═══════════════════════════════════════════════════════════════╝`)
+  console.log(`  ${ok} en sûreté sur ${cible} · ${echecs.length} échec(s)`)
   for (const f of echecs) console.log(`  - ${f}`)
-  if (ok === 0 && echecs.length > 0) process.exit(1)
+  return { ok, echecs: echecs.length }
 }
 
 /** Envoie UN event et attend son accusé de réception nommé. */
-function envoyer(e: NostrEvent): Promise<{ accepte: boolean; message: string }> {
+function envoyer(cible: string, e: NostrEvent): Promise<{ accepte: boolean; message: string }> {
   return new Promise(resolve => {
-    const ws = new WebSocket(RELAIS_SOUVERAIN)
+    const ws = new WebSocket(cible)
     let fini = false
     const finir = (accepte: boolean, message: string) => {
       if (fini) return
