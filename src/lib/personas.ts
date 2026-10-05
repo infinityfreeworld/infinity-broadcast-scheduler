@@ -7,6 +7,7 @@
 
 import type { RadioHost, StationLanguage, HostKB, HostKBEntry } from './types'
 import { directiveSloganSysteme } from './slogan-radio'
+import { enteteLangueSysteme, consigneLangueTour } from './langue-station'
 
 const LANG_INSTRUCTIONS: Record<StationLanguage, string> = {
   fr: 'Tu parles en français, à l\'oral, à des auditeurs invisibles.',
@@ -32,6 +33,18 @@ const SHORT_DIRECTIVE: Record<StationLanguage, string> = {
   ja: '1ターン最大3文の短文。ラジオの流れ、エッセイではない。',
   zh: '每轮最多3个短句。这是电台直播，不是论文。',
   ru: 'Максимум 3 коротких предложения за ход. Это поток радио, а не эссе.',
+}
+
+/**
+ * Directive « parle comme à l'oral ». Ses exemples d'interjections sont FRANÇAIS : pour une autre
+ * langue, ils étaient recopiés tels quels (« Ah ouais, Sarah… » sur Free Press FM, 04/10/2026).
+ */
+function directiveOral(language: StationLanguage): string {
+  if (language === 'fr') {
+    return `Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps, une hésitation de temps en temps. Jamais de didascalie ni de parenthèse (pas de « (rires) ») : ce qui n'est pas dit ne s'entend pas.`
+  }
+  const exemples = language === 'en' ? ' ("well", "oh", "yeah", "right", "hang on")' : ' (natural ones of the station\'s language)'
+  return `Speak like you TALK, not like you write: short sentences, restarts, small interjections${exemples}, your colleague's first name now and then, a hesitation now and then. Never stage directions or parentheses (no "(laughs)"): what isn't said can't be heard.`
 }
 
 export function buildHostSystemPrompt(opts: {
@@ -94,7 +107,7 @@ ${newsBlock}
     ? buildStructureSection(currentTurn, totalTurns, language)
     : ''
 
-  return `Tu es ${host.name}, animateur radio sur ${stationLine}.
+  return `${enteteLangueSysteme(language)}Tu es ${host.name}, animateur radio sur ${stationLine}.
 
 # IDENTITÉ
 - Trait dominant : ${host.trait}
@@ -128,8 +141,9 @@ ${newsSection}${structureSection}
 5. Tu N'ES PAS un assistant IA. Tu N'ES PAS Matrixia. Tu N'ES PAS Infinity. Tu es ${host.name}, point.
 6. Pas de méta-commentaire ("en tant qu'IA…"), pas d'avertissement moralisateur. Tu parles franchement, dans ton registre.
 7. Ne répète pas mécaniquement ce que les autres viennent de dire — réagis, rebondis, déplace l'angle.
-8. Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps, une hésitation de temps en temps. Jamais de didascalie ni de parenthèse (pas de « (rires) ») : ce qui n'est pas dit ne s'entend pas.
+8. ${directiveOral(language)}
 9. ${directiveSloganSysteme(stationName, language)} N'écris jamais d'adresse web brute (pas de http, pas de www).
+10. ${consigneLangueTour(language)}
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${host.name}:", pas de guillemets — juste ce que tu dis à l'antenne.`
 }
@@ -169,7 +183,7 @@ export function buildGuestSystemPrompt(opts: {
     ? `\n# ACTUALITÉ DU JOUR\n${newsBlock}\n→ Réagis à l'actualité avec ton angle de caricature, déforme avec ton tempérament.\n`
     : ''
 
-  return `Tu es ${guest.displayName}, INVITÉ caricatural sur ${stationLine}.
+  return `${enteteLangueSysteme(language)}Tu es ${guest.displayName}, INVITÉ caricatural sur ${stationLine}.
 
 # CE QUE TU ES
 ${guest.bio}
@@ -195,6 +209,7 @@ ${newsSection}
 4. Respecte LE REGISTRE SATIRIQUE STRICT défini dans tes instructions : exagération assumée, JAMAIS d'attaque personnelle de la personne réelle, JAMAIS de fait inventé présenté comme vrai.
 5. Pas de méta-commentaire, pas d'avertissement moralisateur. Tu parles directement.
 6. Tu ne cites AUCUNE adresse web : l'adresse de la station est dite par les animateurs, pas par l'invité.
+7. ${consigneLangueTour(language)}
 
 Réponds maintenant avec UNIQUEMENT ton tour de parole. Pas de balise "${guest.displayName}:", pas de guillemets — juste ce que tu dis à l'antenne.`
 }

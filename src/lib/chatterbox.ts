@@ -33,7 +33,7 @@
  */
 
 import { decodeWav, concatWavs, encodeWav, type ConcatEntry } from './audio'
-import { getNostrVoiceForHost } from './host-voice-mappings'
+import { getNostrVoiceForHost, getNostrVoiceLanguageForHost } from './host-voice-mappings'
 import { voixInventee } from '../data/voix-inventees'
 import { jetonDataspace } from './dataspace-jeton'
 import { sanitizeForSpeech } from './tts-sanitize'
@@ -902,12 +902,31 @@ export function getChatterboxVoiceForHost(
     }
   }
 
+  // Règle d'or (04/10/2026) : la voix parle la langue de la STATION. Une attribution déclarée
+  // pour une autre langue (kind 30095, champ `language`) est sautée : la source suivante répond.
+  let admin = getNostrVoiceForHost(stationId, hostId)
+  const langueAdmin = getNostrVoiceLanguageForHost(stationId, hostId)
+  if (admin && !voixAdminCompatible(langueAdmin, language)) {
+    console.warn(`[chatterbox] voix « ${admin} » attribuée à ${stationId}:${hostId} pour la langue « ${langueAdmin} », `
+      + `la station parle « ${language} » — attribution ignorée`)
+    admin = null
+  }
+
   return resoudreVoix({
-    admin: getNostrVoiceForHost(stationId, hostId),   // kind 30095 — le choix fait dans l'admin
+    admin,   // kind 30095 — le choix fait dans l'admin
     carteLegacy,
     inventee: voixInventee(stationId, hostId),
     defaut: process.env.CHATTERBOX_DEFAULT_VOICE || null,
   }, language)
+}
+
+/**
+ * Une attribution d'admin est-elle utilisable sur cette station ? Oui si elle ne déclare aucune
+ * langue, ou la langue de la station. Pure, pour être éprouvée sans réseau.
+ */
+export function voixAdminCompatible(langueDeclaree: string | null | undefined, langueStation?: string): boolean {
+  if (!langueDeclaree || !langueStation) return true
+  return langueDeclaree.toLowerCase().slice(0, 2) === langueStation.toLowerCase().slice(0, 2)
 }
 
 /** Les sources possibles de la voix d'un animateur. */

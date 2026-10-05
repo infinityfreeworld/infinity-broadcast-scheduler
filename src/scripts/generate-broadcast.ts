@@ -72,6 +72,8 @@ import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
+import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
+import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
 
@@ -314,32 +316,23 @@ async function generateBroadcastBytes(opts: {
       role: 'assistant',
       content: `[${t.hostName}] ${t.text}`,
     }))
+    // Le message du tour, DANS LA LANGUE DE LA STATION, consigne de langue en dernier
+    // (lib/consignes-tour.ts — 04/10/2026, Free Press FM parlait français).
+    const genreTour: GenreTour = isGuestTurn1 ? { type: 'invite-reponse-1' }
+      : isGuestTurn2 ? { type: 'invite-reponse-2' }
+      : isPreGuestTurn ? { type: 'pre-invite', invite: guest!.displayName, bio: guest!.bio }
+      : isMidGuestTurn ? { type: 'relance-invite', invite: guest!.displayName }
+      : isPostGuestTurn ? { type: 'post-invite', invite: guest!.displayName }
+      : isFirstTurn ? { type: 'ouverture' }
+      : i === numTurns - 1 ? { type: 'cloture' }
+      : pauseApres.has(i) ? { type: 'avant-pause', morceau: pauseApres.get(i)! }
+      : retourApres.has(i) ? { type: 'retour-pause', morceau: retourApres.get(i)!, station: station.name }
+      : humain.courts.has(i) ? { type: 'court' }
+      : humain.courrier === i ? { type: 'courrier', anonyme: host.name === 'Anonyme' }
+      : { type: 'courant' }
     const userMessage: LLMMessage = {
       role: 'user',
-      content: isGuestTurn1
-        ? `Ton tour d'invité (1/2). L'animateur vient de te poser sa PREMIÈRE question DIRECTEMENT — RÉPONDS-LUI explicitement (1-2 phrases). Tu peux ensuite ajouter UNE saillie satirique courte dans ton style. Total : 1-3 phrases max.`
-        : isGuestTurn2
-          ? `Ton tour d'invité (2/2 — DERNIER). L'animateur vient de te poser une 2e question (autre angle). RÉPONDS-LUI (1-2 phrases) puis amorce ta SORTIE de l'émission (1 phrase, type "merci de m'avoir reçu" dans ton style satirique). Total : 2-3 phrases max.`
-          : isPreGuestTurn
-            ? `Ton tour. ${guest!.displayName} (${guest!.bio.slice(0, 80)}) est en ligne avec nous. Présente-le brièvement en 1 phrase puis POSE-LUI UNE QUESTION CONCRÈTE en lien avec un sujet d'actualité évoqué (ou à évoquer). Termine ton tour par cette question, adressée explicitement à ${guest!.displayName}.`
-            : isMidGuestTurn
-              ? `Ton tour. ${guest!.displayName} vient de répondre — relance avec une 2e question SOUS UN AUTRE ANGLE (provocation, contradiction polie, ou approfondissement). 2-3 phrases max, termine par '?' adressé à ${guest!.displayName}.`
-              : isPostGuestTurn
-                ? `Ton tour. ${guest!.displayName} s'en va — remercie-le brièvement (1 phrase, dans ton style) puis enchaîne sur le sujet suivant (1 phrase). 2 phrases max.`
-                : (isFirstTurn
-                  ? `Tu ouvres l'émission. Suis la consigne d'INTRO de la section STRUCTURE.`
-                  : (i === numTurns - 1
-                      ? `Dernier tour : conclusion + teaser de demain. Suis la consigne de CONCLUSION.`
-                      : pauseApres.has(i)
-                        ? `Ton tour, et c'est le DERNIER avant une pause musicale. Dis ce que tu as à dire (1-2 phrases), puis LANCE le morceau « ${pauseApres.get(i)} » naturellement, comme un animateur qui envoie la musique (« on s'écoute… », « je vous laisse avec… », « allez, musique »). Ta dernière phrase est celle qui lance la musique.`
-                        : retourApres.has(i)
-                          ? `On REVIENT d'une pause musicale (« ${retourApres.get(i)} »). Commence par une phrase de retour d'antenne dans ton style (« De retour sur ${station.name}… », « C'était… »), puis enchaîne sur la phase courante (cf. STRUCTURE). 2-3 phrases.`
-                          : humain.courts.has(i)
-                            ? `Tour COURT : réagis en UNE seule phrase de 3 à 10 mots (rire, étonnement, relance, approbation, désaccord, taquinerie). Rien d'autre, pas de développement.`
-                            : humain.courrier === i
-                              ? `Le standard a reçu un message d'auditeur en lien avec le sujet en cours. Invente un prénom et une ville, lis le message à l'antenne (2 phrases, à la première personne de l'auditeur, introduites par « ${host.name === 'Anonyme' ? 'quelqu\'un' : 'un auditeur'} nous écrit »), puis réponds-lui en une phrase en l'appelant par son prénom.`
-                              : 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).'))
-        + ' ' + consigneSlogan,
+      content: consigneTour(genreTour, language, consigneSlogan),
     }
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
@@ -350,9 +343,29 @@ async function generateBroadcastBytes(opts: {
     })
     costIn += resp.inputTokens
     costOut += resp.outputTokens
-    let turnText = resp.text.trim()
+    let turnText = retirerEtiquetteLocuteur(resp.text.trim())
     if (!turnText) {
       console.log('(vide, skip)')
+      continue
+    }
+    // 🔴 RÈGLE D'OR (04/10/2026) : tout se dit dans la langue de la station. Un tour produit dans
+    // une autre langue est RÉÉCRIT (jusqu'à MAX_REECRITURES_LANGUE fois), puis ÉCARTÉ s'il reste
+    // étranger : jamais diffusé, et jamais repassé dans l'historique (qui entraînerait la suite).
+    const garanti = await garantirLangue(turnText, language, async (fautif, demande) => {
+      process.stdout.write(`(hors langue ${language} — réécriture) `)
+      const reecrit = await appelerLLM({
+        systemPrompt,
+        messages: [...history, userMessage,
+          { role: 'assistant', content: fautif },
+          { role: 'user', content: demande }],
+      })
+      costIn += reecrit.inputTokens
+      costOut += reecrit.outputTokens
+      return reecrit.text
+    })
+    turnText = garanti.texte
+    if (garanti.horsLangue) {
+      console.log(`(toujours en ${garanti.horsLangue} après ${garanti.reecritures} réécriture(s), tour ÉCARTÉ : « ${turnText.slice(0, 40)}… »)`)
       continue
     }
     // Rien que des emojis ou des symboles : une fois nettoyé par le moteur, il ne

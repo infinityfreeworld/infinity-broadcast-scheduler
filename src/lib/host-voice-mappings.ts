@@ -146,11 +146,13 @@ export async function fetchHostVoiceMappings(timeoutMs = 8000): Promise<Map<stri
       process.env.NOSTR_PUBLIC_KEY?.toLowerCase() ?? '')
 
     const result = new Map<string, string>()
+    langues.clear()
     for (const [dTag, event] of latest.entries()) {
       try {
-        const content = JSON.parse(event.content) as { voiceName?: unknown }
+        const content = JSON.parse(event.content) as { voiceName?: unknown; language?: unknown }
         if (typeof content.voiceName === 'string' && content.voiceName.length > 0) {
           result.set(dTag, content.voiceName)
+          if (typeof content.language === 'string' && content.language) langues.set(dTag, content.language)
         }
       } catch {
         // content JSON cassé → ignore ce mapping
@@ -171,6 +173,26 @@ export async function fetchHostVoiceMappings(timeoutMs = 8000): Promise<Map<stri
  */
 export function exportHostVoiceMappingsToEnv(mappings: Map<string, string>): void {
   process.env[ENV_KEY] = JSON.stringify(Object.fromEntries(mappings))
+  process.env[ENV_KEY_LANGUES] = JSON.stringify(Object.fromEntries(langues))
+}
+
+/**
+ * Langue DÉCLARÉE de chaque attribution (champ `language` du kind 30095 : l'admin la remplit avec
+ * la langue de la station au moment du choix). Sert à écarter une voix attribuée pour une autre
+ * langue que celle de la station (règle d'or du 04/10/2026 : la voix doit parler la langue de
+ * la station). Absente = rien n'est déclaré, la voix est gardée.
+ */
+const langues = new Map<string, string>()
+const ENV_KEY_LANGUES = 'HOST_VOICE_LANG_JSON'
+
+export function getNostrVoiceLanguageForHost(stationId: string, hostId: string): string | null {
+  const json = process.env[ENV_KEY_LANGUES]
+  if (!json) return langues.get(mappingKey(stationId, hostId)) ?? null
+  try {
+    return (JSON.parse(json) as Record<string, string>)[mappingKey(stationId, hostId)] ?? null
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -108,7 +108,9 @@ test('⭐ le script de génération est branché comme cette boucle', () => {
   assert.match(corps, /let slogansDits = 0/)
   assert.match(corps, /positionDuTour\(isFirstTurn, i === numTurns - 1\)/)
   assert.match(corps, /consigneSloganPourTour\(station\.name, language, positionPourConsigne\(position, slogansDits\)\)/)
-  assert.match(corps, /\+ ' ' \+ consigneSlogan/, 'la consigne doit partir dans le message du tour')
+  // 04/10/2026 : le message du tour est construit par consigneTour (lib/consignes-tour.ts), la
+  // consigne de la phrase d'appel y entre avant la consigne de langue.
+  assert.match(corps, /consigneTour\(genreTour, language, consigneSlogan\)/, 'la consigne doit partir dans le message du tour')
   assert.match(corps, /appliquerSlogan\(\{[\s\S]*?nomStation: station\.name, langue: language,[\s\S]*?dejaDits: slogansDits, position,/)
   assert.match(corps, /slogansDits = slogan\.dits/)
   assert.match(corps, /texte: prononcerDomaine\(turnText, language\)/, 'la voix reçoit la forme parlée')
