@@ -121,6 +121,13 @@ export interface RadioBroadcast {
   segments?:   BroadcastSegment[]
   newsRefs:    string[]
   model:       string
+  /**
+   * Titre court de l'émission (≤ 70 car., langue de la station) pour la liste « Émissions
+   * précédentes ». OPTIONNEL (04/10/2026) : absent quand le modèle n'a pas pu l'écrire.
+   */
+  titre?:      string
+  /** Résumé du thème, 1 ou 2 phrases (≤ 220 car., langue de la station). OPTIONNEL. */
+  resume?:     string
   generatedBy: string       // pubkey hex
   generatedAt: number       // unix epoch sec
 }

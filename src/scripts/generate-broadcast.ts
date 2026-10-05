@@ -73,6 +73,8 @@ import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_K
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
+import { resumerEmission, ligneJournalResume } from '../lib/resume-emission'
+import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
@@ -453,11 +455,13 @@ async function generateBroadcastBytes(opts: {
   if (aSynthetiser > 0) {
     console.log(`\n🎤 Synthèse groupée — ${aSynthetiser} tour(s) en voix de personnage, d'un seul trait (${enVolMax} en vol)`)
   }
+  const controleVoix = new ControleQualiteVoix({ langue: language, moteurs: moteursReels(language) })
   for (let i = 0; i < plansVoix.length; i++) {
     const plan = plansVoix[i]
     let wav: import('../lib/audio').DecodedWav | null = null
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
     file.remplir(i)
+    const obtenuesAvant = voixObtenues
 
     if (plan.voixPersonnage) {
       try {
@@ -532,8 +536,16 @@ async function generateBroadcastBytes(opts: {
       wav = piperWav
       if (!plan.voixPersonnage) process.stdout.write(`${kokoro ? '' : 'piper:'}${plan.voixPiper}\n`)
     }
+    // 🔍 Contrôle qualité de la réplique AVANT le montage (lib/controle-voix.ts) : blancs,
+    // chuchotements, texte non dit → régénération, voix de secours, ou rognage. Ne lève jamais.
+    wav = await controleVoix.controler({
+      numero: i + 1, locuteur: turns[i].hostName, texte: plan.texte, wav,
+      viaClone: voixObtenues > obtenuesAvant, voixPersonnage: plan.voixPersonnage, voixLocale: plan.voixPiper,
+    })
     wavEntries.push({ wav })
   }
+  const bilanVoix = controleVoix.ligneBilan()
+  if (bilanVoix) console.log(`\n${bilanVoix}`)
 
   // ── Habillage « humain » (lib/humain.ts) ─────────────────────────────────────────────
   // Niveaux égalisés entre les voix ; silences variables (plus long après une question, plus
@@ -968,6 +980,16 @@ async function main() {
   const costUsd = (result.costInputTokens / 1e6) * 0.80 + (result.costOutputTokens / 1e6) * 4
   console.log(`    Coût estimé Haiku 4.5 : $${costUsd.toFixed(4)}`)
 
+  // Titre + résumé pour la liste « Émissions précédentes » (04/10/2026). UN appel court au
+  // modèle, dans la langue de la station ; ne fait JAMAIS échouer l'émission (repli déterministe).
+  const resumeEm = await resumerEmission({
+    turns: result.turns, langue: station.language ?? 'fr', nomStation: station.name, appeler: appelerLLM,
+  })
+  console.log(`    ${ligneJournalResume(resumeEm)}`)
+  if (resumeEm.inputTokens + resumeEm.outputTokens > 0) {
+    console.log(`    Tokens résumé : ${resumeEm.inputTokens} in / ${resumeEm.outputTokens} out`)
+  }
+
   // Optionnel : sauve le WAV localement (debug)
   const localWavPath = join(tmpdir(), `broadcast-${stationId}-${targetDate}.wav`)
   writeFileSync(localWavPath, result.audioBlob)
@@ -1057,6 +1079,8 @@ async function main() {
     ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     model,
+    ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
+    ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
     generatedBy: '',   // sera rempli par publishBroadcast
     generatedAt: Math.floor(Date.now() / 1000),
   }

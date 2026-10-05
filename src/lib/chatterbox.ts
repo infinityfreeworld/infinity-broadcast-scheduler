@@ -38,6 +38,7 @@ import { voixInventee } from '../data/voix-inventees'
 import { jetonDataspace } from './dataspace-jeton'
 import { sanitizeForSpeech } from './tts-sanitize'
 import { frenchifyEnglishWords } from './frenchify-english'
+import { textePourVoixChinoise } from './prononciation-zh'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -48,6 +49,10 @@ export interface ChatterboxSpeakOptions {
   cfgWeight?:          number
   temperature?:        number
   speed?:              number
+  /** Longueur maximale d'un morceau (caractères). Absent : `maxCaracteres(langue)`. Une
+   *  régénération après un défaut audio (cf. controle-voix.ts) la baisse : des morceaux plus
+   *  courts tiennent mieux sous le plafond de génération du modèle. */
+  maxCaracteres?:      number
 }
 
 export class ChatterboxError extends Error {
@@ -558,7 +563,15 @@ export async function pingUntilReady(
 }
 
 /** Longueur maximale d'une requête de synthèse, en caractères (réglable). */
-export function maxCaracteres(): number {
+export function maxCaracteres(langue?: string): number {
+  // 🔴 04/10/2026 — 350 caractères latins font ~20 s de parole ; 350 caractères CHINOIS en font
+  // ~70 s, bien au-delà du plafond de génération du modèle (~40 s : des tours de 自由之声 coupés
+  // net à 40,0 s, relevés dans les émissions publiées). Le chinois et le japonais partent donc
+  // en morceaux de 120 caractères (~25 s).
+  if (langue === 'zh' || langue === 'ja') {
+    const n = Number.parseInt(process.env.CHATTERBOX_MAX_CARACTERES_CJK ?? '120', 10)
+    return Number.isFinite(n) && n >= 30 ? n : 120
+  }
   const n = Number.parseInt(process.env.CHATTERBOX_MAX_CARACTERES ?? '350', 10)
   return Number.isFinite(n) && n >= 80 ? n : 350
 }
@@ -584,7 +597,9 @@ export function decouperTexte(texte: string, max = maxCaracteres()): string[] {
   if (!t) return []
   if (t.length <= max) return [t]
   const finsDePhrase: number[] = []
-  const re = /[.!?…]+[»"”’)]*(?=\s)/g
+  // Fin de phrase latine SUIVIE d'un blanc (« 1.5 » n'en est pas une), ou ponctuation pleine
+  // largeur chinoise/japonaise, qui n'est jamais suivie d'un blanc (« 。！？ »).
+  const re = /[.!?…]+[»"”’)]*(?=\s)|[。！？]+[」』”’）》]*/g
   for (let m = re.exec(t); m; m = re.exec(t)) finsDePhrase.push(m.index + m[0].length)
 
   const morceaux: string[] = []
@@ -603,6 +618,9 @@ export function decouperTexte(texte: string, max = maxCaracteres()): string[] {
       const faible = Math.max(
         fenetre.lastIndexOf('; '), fenetre.lastIndexOf(': '),
         fenetre.lastIndexOf(', '), fenetre.lastIndexOf(' — '),
+        // Ponctuation faible pleine largeur (sans blanc après) : la coupe tombe JUSTE après,
+        // donc le signe doit tenir dans les `max` premiers caractères.
+        ...['，', '；', '：', '、'].map(p => fenetre.lastIndexOf(p, max - 1)),
       )
       if (faible > max * 0.4) coupe = debut + faible + 1
       else {
@@ -665,14 +683,20 @@ export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions
   // plus bas) reçoit ensuite les mots anglais ré-épelés — même ordre que l'app.
   const langueVoix = optsBruts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr'
   const propre = sanitizeForSpeech(optsBruts.text)
+  // 🔴 04/10/2026 — une voix clonée qui parle CHINOIS reçoit sigles, chiffres et lettres latines
+  // rendus prononçables (prononciation-zh.ts) : elle les lisait avec une phonétique chinoise.
   const opts: ChatterboxSpeakOptions = {
     ...optsBruts,
-    text: langueVoix === 'fr' ? frenchifyEnglishWords(propre) : propre,
+    text: langueVoix === 'fr' ? frenchifyEnglishWords(propre)
+      : langueVoix === 'zh' ? textePourVoixChinoise(propre)
+      : propre,
   }
   // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
   // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons
   // finales) sont courts et partent d'un bloc.
-  const morceaux = (opts.format ?? 'wav') === 'wav' ? decouperTexte(opts.text) : [opts.text]
+  const morceaux = (opts.format ?? 'wav') === 'wav'
+    ? decouperTexte(opts.text, opts.maxCaracteres ?? maxCaracteres(langueVoix))
+    : [opts.text]
   if (morceaux.length <= 1) {
     return avecEcheance(synthetiserSansMur(opts), restant, `synthèse « ${opts.voice} »`)
   }

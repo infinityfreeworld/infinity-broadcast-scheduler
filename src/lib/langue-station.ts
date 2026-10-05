@@ -189,12 +189,19 @@ export function horsLangue(texte: string, langue: LangueStation): LangueStation 
   const total = e.latin + e.cyrillique + e.han + e.kana + e.devanagari
   if (total === 0) return null
 
-  // Langues à écriture propre : la part de cette écriture tranche.
+  // Langues à écriture propre : la part de cette écriture tranche, PUIS les intrusions latines.
   const ecriture = ECRITURE_DE[langue]
   if (ecriture) {
-    if (ecriture(e) / total >= 0.5) return null
+    if (ecriture(e) / total >= 0.5) {
+      const intrus = intrusionsLatines(propre, langue)
+      if (intrus.length === 0) return null
+      return langueLatine(mots(intrus.join(' ')))?.langue ?? 'en'
+    }
     const autre = detecterLangue(propre)
-    return autre && autre !== langue ? autre : (e.latin / total > 0.5 ? (langueLatine(mots(propre))?.langue ?? null) : null)
+    if (autre && autre !== langue) return autre
+    // Majoritairement latin SANS mots-outils reconnaissables : du PINYIN (« Dajia hao, zheli shi
+    // ziyou zhi sheng ») ou une transcription — aucune voix de la langue ne le lira. Étranger.
+    return e.latin / total > 0.5 ? (langueLatine(mots(propre))?.langue ?? 'en') : null
   }
 
   // Station à alphabet latin : un texte majoritairement cyrillique, chinois… est étranger.
@@ -230,14 +237,53 @@ export function horsLangue(texte: string, langue: LangueStation): LangueStation 
   return null
 }
 
+/**
+ * Mots ou bouts de phrase en LETTRES LATINES glissés dans un tour d'une station à écriture propre
+ * (chinois, japonais, russe, hindi), qu'aucune voix de la langue ne sait dire.
+ *
+ * 🔴 04/10/2026 — 自由之声, émissions publiées du 22/09 au 04/10 : chaque retour de pause musicale
+ * commençait par « De retour sur 自由之声 » (consigne française recopiée), et l'on relève
+ * « commitment to chaos », « silicon intelligence », « say I love you », « care », « alemana »,
+ * « ezzel »… Le texte restait à 80 % en caractères chinois : la proportion d'écriture laissait tout
+ * passer. Kokoro SUPPRIME ces mots sans rien dire (« lettres latines ignorées », journaux des nuits
+ * du 27/09, 28/09 et 02/10) ; la voix clonée en `zh` les lit avec une phonétique chinoise. D'où
+ * « les animateurs parlent étrangement, mais pas chinois ».
+ *
+ * Restent admis, parce qu'ils se disent (ou sont convertis par la prononciation chinoise) : les
+ * SIGLES en capitales (AI, FBI, GPS), les jetons avec chiffres (5G, G2), un nom propre isolé ou
+ * deux (« Kimi », « Jakob Coxon »). Sont rejetés : un mot en minuscules de 3 lettres ou plus, un
+ * groupe de 2 mots dont un en minuscules, tout groupe de 3 mots ou plus.
+ */
+export function intrusionsLatines(texte: string, langue: LangueStation): string[] {
+  if (!ECRITURE_DE[langue]) return []
+  const propre = texte.replace(/\[[^\]\n]*\]/g, ' ')
+  const groupes = propre.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*(?:[ -]+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*)*/g) ?? []
+  const intrus: string[] = []
+  for (const g of groupes) {
+    const m = g.split(/[ -]+/).filter(Boolean)
+    const sigle = (w: string) => /^[A-Z]{1,6}s?$/.test(w)
+    const minuscule = (w: string) => /^[a-zà-ÿ]/.test(w)
+    const utiles = m.filter(w => !sigle(w))
+    if (utiles.length === 0) continue
+    if (utiles.length >= 3) { intrus.push(g); continue }
+    if (utiles.length === 2 && utiles.some(minuscule)) { intrus.push(g); continue }
+    if (utiles.length === 1 && minuscule(utiles[0]) && utiles[0].length >= 3) intrus.push(g)
+  }
+  return intrus
+}
+
 // ── 3. La réécriture ──────────────────────────────────────────────────────────────────
 
 /**
  * Message à renvoyer au modèle quand il a répondu dans une autre langue : réécrire LE MÊME tour,
  * en entier, dans la langue de la station.
  */
-export function demandeReecriture(langue: LangueStation, detectee: LangueStation | null): string {
+export function demandeReecriture(langue: LangueStation, detectee: LangueStation | null, intrus: string[] = []): string {
   const ailleurs = detectee ? ` (it was in ${NOMS[detectee].anglais})` : ''
+  if (intrus.length > 0 && langue !== 'fr') {
+    const liste = intrus.slice(0, 6).map(m => `"${m}"`).join(', ')
+    return `Your answer contains words in Latin letters that a ${NOMS[langue].anglais} voice cannot say: ${liste}. Rewrite EXACTLY the same turn ENTIRELY in ${NOMS[langue].anglais} (${NOMS[langue].natif}) script: translate these words, write numbers and names the way a ${NOMS[langue].anglais} radio host says them, and do not quote music titles in a foreign language. Same ideas, same length, same tone. Reply ONLY with the rewritten turn. ${CONSIGNE_NATIVE[langue]}`
+  }
   if (langue === 'fr') {
     return `Ta réponse n'était pas en français${detectee ? ` (elle était en ${detectee === 'en' ? 'anglais' : NOMS[detectee].natif})` : ''}. Réécris EXACTEMENT ce même tour, ENTIÈREMENT en français : mêmes idées, même longueur, même ton. Réponds UNIQUEMENT avec le tour réécrit.`
   }
@@ -283,7 +329,8 @@ export async function garantirLangue(
   let reecritures = 0
   while (ailleurs && reecritures < max) {
     reecritures++
-    const candidat = retirerEtiquetteLocuteur((await reecrire(texte, demandeReecriture(langue, ailleurs))).trim())
+    const demande = demandeReecriture(langue, ailleurs, intrusionsLatines(texte, langue))
+    const candidat = retirerEtiquetteLocuteur((await reecrire(texte, demande)).trim())
     if (candidat) texte = candidat
     ailleurs = horsLangue(texte, langue)
   }
