@@ -27,6 +27,7 @@ import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { sanitizeForSpeech } from './tts-sanitize'
 import { frenchifyEnglishWords } from './frenchify-english'
+import { pausePiper } from './disfluences'
 
 const exec = promisify(execFile)
 
@@ -378,7 +379,8 @@ export function estVoixPiperFrancaise(voiceId: string): boolean {
  * est celle de la station (`voixPourLangue`) ou du programme TV (voix fr fixes).
  */
 export function textePourVoixPiper(text: string, voiceId: string): string {
-  const propre = sanitizeForSpeech(text)
+  // « euh… » → « euh, » : Piper ne marque pas de pause sur « … » (mesuré, cf. disfluences.ts).
+  const propre = pausePiper(sanitizeForSpeech(text))
   return estVoixPiperFrancaise(voiceId) ? frenchifyEnglishWords(propre) : propre
 }
 

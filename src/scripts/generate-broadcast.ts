@@ -40,6 +40,7 @@ import {
   appliquerSlogan, consigneSloganPourTour, positionDuTour, positionPourConsigne, prononcerDomaine,
 } from '../lib/slogan-radio'
 import { resteADire } from '../lib/tts-sanitize'
+import { rattraperDisfluences, tauxDisfluences } from '../lib/disfluences'
 import { ligneMotsAnglaisNonCouverts } from '../lib/releve-anglais'
 
 /** Motif de l'absence de Kokoro sur cette machine — vide quand il est prêt. */
@@ -152,6 +153,10 @@ async function generateBroadcastBytes(opts: {
   /** Pour chaque tour produit : l'indice de boucle d'où il vient (un vocal ou un auditeur s'insère APRÈS son annonce). */
   const indexBoucle: number[] = []
   const refsCourrier: string[] = []
+  // Hésitations (lib/disfluences.ts, 07/10/2026) : demandées au modèle, puis rattrapées s'il en a
+  // écrit trop peu. `permisHesitation[k]` dit si le k-ième tour PRODUIT peut en recevoir une.
+  const tauxHesitations = habillageActif('HABILLAGE_ECRITURE') ? tauxDisfluences() : 0
+  const permisHesitation: boolean[] = []
   // ── Le plan « humain » de l'émission (lib/humain.ts), connu AVANT d'écrire ──────────────
   // Les pauses musicales sont décidées ici aussi (même tirage que le montage) : l'animateur qui
   // précède une pause LANCE le morceau, celui qui suit REVIENT de la musique.
@@ -326,6 +331,7 @@ async function generateBroadcastBytes(opts: {
           behaviorDirective:  customPersona ? behaviorDirective(customPersona.behavior) : undefined,
           pulseDirective,
           dateDuJour,
+          disfluences:        tauxHesitations > 0,
         })
 
     // Place du tour pour la phrase d'appel : ouverture = premier tour PRODUIT,
@@ -434,6 +440,9 @@ async function generateBroadcastBytes(opts: {
     // La VOIX reçoit le domaine sous sa forme parlée (« Infiniti tiret Friwourld point
     // com ») ; le nettoyage (astérisques, didascalies…) est fait à l'entrée de chaque moteur.
     plansVoix.push({ texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
+    // Ni l'ouverture, ni la conclusion, ni le lancement d'un morceau (son titre), ni le retour de
+    // pause, ni le courrier lu mot pour mot, ni une réaction courte : on n'y ajoute pas d'hésitation.
+    permisHesitation.push(['courant', 'pre-invite', 'relance-invite', 'post-invite', 'invite-reponse-1', 'invite-reponse-2'].includes(genreTour.type))
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
 
@@ -492,6 +501,20 @@ async function generateBroadcastBytes(opts: {
   }
 
   if (turns.length === 0) throw new Error('Aucun tour généré')
+
+  // ── Rattrapage des hésitations (lib/disfluences.ts) ─────────────────
+  // Déterministe par (station, date). Le transcript ET la voix reçoivent le texte rattrapé.
+  if (tauxHesitations > 0) {
+    const r = rattraperDisfluences(
+      turns.map((t, k) => ({ texte: t.text, permis: permisHesitation[k] ?? false })),
+      language, `${station.id}:${opts.date}:disfluences`, tauxHesitations,
+    )
+    for (const k of r.ajouts) {
+      turns[k].text = r.textes[k]
+      plansVoix[k].texte = prononcerDomaine(r.textes[k], language)
+    }
+    console.log(`    🤔 hésitations : ${r.avant} tour(s) en portaient, cible ${r.cible}${r.ajouts.length ? ` · ajoutées aux tours ${r.ajouts.map(k => k + 1).join(', ')}` : ''}`)
+  }
 
   // ── PHASE 2 : TOUTE la synthèse, d'un seul trait ───────────────────
   //
