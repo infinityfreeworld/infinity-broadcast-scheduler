@@ -494,6 +494,13 @@ export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
   const maxTentatives = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10)
   const debut = Date.now()
   let delai = 5_000
+  // 🔴 07/10/2026 — passé l'échéance de la nuit, chaque essai lève aussitôt « échéance dépassée »
+  // (408) : les 24 tentatives n'étaient qu'une attente de 12 minutes sans aucune chance d'aboutir,
+  // répétée sur chaque station restante. On le dit tout de suite.
+  if (echeanceNuitPassee()) {
+    console.warn('  [chatterbox] échéance de la nuit passée — pas de réveil, pas de voix clonée')
+    return 'injoignable'
+  }
 
   for (let i = 0; i < maxTentatives; i++) {
     const ecoule = Math.round((Date.now() - debut) / 1000)
