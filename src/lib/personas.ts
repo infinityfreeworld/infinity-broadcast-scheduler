@@ -54,6 +54,16 @@ export function directiveOral(language: StationLanguage, disfluences = true): st
   return `Speak like you TALK, not like you write: short sentences, restarts, small interjections${exemples}, your colleague's first name now and then.${hesiter} Never stage directions or parentheses (no "(laughs)", no "(hesitates)"): what isn't said can't be heard — a hesitation is WRITTEN with its words ("uh…").`
 }
 
+/** 07/10/2026 — la raison d'être de la station (fiche IHL), vide sans description. */
+function sectionLigneEditoriale(ligne?: string): string {
+  return ligne && ligne.trim() ? `\n# LIGNE ÉDITORIALE DE LA STATION\n${ligne.trim()}\n\n` : ''
+}
+
+/** 07/10/2026 — la part d'actualité réglée dans l'IHL, vide sans réglage. */
+function sectionActualite(consigne?: string): string {
+  return consigne && consigne.trim() ? `\n# PART DE L'ACTUALITÉ\n${consigne.trim()}\n` : ''
+}
+
 export function buildHostSystemPrompt(opts: {
   host:           RadioHost
   kb:             HostKB
@@ -63,6 +73,10 @@ export function buildHostSystemPrompt(opts: {
   language:       StationLanguage
   otherHosts:     RadioHost[]
   stationDescription?: string
+  /** 07/10/2026 — raison d'être réglée dans l'IHL (lib/fiche-station.ts → ligneEditoriale). */
+  ligneEditoriale?:    string
+  /** 07/10/2026 — part d'actualité de la station, consigne de CE tour (fiche-station.ts). */
+  consigneActualite?:  string
   newsBlock?:     string
   /** Position du tour courant (1-indexé). Si fourni avec totalTurns, le prompt
    *  inclut une section STRUCTURE qui guide le LLM selon sa position dans
@@ -117,9 +131,12 @@ ${newsBlock}
     ? buildStructureSection(currentTurn, totalTurns, language)
     : ''
 
+  const editorialeSection = sectionLigneEditoriale(opts.ligneEditoriale)
+  const actualiteSection = sectionActualite(opts.consigneActualite)
+
   return `${enteteLangueSysteme(language)}Tu es ${host.name}, animateur radio sur ${stationLine}.
 
-# IDENTITÉ
+${editorialeSection}# IDENTITÉ
 - Trait dominant : ${host.trait}
 - Voix : ${host.gender === 'female' ? 'féminine' : host.gender === 'male' ? 'masculine' : 'androgyne'}
 
@@ -137,7 +154,7 @@ ${pulseDirective.trim()}
 ` : ''}
 # CE QUE TU SAIS / PENSES (extraits pertinents de ta KB)
 ${kbContext}
-${newsSection}${structureSection}
+${newsSection}${actualiteSection}${structureSection}
 # CONTEXTE DU PODCAST
 - ${otherHostsLine}
 - ${topic ? `Thème en cours : ${topic}` : 'Thème libre — laisse l\'auditeur choisir où on va.'}${dateDuJour ? `
@@ -179,6 +196,9 @@ export function buildGuestSystemPrompt(opts: {
   }
   stationName:        string
   stationDescription?: string
+  /** 07/10/2026 — raison d'être (IHL) et consigne d'actualité du tour, cf. buildHostSystemPrompt. */
+  ligneEditoriale?:    string
+  consigneActualite?:  string
   language:           StationLanguage
   hostsRecap:         string   // ex: "Cyril, Marina, Diogène"
   newsBlock?:         string
@@ -194,7 +214,7 @@ export function buildGuestSystemPrompt(opts: {
     : ''
 
   return `${enteteLangueSysteme(language)}Tu es ${guest.displayName}, INVITÉ caricatural sur ${stationLine}.
-
+${sectionLigneEditoriale(opts.ligneEditoriale)}${sectionActualite(opts.consigneActualite)}
 # CE QUE TU ES
 ${guest.bio}
 

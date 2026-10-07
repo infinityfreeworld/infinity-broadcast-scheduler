@@ -32,7 +32,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
-import { stationSelonIHL } from '../lib/station-reglages'
+import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
 import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
@@ -54,10 +54,12 @@ import { fileEnVol } from '../lib/en-vol'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
 import {
-  resolveRhythmForStation, resolveBehaviorForPersona, hasPublishedPulse,
-  rhythmDirective, behaviorPulseDirective, guestSlotsForRate,
+  loadPulseFromEnv, rhythmDirective, behaviorPulseDirective, guestSlotsForRate,
   personaKeyForHost, personaKeyForGuest,
 } from '../lib/pulse'
+import {
+  rythmeEffectif, tenueEffective, ligneEditoriale, actualitesVoulues, toursActualite, consigneActualite,
+} from '../lib/fiche-station'
 import {
   unifiedGuestsForStation, resolvePersonaForStation, hasUnifiedPersonas,
   fetchRadioPersonas, exportRadioPersonasToEnv,
@@ -180,11 +182,18 @@ async function generateBroadcastBytes(opts: {
   // n'a été publié, `pulseActif` est faux et le prompt reste EXACTEMENT
   // celui d'avant : on ne change pas les émissions d'aujourd'hui en
   // injectant des valeurs par défaut.
-  const rhythm = resolveRhythmForStation(station.id)
-  const pulseActif = hasPublishedPulse()
+  // 07/10/2026 — le rythme se règle désormais DANS la fiche de la station (IHL, kind 30091) ;
+  // l'ancien Pulse n'est plus qu'un héritage en lecture seule (lib/fiche-station.ts).
+  const pulseSnap = loadPulseFromEnv()
+  const { rhythm, origine: origineRythme, actif: pulseActif } = rythmeEffectif(station, pulseSnap)
   if (pulseActif) {
-    console.log(`    ⚙️  Pulse : ${rhythm.globalMood} · densité ${rhythm.dialogueDensity} · segment ~${rhythm.averageSegmentSec}s · invités ${rhythm.interventionRate}`)
+    console.log(`    ⚙️  Rythme (${origineRythme}) : ${rhythm.globalMood} · densité ${rhythm.dialogueDensity} · segment ~${rhythm.averageSegmentSec}s · invités ${rhythm.interventionRate}`)
   }
+  // Part d'actualité (fiche IHL) : quels tours partent de l'actu, lesquels des thèmes propres.
+  const partActu = station.actualite?.part
+  const toursActu = toursActualite(partActu, numTurns)
+  const editoriale = ligneEditoriale(station)
+  if (partActu !== undefined) console.log(`    📰 actualité ${partActu} % : ${toursActu.size}/${numTurns} tour(s) partent de l'actu`)
 
   // `interventionRate` décide de la PRÉSENCE de l'invité :
   //   rare → environ 1 jour sur 3 · normal et frenetic → présent
@@ -302,17 +311,23 @@ async function generateBroadcastBytes(opts: {
       ? personaKeyForGuest(guest!.id)
       : personaKeyForHost(station.id, host.id)
     const pulseDirective = pulseActif
-      ? `${rhythmDirective(rhythm)}\n${behaviorPulseDirective(resolveBehaviorForPersona(pulseKey))}`
+      ? `${rhythmDirective(rhythm)}\n${behaviorPulseDirective(tenueEffective(pulseKey, station, pulseSnap))}`
       : undefined
 
+    // Sans réglage d'actualité : tous les tours voient l'actu, comme avant.
+    const tourActu = toursActu.has(i)
+    const newsCeTour = tourActu ? news : []
+    const consigneActu = consigneActualite(partActu, tourActu, news.length > 0)
     const systemPrompt = isGuestTurn
       ? buildGuestSystemPrompt({
           guest:              guest!,
           stationName:        station.name,
           stationDescription: station.description,
+          ligneEditoriale:    editoriale,
+          consigneActualite:  consigneActu,
           language,
           hostsRecap:         station.hosts.map(h => h.name).join(', '),
-          newsBlock:          formatNewsForPrompt(news),
+          newsBlock:          formatNewsForPrompt(newsCeTour),
           behaviorDirective:  guestBehaviorDirective(guest!.behavior),
           pulseDirective,
         })
@@ -321,7 +336,9 @@ async function generateBroadcastBytes(opts: {
           kb, selectedEntries, topic,
           stationName:        station.name,
           stationDescription: station.description,
-          newsBlock:          formatNewsForPrompt(news),
+          ligneEditoriale:    editoriale,
+          consigneActualite:  consigneActu,
+          newsBlock:          formatNewsForPrompt(newsCeTour),
           language,
           otherHosts,
           currentTurn:        i + 1,
@@ -871,12 +888,14 @@ async function main() {
   // ~150ms pacing).
   const numTurns = Number.parseInt(process.env.NUM_TURNS ?? '22', 10)
 
+  // La FICHE posée dans l'IHL par un administrateur (kind 30091 : nom, raison d'être, langue,
+  // animateurs, sources, rythme, actualité, musiques…) passe devant la seed. Sans relais ni admin
+  // reconnu : la seed, et on le dit. Une station hors seed n'existe que par sa fiche d'admin
+  // complète (lib/station-reglages.ts).
   const seed = SEED_STATIONS.find(s => s.id === stationId)
-  if (!seed) throw new Error(`Station inconnue : ${stationId}`)
-  if (seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
-  // Les réglages posés dans l'IHL (musiques, jingles, pauses — kind 30091) passent devant la
-  // seed. Sans relais ni admin reconnu : la seed, et on le dit (lib/station-reglages.ts).
-  const station = await stationSelonIHL(seed)
+  if (seed && seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
+  const station = seed ? await stationSelonIHL(seed) : await stationAjouteeSelonIHL(stationId, SEED_STATIONS)
+  if (!station) throw new Error(`Station inconnue : ${stationId} (ni dans la seed, ni fiche IHL d'administrateur complète)`)
 
   // Aucune voix commercialisable dans cette langue ⇒ on RENONCE, avant
   // d'avoir dépensé un seul jeton. Publier quand même reviendrait à
@@ -907,7 +926,7 @@ async function main() {
     if (deja === null) console.warn('  ⚠ relais illisibles : impossible de vérifier un doublon — on produit.')
   }
 
-  await assurerConfigNostr(SEED_STATIONS.map(s => s.id))
+  await assurerConfigNostr([...new Set([...SEED_STATIONS.map(s => s.id), station.id])])
 
   console.log(`\n🎙  Génération broadcast : ${station.name} pour ${targetDate}`)
   console.log(`    ${numTurns} tours · ${station.hosts.length} animateur(s)`)
@@ -1029,7 +1048,7 @@ async function main() {
 
   // 2. Fetch news
   console.log('\n📰 Fetch actu…')
-  const news = await fetchNewsForStation(station, 8)
+  const news = actualitesVoulues(station) ? await fetchNewsForStation(station, 8) : []
   console.log(`    ${news.length} item(s) récupérés`)
 
   // 3. Génération

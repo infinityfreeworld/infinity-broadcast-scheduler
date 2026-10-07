@@ -7,6 +7,8 @@
  *   publiés ici soient correctement parsés là-bas.
  */
 
+import type { InterventionRate, GlobalMood, Verbosity } from './pulse'
+
 export type StationKind =
   | 'wtf' | 'freeworld' | 'bigballs' | 'mindctrl'
   | 'hydrogene' | 'g1' | 'deglingos' | 'diginomad' | 'tech'
@@ -66,6 +68,42 @@ export interface RadioStation {
   pauseDureeS?: number
   /** Phase H.3 — IDs des guests (kind:30098) invitables par cette station. */
   guestIds?:    string[]
+  /** 07/10/2026 — rythme PROPRE à la station (IHL, kind 30091), remplace le Pulse 30101/30102. */
+  rythme?:      RythmeStation
+  /** 07/10/2026 — part de l'actualité dans l'émission (IHL, kind 30091). */
+  actualite?:   ActualiteStation
+  /** 07/10/2026 — appels d'auditeurs (IHL, kind 30091). Lu, PAS encore fabriqué. */
+  appels?:      AppelsStation
+}
+
+/**
+ * 07/10/2026 — Contrat avec l'app (`src/modules/radio/types.ts`, branche
+ * `feat/radio-stations-reglages-ihl`) : mêmes noms, bornes et sens que le Pulse.
+ */
+export interface RythmeStation {
+  /** 0-100 */
+  dialogueDensity:         number
+  interventionRate:        InterventionRate
+  /** 30-180 secondes */
+  averageSegmentSec:       number
+  globalMood:              GlobalMood
+  verbosity:               Verbosity
+  /** 0-100 */
+  interruptionTendency:    number
+  /** 0-100 */
+  contradictionPropensity: number
+}
+
+/** 0-100 — part du temps de parole consacrée à l'actualité récupérée. */
+export interface ActualiteStation {
+  part: number
+}
+
+/** `nombre` (1-5) appels d'auditeurs tous les `tousLesNJours` (1-30) jours. */
+export interface AppelsStation {
+  actifs:        boolean
+  nombre:        number
+  tousLesNJours: number
 }
 
 export interface HostKBEntry {
