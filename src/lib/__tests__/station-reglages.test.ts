@@ -120,13 +120,13 @@ test('stations hors seed : seules les fiches d’admin COMPLÈTES sont fabriqué
     ev(admin, 'sans-hote', RECENT, JSON.stringify({ ...complete, frequency: 142.1, hosts: [] })),
     ev(admin, 'en-japonais', RECENT, JSON.stringify({ ...complete, frequency: 143.1, language: 'ja' })),
     ev(admin, 'sur-pirate', RECENT, JSON.stringify({ ...complete, frequency: pirate.frequency + 0.01 })),
-    ev(admin, 'bigballs-radio', RECENT, JSON.stringify({ deleted: true })),
+    ev(admin, 'station-effacee', RECENT, JSON.stringify({ deleted: true })),
     ev(admin, 'pirate-radio', RECENT, JSON.stringify(complete)),   // seed : pas une station ajoutée
   ]
   const { stations, ecartees } = stationsAjouteesIHL(events, new Set([admin]), SEED_STATIONS)
   assert.deepEqual(stations.map(s => s.id), ['radio-neuve'])
   assert.equal(stations[0].name, 'Radio Neuve'); assert.equal(stations[0].description, 'Ligne')
-  assert.deepEqual(ecartees.map(e => e.id).sort(), ['bigballs-radio', 'en-japonais', 'sans-hote', 'sur-pirate'])
+  assert.deepEqual(ecartees.map(e => e.id).sort(), ['en-japonais', 'sans-hote', 'station-effacee', 'sur-pirate'])
   assert.ok(!ecartees.some(e => e.id === 'radio-tiers'), 'la fiche d’un tiers n’est même pas examinée')
   assert.equal(stationAjoutee(ev(admin, 'x1', RECENT, JSON.stringify({ ...complete, name: '' })), SEED_STATIONS).motif, 'sans nom')
   assert.equal(stationAjoutee(ev(admin, 'x2', RECENT, JSON.stringify({ ...complete, language: undefined })), SEED_STATIONS).motif, 'sans langue')
