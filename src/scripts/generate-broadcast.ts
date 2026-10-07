@@ -85,6 +85,10 @@ import { planCourrier, tourDeCourrier } from '../lib/courrier/plan-courrier'
 import { consigneCourrier, promptAuditeurInvente, consigneAuditeurInvente } from '../lib/courrier/consignes-courrier'
 import { transcripteurCourrier } from '../lib/courrier/transcription'
 import { contientInsulte } from '../lib/courrier/filtre-insultes'
+import {
+  plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage,
+  type MarquesCourrier,
+} from '../lib/courrier/reprise-courrier'
 import { preparerReprise, deciderOuArreter } from '../lib/reprise-branchement'
 import { ArretVolontaire } from '../lib/regle-publication'
 import type { RepriseEmission } from '../lib/reprise-emission'
@@ -138,7 +142,7 @@ interface GenResult {
 }
 
 /** Ce qu'un tour doit dire, et par quelle voix (gardé dans le chantier d'une reprise). */
-type PlanVoix = { texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean }
+type PlanVoix = { texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean } & MarquesCourrier
 
 async function generateBroadcastBytes(opts: {
   station:  RadioStation
@@ -157,10 +161,11 @@ async function generateBroadcastBytes(opts: {
   const turns: BroadcastTurn[] = []
   const wavEntries: ConcatEntry[] = []
   /** Ce qu'il faudra faire dire, et par quelle voix — rempli en phase 1. */
-  const plansVoix: Array<{ texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean; audio?: import('../lib/audio').DecodedWav }> = []
-  /** Pour chaque tour produit : l'indice de boucle d'où il vient (un vocal ou un auditeur s'insère APRÈS son annonce). */
-  const indexBoucle: number[] = []
-  const refsCourrier: string[] = []
+  // Chaque plan porte aussi ses marques de courrier (lib/courrier/reprise-courrier.ts) : indice de
+  // boucle, message passé, vocal — gardées dans le chantier, sauf le son, pour qu'une reprise les retrouve.
+  const plansVoix: PlanVoix[] = []
+  /** Tours à sauter (reprise : vocal d'auditeur introuvable, et ses tours liés). */
+  let sautes: ReadonlySet<number> = new Set<number>()
   // Hésitations (lib/disfluences.ts, 07/10/2026) : demandées au modèle, puis rattrapées s'il en a
   // écrit trop peu. `permisHesitation[k]` dit si le k-ième tour PRODUIT peut en recevoir une.
   const tauxHesitations = habillageActif('HABILLAGE_ECRITURE') ? tauxDisfluences() : 0
@@ -268,8 +273,13 @@ async function generateBroadcastBytes(opts: {
   const repris = opts.reprise?.textesRepris() ?? null
   if (repris) {
     turns.push(...repris.turns)
-    plansVoix.push(...repris.plans)
-    voixAttendues = plansVoix.filter(p => p.voixPersonnage).length
+    // Le son des vocaux d'auditeurs n'est pas dans le chantier : il est recollé depuis le courrier
+    // relevé de nouveau ; introuvable, le vocal est sauté avec ses tours liés (jamais silence ni Piper).
+    const rc = restaurerCourrier(repris.plans, opts.courrier?.vocaux)
+    plansVoix.push(...rc.plans)
+    sautes = rc.sautes
+    if (sautes.size > 0) console.log(`    ✉️  reprise : vocal d'auditeur introuvable — ${sautes.size} tour(s) sauté(s) (annonce, vocal, réaction)`)
+    voixAttendues = plansVoix.filter((p, k) => p.voixPersonnage && !sautes.has(k)).length
     console.log(`    🔁 reprise : texte du passage précédent (${turns.length} tours), seuls les tours manquants seront synthétisés`)
   }
 
@@ -454,19 +464,23 @@ async function generateBroadcastBytes(opts: {
       tEnd:     0,
     }
     turns.push(turn)
-    indexBoucle.push(i)
     // La VOIX reçoit le domaine sous sa forme parlée (« Infiniti tiret Friwourld point
     // com ») ; le nettoyage (astérisques, didascalies…) est fait à l'entrée de chaque moteur.
-    plansVoix.push({ texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
+    plansVoix.push({
+      texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i),
+      boucle: i,
+      ...(place?.type === 'texte' && tourC && courrier ? { refCourrier: courrier.textes[place.k].ref } : {}),
+      ...((place?.type === 'vocal-intro' || place?.type === 'vocal-reaction') && tourC && courrier ? { lieAuVocal: courrier.vocaux[place.k].ref } : {}),
+    })
     // Ni l'ouverture, ni la conclusion, ni le lancement d'un morceau (son titre), ni le retour de
-    // pause, ni le courrier lu mot pour mot, ni une réaction courte : on n'y ajoute pas d'hésitation.
-    permisHesitation.push(['courant', 'pre-invite', 'relance-invite', 'post-invite', 'invite-reponse-1', 'invite-reponse-2'].includes(genreTour.type))
+    // pause, ni le courrier lu mot pour mot, ni un tour d'appel, ni une réaction courte : on n'y
+    // ajoute pas d'hésitation. Un permis par tour PRODUIT (les tours d'auditeurs inclus, à faux).
+    permisHesitation.push(hesitationPermise(genreTour.type, tourC))
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
 
     // ── Courrier des auditeurs : ce qui passe APRÈS ce tour (vocal, auditeur joué) ──
     if (place && courrier && tourC) {
-      if (place.type === 'texte') refsCourrier.push(courrier.textes[place.k].ref)
       if (place.type === 'vocal-intro') {
         const v = courrier.vocaux[place.k]
         turns.push({
@@ -476,9 +490,8 @@ async function generateBroadcastBytes(opts: {
           text: v.transcription ?? (language === 'fr' ? '(message vocal)' : '(voice message)'),
           tStart: 0, tEnd: 0,
         })
-        indexBoucle.push(i)
-        plansVoix.push({ texte: '', voixPiper: voiceId, voixPersonnage: null, court: false, audio: v.wav })
-        refsCourrier.push(v.ref)
+        plansVoix.push({ texte: '', voixPiper: voiceId, voixPersonnage: null, court: false, audio: v.wav, boucle: i, refCourrier: v.ref, vocalRef: v.ref })
+        permisHesitation.push(false)
         inseres.add(`vocal:${place.k}`)
         console.log(`  [${i + 1}+] 📞 message vocal d'auditeur (${v.wav.samples.length / v.wav.sampleRate | 0} s)`)
       }
@@ -509,8 +522,8 @@ async function generateBroadcastBytes(opts: {
           const voixA = a.voixInventee && chatterboxBranche() ? a.voixInventee : null
           if (voixA) voixAttendues++
           turns.push({ id: `bcast-${i}a-${Date.now().toString(36).slice(-4)}`, hostId: `auditeur-joue-${place.k}`, hostName: a.prenom, color: '#9aa4b2', avatar: '📞', text: dit, tStart: 0, tEnd: 0 })
-          indexBoucle.push(i)
-          plansVoix.push({ texte: prononcerDomaine(dit, language), voixPiper: voixPourLangue(language, a.genre, `auditeur-${a.prenom}`) ?? voiceId, voixPersonnage: voixA, court: false })
+          plansVoix.push({ texte: prononcerDomaine(dit, language), voixPiper: voixPourLangue(language, a.genre, `auditeur-${a.prenom}`) ?? voiceId, voixPersonnage: voixA, court: false, boucle: i })
+          permisHesitation.push(false)
           inseres.add(`appel:${place.k}`)
           console.log(`${dit.slice(0, 60)}${dit.length > 60 ? '…' : ''}`)
         }
@@ -522,9 +535,11 @@ async function generateBroadcastBytes(opts: {
 
   // ── Rattrapage des hésitations (lib/disfluences.ts) ─────────────────
   // Déterministe par (station, date). Le transcript ET la voix reçoivent le texte rattrapé.
-  if (tauxHesitations > 0) {
+  // À la reprise, le texte repris est déjà rattrapé : on n'y touche plus.
+  if (tauxHesitations > 0 && !repris) {
     const r = rattraperDisfluences(
-      turns.map((t, k) => ({ texte: t.text, permis: permisHesitation[k] ?? false })),
+      // Jamais un tour d'auditeur (vocal, appel joué), jamais un permis désaligné (reprise-courrier.ts).
+      permisPourRattrapage(turns, permisHesitation),
       language, `${station.id}:${opts.date}:disfluences`, tauxHesitations,
     )
     for (const k of r.ajouts) {
@@ -551,8 +566,9 @@ async function generateBroadcastBytes(opts: {
   //
   // En groupant, la file reste alimentée le temps du lot et une seule
   // location sert toute la station.
-  const aSynthetiser = plansVoix.filter(p => p.voixPersonnage).length
-  opts.reprise?.enregistrerTextes(turns, plansVoix)
+  const aSynthetiser = plansVoix.filter((p, k) => p.voixPersonnage && !sautes.has(k)).length
+  // Le chantier garde le texte et les marques du courrier, JAMAIS le son d'un auditeur (rechargé à la reprise).
+  opts.reprise?.enregistrerTextes(turns, plansPourChantier(plansVoix))
   // 🚀 k tours EN VOL chez data-space (cf. lib/en-vol.ts) : un seul à la fois laissait leur station
   // chômer ~80 % du temps entre deux « 429 not_ready ». L'ordre, le décodage et les replis restent
   // ceux de la boucle ci-dessous, tour par tour.
@@ -560,7 +576,7 @@ async function generateBroadcastBytes(opts: {
   let fenetreRelancee = false
   const file = fileEnVol(
     plansVoix.length, enVolMax,
-    j => !!plansVoix[j].voixPersonnage && !opts.reprise?.dejaFait(j),
+    j => !!plansVoix[j].voixPersonnage && !opts.reprise?.dejaFait(j) && !sautes.has(j),
     j => synthesizeWithChatterbox({
       voice:    plansVoix[j].voixPersonnage as string,
       text:     plansVoix[j].texte,
@@ -581,10 +597,12 @@ async function generateBroadcastBytes(opts: {
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
     file.remplir(i)
     const obtenuesAvant = voixObtenues
-    // Le message vocal d'un auditeur : SA voix, telle quelle — ni synthèse, ni contrôle de voix.
-    if (plan.audio) {
-      process.stdout.write('vocal d\'auditeur\n')
-      wavEntries.push({ wav: plan.audio })
+    // Le message vocal d'un auditeur : SA voix, telle quelle — ni synthèse, ni contrôle de voix,
+    // ni oreille, ni report. Un vocal perdu à la reprise est sauté avec ses tours liés.
+    const sortCourrier = sortDuTourCourrier(plan, i, sautes)
+    if (sortCourrier) {
+      if ('monter' in sortCourrier) wavEntries.push({ wav: sortCourrier.monter })
+      process.stdout.write('sauter' in sortCourrier ? 'sauté (vocal d\'auditeur introuvable)\n' : 'vocal d\'auditeur\n')
       continue
     }
     // Tour déjà dit par sa voix de personnage à un passage précédent : repris tel quel.
@@ -696,6 +714,15 @@ async function generateBroadcastBytes(opts: {
   if (opts.reprise) console.log(opts.reprise.ligneBilan())
   // Des tours manquent et la nuit peut les reprendre : l'émission est REPORTÉE (ni montage, ni Piper).
   opts.reprise?.verifierManques()
+  // Les tours sautés (vocal perdu à la reprise) sortent de l'émission : tours et plans restent
+  // alignés sur les entrées montées.
+  if (sautes.size > 0) {
+    const t = sansSautes(turns, sautes), p = sansSautes(plansVoix, sautes)
+    turns.length = 0; turns.push(...t)
+    plansVoix.length = 0; plansVoix.push(...p)
+  }
+  const indexBoucle = plansVoix.map((p, k) => p.boucle ?? k)
+  const refsCourrier = plansVoix.flatMap(p => (p.refCourrier ? [p.refCourrier] : []))
 
   // ── Habillage « humain » (lib/humain.ts) ─────────────────────────────────────────────
   // Niveaux égalisés entre les voix ; silences variables (plus long après une question, plus
@@ -712,7 +739,7 @@ async function generateBroadcastBytes(opts: {
 
   // Montage : tours + pauses musicales + jingles, puis encodage.
   // Un vocal ou un auditeur inséré décale les entrées : les pauses restent alors APRÈS le bon tour.
-  const alignement = turns.length !== new Set(indexBoucle).size ? { indexBoucle, nbTours: numTurns } : undefined
+  const alignement = turns.length !== new Set(indexBoucle).size || sautes.size > 0 ? { indexBoucle, nbTours: numTurns } : undefined
   const { entries, segmentsPrevus, finVoix } = await monterAvecMusique(station, wavEntries, opts.date, alignement)
   const merged = concatWavs(entries, habillageActif('HABILLAGE_FOND') ? { bruitDb: -58, rand: prng(`${station.id}:${opts.date}:fond`) } : {})
   for (let i = 0; i < turns.length; i++) {
