@@ -20,7 +20,7 @@ import {
 } from './sujets-carte'
 import {
   KIND_PROJET_ABONDANCE, TAG_VALIDATION_ABONDANCE, projetsAbondance, derniereEmission, referenceNouveaute,
-  antenneAbondance, type EmissionLue,
+  antenneAbondance, type EmissionLue, type ProjetAbondance,
 } from './sujets-abondance'
 import { KIND_OBF_ALERTE, BILAN_HEURES, alertesLisibles, alerteDeConfiance, bilanAlertes, bilanEnPhrase, actualitesStationObf, ligneEditorialeObf } from './sujets-obf'
 import { actualitesStationBiogame, ligneEditorialeBiogame } from './sujets-biogame'
@@ -53,17 +53,45 @@ function auteurEmissions(): string | null {
 
 // ── Abondance ────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Les projets d'Abondance qu'on peut dire (validés dans cette version, publics, ni retirés ni masqués,
+ * auteur non banni — `projetsAbondance`). Partagé par la station Abondance et la télévision.
+ */
+async function lireProjetsValides(
+  pool: SimplePool, relays: string[], arbitres: ReadonlySet<string>, maintenant: number,
+): Promise<{ lus: number; liste: ProjetAbondance[] }> {
+  const [projets, decisions, supp, moderation] = await Promise.all([
+    lire(pool, relays, { kinds: [KIND_PROJET_ABONDANCE], limit: 1000 }),
+    lire(pool, relays, { kinds: [KIND_DECISION_BIOGAME], authors: [...arbitres], '#t': [TAG_VALIDATION_ABONDANCE], limit: 2000 }),
+    lire(pool, relays, { kinds: [KIND_SUPPRESSION], '#k': [String(KIND_PROJET_ABONDANCE)], limit: 500 }),
+    lire(pool, relays, { kinds: [KIND_MODERATION_IHL], authors: [...arbitres], '#d': ['ihl-account-bans', 'ihl-moderation'], limit: 50 }),
+  ])
+  const moder = confianceDepuisModeration(moderation, arbitres, maintenant)
+  return { lus: projets.length, liste: projetsAbondance([...projets, ...decisions, ...supp], { ...moder, arbitres }, maintenant) }
+}
+
+/** Pour la télévision (`infinity-sujets.ts`) : les projets d'Abondance qu'on peut dire. Ne lève pas. */
+export async function fetchProjetsAbondance(maintenant = Date.now()): Promise<{ liste: ProjetAbondance[]; journal: string }> {
+  const relays = getRelays()
+  const pool = new SimplePool()
+  try {
+    const { lus, liste } = await lireProjetsValides(pool, relays, arbitresCarte(), maintenant)
+    return { liste, journal: `${lus} projet(s) Abondance lus, ${liste.length} validé(s) et ouvert(s)` }
+  } catch (err) {
+    return { liste: [], journal: `relais injoignables (${err instanceof Error ? err.message : String(err)})` }
+  } finally {
+    try { pool.close(relays) } catch { /* rien à fermer */ }
+  }
+}
+
 async function pourAbondance(station: RadioStation, date: string, maintenant: number): Promise<CartePourStation> {
   const relays = getRelays()
   const pool = new SimplePool()
   const arbitres = arbitresCarte()
   try {
     const auteur = auteurEmissions()
-    const [projets, decisions, supp, moderation, emissions, recentes] = await Promise.all([
-      lire(pool, relays, { kinds: [KIND_PROJET_ABONDANCE], limit: 1000 }),
-      lire(pool, relays, { kinds: [KIND_DECISION_BIOGAME], authors: [...arbitres], '#t': [TAG_VALIDATION_ABONDANCE], limit: 2000 }),
-      lire(pool, relays, { kinds: [KIND_SUPPRESSION], '#k': [String(KIND_PROJET_ABONDANCE)], limit: 500 }),
-      lire(pool, relays, { kinds: [KIND_MODERATION_IHL], authors: [...arbitres], '#d': ['ihl-account-bans', 'ihl-moderation'], limit: 50 }),
+    const [{ lus, liste }, emissions, recentes] = await Promise.all([
+      lireProjetsValides(pool, relays, arbitres, maintenant),
       auteur
         ? pool.querySync(relays, { kinds: [RADIO_BROADCAST_KIND], authors: [auteur], '#d': dTagsEmissionsPrecedentes(station.id, date) }, { maxWait: DELAI_MS })
           .then(l => l as EmissionLue[]).catch(() => null)
@@ -72,15 +100,13 @@ async function pourAbondance(station: RadioStation, date: string, maintenant: nu
       // des trois derniers jours, c'est qu'ils sont muets — pas que la station n'a jamais parlé.
       auteur ? lire(pool, relays, { kinds: [RADIO_BROADCAST_KIND], authors: [auteur], since: Math.floor(maintenant / 1000) - 3 * 86_400, limit: 5 }) : Promise.resolve([]),
     ])
-    const moder = confianceDepuisModeration(moderation, arbitres, maintenant)
-    const liste = projetsAbondance([...projets, ...decisions, ...supp], { ...moder, arbitres }, maintenant)
     // « Nouveau » : apparu depuis la dernière émission PUBLIÉE de la station (cf. sujets-abondance.ts).
     const lecture = emissions === null || recentes.length === 0
       ? { ok: false, derniere: null }
       : { ok: true, derniere: derniereEmission(emissions, station.id, date, auteur!) }
     const reference = referenceNouveaute(lecture, maintenant)
     const a = antenneAbondance(liste, reference, date)
-    const journal = `${projets.length} projet(s) lus, ${liste.length} validé(s) et ouvert(s) · `
+    const journal = `${lus} projet(s) lus, ${liste.length} validé(s) et ouvert(s) · `
       + `référence « nouveau » : ${new Date(reference).toISOString()} (${lecture.ok ? (lecture.derniere ? 'dernière émission' : 'première émission') : 'relais illisibles, repli'}) · `
       + `${a.nouveaux.length} nouveau(x), ${a.rotation.length} en rotation${a.campagne ? `, campagne « ${a.campagne.titre} »` : ''}`
       + `${liste.length ? '' : ' → raison d\'être'}`

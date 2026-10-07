@@ -40,6 +40,44 @@ async function lire(pool: SimplePool, relays: string[], filtre: Filter, maxWait 
   try { return (await pool.querySync(relays, filtre, { maxWait })) as NostrEvent[] } catch { return [] }
 }
 
+/**
+ * Sonde l'ANCIENNETÉ des auteurs (LECTURE SEULE) : un auteur est « établi » si les relais rendent un
+ * événement de lui antérieur à son seuil (`seuilsAnciennete`). Exportée pour la télévision
+ * (`infinity-sujets.ts`), qui juge ses propositions DAV avec la même règle.
+ *   1. sonde GROUPÉE : un événement antérieur au plus ancien des seuils prouve l'ancienneté de tous ;
+ *   2. sonde INDIVIDUELLE, chacun à SON seuil, les publications les plus récentes d'abord — bornée.
+ * Une sonde muette vaut « non établi » (prudence).
+ */
+export async function sonderAnciennete(
+  pool: SimplePool, relays: string[], seuils: ReadonlyMap<string, number>,
+  publications: readonly { auteur: string; publieLe: number }[],
+): Promise<Set<string>> {
+  const etablis = new Set<string>()
+  const auteurs = [...seuils.keys()]
+  if (auteurs.length) {
+    const plusAncien = Math.min(...seuils.values())
+    const paquets: string[][] = []
+    for (let i = 0; i < auteurs.length; i += PAQUET_AUTEURS) paquets.push(auteurs.slice(i, i + PAQUET_AUTEURS))
+    for (let i = 0; i < paquets.length; i += SONDES_EN_PARALLELE) {
+      const reponses = await Promise.all(paquets.slice(i, i + SONDES_EN_PARALLELE)
+        .map(paquet => lire(pool, relays, { authors: paquet, until: plusAncien, limit: 500 }, DELAI_SONDE_MS)))
+      for (const pk of etablisDepuis(reponses.flat(), seuils)) etablis.add(pk)
+    }
+  }
+  const restants = [...publications]
+    .filter(s => seuils.has(s.auteur) && !etablis.has(s.auteur))
+    .sort((a, b) => b.publieLe - a.publieLe)
+    .map(s => s.auteur)
+    .filter((pk, i, l) => l.indexOf(pk) === i)
+    .slice(0, SONDES_INDIVIDUELLES_MAX)
+  for (let i = 0; i < restants.length; i += SONDES_EN_PARALLELE) {
+    const lot = restants.slice(i, i + SONDES_EN_PARALLELE)
+    const reponses = await Promise.all(lot.map(pk => lire(pool, relays, { authors: [pk], until: seuils.get(pk)!, limit: 1 }, DELAI_SONDE_MS)))
+    for (const pk of etablisDepuis(reponses.flat(), seuils)) etablis.add(pk)
+  }
+  return etablis
+}
+
 export interface BilanCarte {
   sujets: SujetCarte[]
   /** Pour le journal : ce qui a été lu, écarté, sondé. */
@@ -73,31 +111,7 @@ export async function fetchSujetsCarte(
       .filter(s => !opts.familles || opts.familles.includes(s.famille))
     const seuils = seuilsAnciennete(lisibles, { arbitres, bannis: moder.bannis })
 
-    // 1. Sonde GROUPÉE : un événement antérieur au plus ancien des seuils prouve l'ancienneté de tous.
-    const etablis = new Set<string>()
-    const auteurs = [...seuils.keys()]
-    if (auteurs.length) {
-      const plusAncien = Math.min(...seuils.values())
-      const paquets: string[][] = []
-      for (let i = 0; i < auteurs.length; i += PAQUET_AUTEURS) paquets.push(auteurs.slice(i, i + PAQUET_AUTEURS))
-      for (let i = 0; i < paquets.length; i += SONDES_EN_PARALLELE) {
-        const reponses = await Promise.all(paquets.slice(i, i + SONDES_EN_PARALLELE)
-          .map(paquet => lire(pool, relays, { authors: paquet, until: plusAncien, limit: 500 }, DELAI_SONDE_MS)))
-        for (const pk of etablisDepuis(reponses.flat(), seuils)) etablis.add(pk)
-      }
-    }
-    // 2. Sonde INDIVIDUELLE, chacun à SON seuil, les publications les plus récentes d'abord — bornée.
-    const restants = lisibles
-      .filter(s => seuils.has(s.auteur) && !etablis.has(s.auteur))
-      .sort((a, b) => b.publieLe - a.publieLe)
-      .map(s => s.auteur)
-      .filter((pk, i, l) => l.indexOf(pk) === i)
-      .slice(0, SONDES_INDIVIDUELLES_MAX)
-    for (let i = 0; i < restants.length; i += SONDES_EN_PARALLELE) {
-      const lot = restants.slice(i, i + SONDES_EN_PARALLELE)
-      const reponses = await Promise.all(lot.map(pk => lire(pool, relays, { authors: [pk], until: seuils.get(pk)!, limit: 1 }, DELAI_SONDE_MS)))
-      for (const pk of etablisDepuis(reponses.flat(), seuils)) etablis.add(pk)
-    }
+    const etablis = await sonderAnciennete(pool, relays, seuils, lisibles)
 
     const conf: ConfianceCarte = { ...moder, etablis, arbitres }
     const sujets = retenirSujetsCarte(tous, conf, maintenant, { combien: opts.combien, familles: opts.familles })
