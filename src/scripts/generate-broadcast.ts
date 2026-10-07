@@ -438,16 +438,6 @@ async function generateBroadcastBytes(opts: {
 
   if (turns.length === 0) throw new Error('Aucun tour généré')
 
-  // ── Liens d'action pour l'écran des liens (07/10/2026, lib/liens-action.ts) ─────────────
-  // LISTE FERMÉE (liste blanche) ; seulement les campagnes que les répliques ont RÉELLEMENT
-  // nommées. Ajoutés au fil APRÈS la dernière réplique écrite : le modèle ne les a jamais vus,
-  // la voix ne les lit jamais. L'écran des liens les retrouve dans l'actualité (`link`).
-  const liensAction = liensActionCites(turns.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
-  if (liensAction.length) {
-    news.push(...liensAction)
-    console.log(`    🔗 Liens d'action pour l'écran : ${liensAction.map(l => l.sourceTitle).join(' · ')}`)
-  }
-
   // ── PHASE 2 : TOUTE la synthèse, d'un seul trait ───────────────────
   //
   // 🔴 CETTE SÉPARATION EST UNE CONTRAINTE D'HÉBERGEUR, PAS UN GOÛT.
@@ -606,6 +596,16 @@ async function generateBroadcastBytes(opts: {
   // dictionnaire (frenchify-english.ts), à écouter puis à ajouter — app ET générateur.
   const releveAnglais = ligneMotsAnglaisNonCouverts(plansVoix.map(p => p.texte), language)
   if (releveAnglais) console.log(`\n🔤 ${releveAnglais}`)
+  // ── Liens d'action pour l'écran des liens (07/10/2026, lib/liens-action.ts) ─────────────
+  // LISTE FERMÉE (liste blanche) ; seulement les campagnes que les répliques ont RÉELLEMENT
+  // nommées, dans leur texte DÉFINITIF. Ajoutés au fil APRÈS la dernière réplique écrite : le modèle ne les a jamais vus,
+  // la voix ne les lit jamais. L'écran des liens les retrouve dans l'actualité (`link`).
+  const liensAction = liensActionCites(turns.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
+  if (liensAction.length) {
+    news.push(...liensAction)
+    console.log(`    🔗 Liens d'action pour l'écran : ${liensAction.map(l => l.sourceTitle).join(' · ')}`)
+  }
+
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,
