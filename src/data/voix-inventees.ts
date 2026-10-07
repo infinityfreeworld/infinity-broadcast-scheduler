@@ -68,10 +68,13 @@ export const VOIX_INVENTEES: Readonly<Record<string, string>> = Object.freeze({
 /**
  * Animateurs SANS voix inventée, en attendant le dépôt de leur référence au catalogue (on n'ajoute
  * une ligne à `VOIX_INVENTEES` qu'APRÈS ce dépôt, cf. en-tête). Ils parlent avec leur voix Piper
- * sous licence permise (`lib/voix.ts`). Le test exige que chaque animateur soit dans UNE des deux
- * listes : ni oubli, ni animateur fantôme.
+ * sous licence permise (`lib/voix.ts`) jusqu'au choix du fondateur à l'écoute. Le test exige que
+ * chaque animateur soit dans UNE des deux listes : ni oubli, ni animateur fantôme.
  */
 export const ANIMATEURS_SANS_VOIX_INVENTEE: ReadonlySet<string> = new Set([
+  // 16/09/2026 — Biogame remplace Big Balls Radio : Nora et Malik sont neufs.
+  'bigballs-radio:bg-nora',
+  'bigballs-radio:bg-malik',
   // Manifestactions (07/10/2026) — voix à concevoir et déposer (workflow deposer-voix).
   'manifestactions-radio:ma-ines',
   'manifestactions-radio:ma-bastien',

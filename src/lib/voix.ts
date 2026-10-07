@@ -48,6 +48,8 @@ const VOIX_FR_PAR_ANIMATEUR: Record<string, string> = {
   'wtf-diogene': 'fr_FR-gilles-low',
   'fw-aurelien': 'fr_FR-gilles-low',
   'fw-leila':    'fr_FR-siwis-medium',
+  'bg-nora':     'fr_FR-siwis-medium',
+  'bg-malik':    'fr_FR-gilles-low',
   'mc-anonyme':  'fr_FR-siwis-medium',
   'h2-henri':    'fr_FR-gilles-low',
   'h2-camille':  'fr_FR-siwis-medium',
