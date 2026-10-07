@@ -162,7 +162,8 @@ test('⭐ branchement : les liens d’action entrent dans le fil APRÈS la derni
   const boucle = src.search(/for \(let i = 0; i < (?:\(repris \? 0 : numTurns\)|numTurns); i\+\+\)/)
   const finBoucle = src.indexOf("if (turns.length === 0) throw new Error('Aucun tour généré')")
   const ajout = src.indexOf('news.push(...liensAction)')
-  const prompts = [...src.matchAll(/formatNewsForPrompt\(news\)/g)].map(m => m.index!)
+  // Depuis #82 (part d'actualité), le prompt reçoit les actus DU TOUR (`newsCeTour`).
+  const prompts = [...src.matchAll(/formatNewsForPrompt\((?:news|newsCeTour)\)/g)].map(m => m.index!)
   assert.ok(boucle > 0 && finBoucle > boucle && ajout > finBoucle, 'ajout après la boucle d’écriture')
   assert.ok(prompts.length > 0 && prompts.every(i => i > boucle && i < finBoucle), 'le prompt est construit DANS la boucle')
   assert.equal(src.split('liensActionCites(').length - 1, 1, 'un seul appel')
