@@ -302,6 +302,15 @@ Tout est déterministe par (station, date) et se coupe par variable (`off`) :
 - `HABILLAGE_ECRITURE` : ~1 tour sur 5 est une réaction courte (3-10 mots), un tour lit le
   courrier des auditeurs, l'animateur qui précède une pause LANCE le morceau, celui qui suit
   en REVIENT ; la date du jour est connue (jamais l'heure) ; consigne de style oral ;
+- `HABILLAGE_DISFLUENCES` (07/10/2026, `src/lib/disfluences.ts`) : les animateurs HÉSITENT
+  (« euh… », « bah », « enfin », « tu vois », faux départs, « c'est, c'est vrai »), avec les
+  hésitations naturelles de chaque langue (en : uh, um, I mean ; es : eh, pues, o sea ; ru : ну,
+  э-э, как бы ; zh : 嗯, 那个, 就是). La consigne vise un tour sur deux ou trois, deux au plus par
+  tour ; si le modèle en écrit trop peu, un rattrapage déterministe en ajoute (début de réponse,
+  après une virgule, petite répétition), jamais dans l'ouverture, la conclusion, le lancement d'un
+  morceau, le retour de pause, le courrier lu ni les réactions courtes. Valeur = part des tours
+  concernés : `0.4` par défaut, `0.5` ou `50` pour un sur deux, `0` (ou `off`) = ni consigne ni
+  rattrapage. Coupé aussi par `HABILLAGE_ECRITURE=off` ;
 - `HABILLAGE_NIVEAUX` : chaque voix rejoint le niveau médian (±6 dB, sans écrêter) ;
 - `HABILLAGE_SILENCES` : silence variable entre les tours (0,10-0,70 s, plus long après une
   question, plus court après une réaction brève) ;
