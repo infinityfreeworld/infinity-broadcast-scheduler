@@ -7,10 +7,15 @@
  *   publiés ici soient correctement parsés là-bas.
  */
 
+import type { InterventionRate, GlobalMood, Verbosity } from './pulse'
+
 export type StationKind =
   | 'wtf' | 'freeworld' | 'bigballs' | 'mindctrl'
   | 'hydrogene' | 'g1' | 'deglingos' | 'diginomad' | 'tech'
   | 'pirate' | 'oasis'
+  | 'manifestactions'   // 07/10/2026 — les Manifestactions de la carte, ou leur raison d'être
+  | 'abondance'         // 07/10/2026 — les projets d'Abondance, ou sa raison d'être
+  | 'obf'               // 07/10/2026 — le système d'alerte OBF, les crises, et comment le soutenir
   | 'user'
 
 export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh' | 'ru'
@@ -66,6 +71,42 @@ export interface RadioStation {
   pauseDureeS?: number
   /** Phase H.3 — IDs des guests (kind:30098) invitables par cette station. */
   guestIds?:    string[]
+  /** 07/10/2026 — rythme PROPRE à la station (IHL, kind 30091), remplace le Pulse 30101/30102. */
+  rythme?:      RythmeStation
+  /** 07/10/2026 — part de l'actualité dans l'émission (IHL, kind 30091). */
+  actualite?:   ActualiteStation
+  /** 07/10/2026 — appels d'auditeurs (IHL, kind 30091). Lu, PAS encore fabriqué. */
+  appels?:      AppelsStation
+}
+
+/**
+ * 07/10/2026 — Contrat avec l'app (`src/modules/radio/types.ts`, branche
+ * `feat/radio-stations-reglages-ihl`) : mêmes noms, bornes et sens que le Pulse.
+ */
+export interface RythmeStation {
+  /** 0-100 */
+  dialogueDensity:         number
+  interventionRate:        InterventionRate
+  /** 30-180 secondes */
+  averageSegmentSec:       number
+  globalMood:              GlobalMood
+  verbosity:               Verbosity
+  /** 0-100 */
+  interruptionTendency:    number
+  /** 0-100 */
+  contradictionPropensity: number
+}
+
+/** 0-100 — part du temps de parole consacrée à l'actualité récupérée. */
+export interface ActualiteStation {
+  part: number
+}
+
+/** `nombre` (1-5) appels d'auditeurs tous les `tousLesNJours` (1-30) jours. */
+export interface AppelsStation {
+  actifs:        boolean
+  nombre:        number
+  tousLesNJours: number
 }
 
 export interface HostKBEntry {
@@ -120,6 +161,12 @@ export interface RadioBroadcast {
   /** Pauses musicales et jingles (absent quand l'émission n'en a pas). */
   segments?:   BroadcastSegment[]
   newsRefs:    string[]
+  /**
+   * Les liens évoqués dans l'émission, chacun à l'instant où il est évoqué (07/10/2026,
+   * `lib/liens-emission.ts`). OPTIONNEL et RÉTROCOMPATIBLE : absent quand il n'y en a aucun,
+   * ignoré par les lecteurs qui ne le connaissent pas.
+   */
+  liens?:      import('./liens-emission').LienEmission[]
   model:       string
   /**
    * Titre court de l'émission (≤ 70 car., langue de la station) pour la liste « Émissions

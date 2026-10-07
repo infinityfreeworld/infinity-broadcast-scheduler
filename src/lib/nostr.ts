@@ -54,6 +54,8 @@ export function contenuEmission(finalBroadcast: RadioBroadcast): string {
     ...(finalBroadcast.segments && finalBroadcast.segments.length > 0
       ? { segments: finalBroadcast.segments } : {}),
     newsRefs:    finalBroadcast.newsRefs,
+    // Liens évoqués, calés dans le temps (07/10/2026) : seulement quand il y en a.
+    ...(finalBroadcast.liens && finalBroadcast.liens.length > 0 ? { liens: finalBroadcast.liens } : {}),
     model:       finalBroadcast.model,
     generatedAt: finalBroadcast.generatedAt,
     // « Émissions précédentes » : titre et résumé du thème, dans la langue de la station.

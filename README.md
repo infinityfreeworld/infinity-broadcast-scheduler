@@ -411,3 +411,12 @@ Tout est déterministe par (station, date) et se coupe par variable (`off`) :
 ## License
 
 AGPL-3.0 — code libre. Voir [LICENSE](./LICENSE) (à ajouter).
+
+## Fiche de station réglée dans l'IHL (07/10/2026)
+
+Le générateur applique la fiche ENTIÈRE d'une station publiée par un administrateur radio (kind 30091) : nom, slogan, raison d'être, langue, animateurs, invités, sources d'actus, rythme, part d'actualité, appels, musiques, jingles, pauses.
+
+| Variable | Défaut | Effet |
+|---|---|---|
+| `RADIO_FICHE_COMPLETE_DEPUIS` | `2026-10-07` | Une fiche signée AVANT cette date (UTC) ne garde que musiques, jingles et pauses : des fiches de juin 2026 portaient des erreurs de saisie (noms inversés, animateurs retirés) qui ne passaient pas à l'antenne. |
+| `RADIO_ADMIN_PUBKEYS` | liste intégrée | Administrateurs radio dont la fiche est reconnue (`*` = filtre levé). |

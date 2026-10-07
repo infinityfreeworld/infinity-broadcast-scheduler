@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resoudreVoix } from '../chatterbox'
-import { VOIX_INVENTEES, voixInventee } from '../../data/voix-inventees'
+import { VOIX_INVENTEES, voixInventee, ANIMATEURS_SANS_VOIX_INVENTEE } from '../../data/voix-inventees'
 import { SEED_STATIONS } from '../../data/seed-stations'
 
 test('⭐ le choix fait dans l’ADMIN passe devant la voix inventée (remplacer à tout moment)', () => {
@@ -41,8 +41,11 @@ test('rien d’utilisable → null (Piper), comme avant', () => {
 test('⭐ chaque animateur des radios a SA voix inventée — ni oubli, ni animateur fantôme', () => {
   // Remplie le 14/09/2026 APRÈS le dépôt des 31 références au catalogue (workflow deposer-voix) :
   // une voix absente du catalogue rendrait 404 voice_not_found, puis Piper.
+  // 07/10/2026 : un animateur dont la voix n'est pas encore déposée est listé À PART (Piper en attendant).
   const attendues = SEED_STATIONS.flatMap(s => s.hosts.map(h => `${s.id}:${h.id}`)).sort()
-  assert.deepEqual(Object.keys(VOIX_INVENTEES).sort(), attendues)
+  const enAttente = [...ANIMATEURS_SANS_VOIX_INVENTEE]
+  assert.deepEqual([...Object.keys(VOIX_INVENTEES), ...enAttente].sort(), attendues)
+  for (const cle of enAttente) assert.equal(VOIX_INVENTEES[cle], undefined, `${cle} : dans les deux listes`)
 })
 
 test('le nom au catalogue est inv-<animateur>, sans .wav (le client l’ajoute)', () => {

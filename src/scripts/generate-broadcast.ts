@@ -25,6 +25,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
+import { extraireLiensEmission, champLiens } from '../lib/liens-emission'
 import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem, BroadcastSegment } from '../lib/types'
 import { appelerLLM, maillonsDisponibles, bilanDesMaillons, type LLMMessage } from '../lib/llm'
 import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
@@ -32,7 +33,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
-import { stationSelonIHL } from '../lib/station-reglages'
+import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
 import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
@@ -54,10 +55,12 @@ import { fileEnVol } from '../lib/en-vol'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
 import {
-  resolveRhythmForStation, resolveBehaviorForPersona, hasPublishedPulse,
-  rhythmDirective, behaviorPulseDirective, guestSlotsForRate,
+  loadPulseFromEnv, rhythmDirective, behaviorPulseDirective, guestSlotsForRate,
   personaKeyForHost, personaKeyForGuest,
 } from '../lib/pulse'
+import {
+  rythmeEffectif, tenueEffective, ligneEditoriale, actualitesVoulues, toursActualite, consigneActualite,
+} from '../lib/fiche-station'
 import {
   unifiedGuestsForStation, resolvePersonaForStation, hasUnifiedPersonas,
   fetchRadioPersonas, exportRadioPersonasToEnv,
@@ -73,6 +76,9 @@ import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
+import { sujetsCartePourStation } from '../lib/carte-relais'
+import { placerRubriqueCarte, sujetEnUneLigne, sansSigleAdministration } from '../lib/sujets-carte'
+import { liensActionCites } from '../lib/liens-action'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
 import { resumerEmission, ligneJournalResume } from '../lib/resume-emission'
 import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
@@ -198,11 +204,18 @@ async function generateBroadcastBytes(opts: {
   // n'a été publié, `pulseActif` est faux et le prompt reste EXACTEMENT
   // celui d'avant : on ne change pas les émissions d'aujourd'hui en
   // injectant des valeurs par défaut.
-  const rhythm = resolveRhythmForStation(station.id)
-  const pulseActif = hasPublishedPulse()
+  // 07/10/2026 — le rythme se règle désormais DANS la fiche de la station (IHL, kind 30091) ;
+  // l'ancien Pulse n'est plus qu'un héritage en lecture seule (lib/fiche-station.ts).
+  const pulseSnap = loadPulseFromEnv()
+  const { rhythm, origine: origineRythme, actif: pulseActif } = rythmeEffectif(station, pulseSnap)
   if (pulseActif) {
-    console.log(`    ⚙️  Pulse : ${rhythm.globalMood} · densité ${rhythm.dialogueDensity} · segment ~${rhythm.averageSegmentSec}s · invités ${rhythm.interventionRate}`)
+    console.log(`    ⚙️  Rythme (${origineRythme}) : ${rhythm.globalMood} · densité ${rhythm.dialogueDensity} · segment ~${rhythm.averageSegmentSec}s · invités ${rhythm.interventionRate}`)
   }
+  // Part d'actualité (fiche IHL) : quels tours partent de l'actu, lesquels des thèmes propres.
+  const partActu = station.actualite?.part
+  const toursActu = toursActualite(partActu, numTurns)
+  const editoriale = ligneEditoriale(station)
+  if (partActu !== undefined) console.log(`    📰 actualité ${partActu} % : ${toursActu.size}/${numTurns} tour(s) partent de l'actu`)
 
   // `interventionRate` décide de la PRÉSENCE de l'invité :
   //   rare → environ 1 jour sur 3 · normal et frenetic → présent
@@ -252,6 +265,18 @@ async function generateBroadcastBytes(opts: {
 
   const exclus = new Set<number>([0, numTurns - 1, ...pauseApres.keys(), ...retourApres.keys()])
   if (guest !== null) for (let k = guestStart - 1; k <= guestStart + 3; k++) exclus.add(k)
+  // ── La carte d'Infinity (07/10/2026, lib/sujets-carte.ts) ───────────────────────────────
+  // Station Manifestactions : ses sujets (Manifestactions réelles, sinon leur raison d'être) en tête
+  // de l'actualité, et sa ligne éditoriale. Freeworld : la rubrique « Pendant ce temps sur la
+  // carte », placée AVANT le plan humain (qui n'y pose ni réaction courte ni courrier). Les autres
+  // stations : rien, aucune requête.
+  const carte = await sujetsCartePourStation(station, opts.date)
+  if (carte.journal) console.log(`    🗺  Carte : ${carte.journal}`)
+  news.unshift(...carte.actualites)
+  const rubrique = carte.rubrique
+  const toursCarte = placerRubriqueCarte(numTurns, exclus, rubrique.length, `${station.id}:${opts.date}:carte`)
+  for (const k of toursCarte) exclus.add(k)
+  if (toursCarte.length) console.log(`    🗺  « Pendant ce temps sur la carte » aux tours ${toursCarte.map(k => k + 1).join(', ')}`)
   const humain = habillageActif('HABILLAGE_ECRITURE') ? planHumain(numTurns, exclus, `${station.id}:${opts.date}:humain`) : { courts: new Set<number>(), courrier: null }
   if (humain.courts.size > 0 || humain.courrier !== null) {
     console.log(`    🗣  réactions courtes aux tours ${[...humain.courts].map(i => i + 1).sort((a, b) => a - b).join(', ') || '—'} · courrier des auditeurs au tour ${humain.courrier !== null ? humain.courrier + 1 : '—'}`)
@@ -331,26 +356,35 @@ async function generateBroadcastBytes(opts: {
       ? personaKeyForGuest(guest!.id)
       : personaKeyForHost(station.id, host.id)
     const pulseDirective = pulseActif
-      ? `${rhythmDirective(rhythm)}\n${behaviorPulseDirective(resolveBehaviorForPersona(pulseKey))}`
+      ? `${rhythmDirective(rhythm)}\n${behaviorPulseDirective(tenueEffective(pulseKey, station, pulseSnap))}`
       : undefined
 
+    // Sans réglage d'actualité : tous les tours voient l'actu, comme avant.
+    const tourActu = toursActu.has(i)
+    const newsCeTour = tourActu ? news : []
+    const consigneActu = consigneActualite(partActu, tourActu, news.length > 0)
     const systemPrompt = isGuestTurn
       ? buildGuestSystemPrompt({
           guest:              guest!,
           stationName:        station.name,
           stationDescription: station.description,
+          ligneEditoriale:    editoriale,
+          consigneActualite:  consigneActu,
           language,
           hostsRecap:         station.hosts.map(h => h.name).join(', '),
-          newsBlock:          formatNewsForPrompt(news),
+          newsBlock:          formatNewsForPrompt(newsCeTour),
           behaviorDirective:  guestBehaviorDirective(guest!.behavior),
           pulseDirective,
         })
       : buildHostSystemPrompt({
           host:               effectiveHost,
           kb, selectedEntries, topic,
+          consigneCarte:      carte.ligneEditoriale,
           stationName:        station.name,
           stationDescription: station.description,
-          newsBlock:          formatNewsForPrompt(news),
+          ligneEditoriale:    editoriale,
+          consigneActualite:  consigneActu,
+          newsBlock:          formatNewsForPrompt(newsCeTour),
           language,
           otherHosts,
           currentTurn:        i + 1,
@@ -382,6 +416,10 @@ async function generateBroadcastBytes(opts: {
       : i === numTurns - 1 ? { type: 'cloture' }
       : pauseApres.has(i) ? { type: 'avant-pause', morceau: pauseApres.get(i)! }
       : retourApres.has(i) ? { type: 'retour-pause', morceau: retourApres.get(i)!, station: station.name }
+      : toursCarte.includes(i) ? {
+          type: 'carte', sujet: sujetEnUneLigne(rubrique[toursCarte.indexOf(i)]),
+          ouvre: toursCarte.indexOf(i) === 0, ferme: toursCarte.indexOf(i) === toursCarte.length - 1,
+        }
       : humain.courts.has(i) ? { type: 'court' }
       : humain.courrier === i ? { type: 'courrier', anonyme: host.name === 'Anonyme' }
       : { type: 'courant' }
@@ -403,6 +441,8 @@ async function generateBroadcastBytes(opts: {
     costIn += resp.inputTokens
     costOut += resp.outputTokens
     let turnText = retirerEtiquetteLocuteur(resp.text.trim())
+    // « L'IHL ne se nomme JAMAIS » (décision du Bâtisseur) — stations de la carte.
+    if (carte.concernee) turnText = sansSigleAdministration(turnText)
     if (!turnText) {
       console.log('(vide, skip)')
       continue
@@ -753,6 +793,16 @@ async function generateBroadcastBytes(opts: {
   // dictionnaire (frenchify-english.ts), à écouter puis à ajouter — app ET générateur.
   const releveAnglais = ligneMotsAnglaisNonCouverts(plansVoix.map(p => p.texte), language)
   if (releveAnglais) console.log(`\n🔤 ${releveAnglais}`)
+  // ── Liens d'action pour l'écran des liens (07/10/2026, lib/liens-action.ts) ─────────────
+  // LISTE FERMÉE (liste blanche) ; seulement les campagnes que les répliques ont RÉELLEMENT
+  // nommées, dans leur texte DÉFINITIF. Ajoutés au fil APRÈS la dernière réplique écrite : le modèle ne les a jamais vus,
+  // la voix ne les lit jamais. L'écran des liens les retrouve dans l'actualité (`link`).
+  const liensAction = liensActionCites(turns.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
+  if (liensAction.length) {
+    news.push(...liensAction)
+    console.log(`    🔗 Liens d'action pour l'écran : ${liensAction.map(l => l.sourceTitle).join(' · ')}`)
+  }
+
   const audioBlob = encodeWav(merged)
   return {
     audioBlob,
@@ -986,12 +1036,14 @@ async function main() {
   // ~150ms pacing).
   const numTurns = Number.parseInt(process.env.NUM_TURNS ?? '22', 10)
 
+  // La FICHE posée dans l'IHL par un administrateur (kind 30091 : nom, raison d'être, langue,
+  // animateurs, sources, rythme, actualité, musiques…) passe devant la seed. Sans relais ni admin
+  // reconnu : la seed, et on le dit. Une station hors seed n'existe que par sa fiche d'admin
+  // complète (lib/station-reglages.ts).
   const seed = SEED_STATIONS.find(s => s.id === stationId)
-  if (!seed) throw new Error(`Station inconnue : ${stationId}`)
-  if (seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
-  // Les réglages posés dans l'IHL (musiques, jingles, pauses — kind 30091) passent devant la
-  // seed. Sans relais ni admin reconnu : la seed, et on le dit (lib/station-reglages.ts).
-  const station = await stationSelonIHL(seed)
+  if (seed && seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
+  const station = seed ? await stationSelonIHL(seed) : await stationAjouteeSelonIHL(stationId, SEED_STATIONS)
+  if (!station) throw new Error(`Station inconnue : ${stationId} (ni dans la seed, ni fiche IHL d'administrateur complète)`)
 
   // Aucune voix commercialisable dans cette langue ⇒ on RENONCE, avant
   // d'avoir dépensé un seul jeton. Publier quand même reviendrait à
@@ -1022,7 +1074,7 @@ async function main() {
     if (deja === null) console.warn('  ⚠ relais illisibles : impossible de vérifier un doublon — on produit.')
   }
 
-  await assurerConfigNostr(SEED_STATIONS.map(s => s.id))
+  await assurerConfigNostr([...new Set([...SEED_STATIONS.map(s => s.id), station.id])])
 
   console.log(`\n🎙  Génération broadcast : ${station.name} pour ${targetDate}`)
   console.log(`    ${numTurns} tours · ${station.hosts.length} animateur(s)`)
@@ -1144,7 +1196,7 @@ async function main() {
 
   // 2. Fetch news
   console.log('\n📰 Fetch actu…')
-  const news = await fetchNewsForStation(station, 8)
+  const news = actualitesVoulues(station) ? await fetchNewsForStation(station, 8) : []
   console.log(`    ${news.length} item(s) récupérés`)
 
   // 2.b — Courrier des auditeurs et appels du jour (lib/courrier). Ne fait jamais échouer l'émission.
@@ -1281,6 +1333,8 @@ async function main() {
     turns:       result.turns,
     ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
+    // L'écran des liens de l'appli (07/10/2026) : chaque lien évoqué, à l'instant où il l'est.
+    ...champLiens(extraireLiensEmission({ turns: result.turns, news })),
     model,
     ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
     ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),

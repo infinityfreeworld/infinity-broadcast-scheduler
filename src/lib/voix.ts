@@ -48,6 +48,8 @@ const VOIX_FR_PAR_ANIMATEUR: Record<string, string> = {
   'wtf-diogene': 'fr_FR-gilles-low',
   'fw-aurelien': 'fr_FR-gilles-low',
   'fw-leila':    'fr_FR-siwis-medium',
+  'bg-nora':     'fr_FR-siwis-medium',
+  'bg-malik':    'fr_FR-gilles-low',
   'mc-anonyme':  'fr_FR-siwis-medium',
   'h2-henri':    'fr_FR-gilles-low',
   'h2-camille':  'fr_FR-siwis-medium',
@@ -66,6 +68,14 @@ const VOIX_FR_PAR_ANIMATEUR: Record<string, string> = {
   'oa-lea':      'fr_FR-siwis-medium',
   'oa-theo':     'fr_FR-gilles-low',
   'oa-aicha':    'fr_FR-siwis-medium',
+  // Manifestactions (07/10/2026) — siwis : CC BY 4.0 (crédit dit au journal), gilles : CC0.
+  'ma-ines':     'fr_FR-siwis-medium',
+  'ma-bastien':  'fr_FR-gilles-low',
+  // Abondance et OBF (07/10/2026) — mêmes licences : siwis CC BY 4.0, gilles CC0.
+  'ab-solene':   'fr_FR-siwis-medium',
+  'ab-yann':     'fr_FR-gilles-low',
+  'obf-maya':    'fr_FR-siwis-medium',
+  'obf-gregoire': 'fr_FR-gilles-low',
 }
 
 const VOIX_FR_PAR_GENRE: Record<Genre, string> = {
