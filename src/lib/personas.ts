@@ -8,6 +8,7 @@
 import type { RadioHost, StationLanguage, HostKB, HostKBEntry } from './types'
 import { directiveSloganSysteme } from './slogan-radio'
 import { enteteLangueSysteme, consigneLangueTour } from './langue-station'
+import { directiveDisfluences } from './disfluences'
 
 const LANG_INSTRUCTIONS: Record<StationLanguage, string> = {
   fr: 'Tu parles en français, à l\'oral, à des auditeurs invisibles.',
@@ -38,13 +39,19 @@ const SHORT_DIRECTIVE: Record<StationLanguage, string> = {
 /**
  * Directive « parle comme à l'oral ». Ses exemples d'interjections sont FRANÇAIS : pour une autre
  * langue, ils étaient recopiés tels quels (« Ah ouais, Sarah… » sur Free Press FM, 04/10/2026).
+ *
+ * 07/10/2026 — les HÉSITATIONS (« euh… », faux départs, répétitions) sont désormais demandées
+ * explicitement, par langue, avec une fréquence (lib/disfluences.ts) : l'ancienne phrase « une
+ * hésitation de temps en temps » n'en faisait presque jamais écrire. `disfluences: false` les
+ * retire (HABILLAGE_DISFLUENCES=0).
  */
-function directiveOral(language: StationLanguage): string {
+export function directiveOral(language: StationLanguage, disfluences = true): string {
+  const hesiter = disfluences ? ` ${directiveDisfluences(language)}` : ''
   if (language === 'fr') {
-    return `Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps, une hésitation de temps en temps. Jamais de didascalie ni de parenthèse (pas de « (rires) ») : ce qui n'est pas dit ne s'entend pas.`
+    return `Parle comme à l'ORAL, pas comme à l'écrit : phrases courtes, reprises, petites interjections (« bon », « ah », « ouais », « hein », « attends »), le prénom de ton collègue de temps en temps.${hesiter} Jamais de didascalie ni de parenthèse (pas de « (rires) », pas de « (hésite) ») : ce qui n'est pas dit ne s'entend pas — une hésitation s'ÉCRIT avec ses mots (« euh… »).`
   }
   const exemples = language === 'en' ? ' ("well", "oh", "yeah", "right", "hang on")' : ' (natural ones of the station\'s language)'
-  return `Speak like you TALK, not like you write: short sentences, restarts, small interjections${exemples}, your colleague's first name now and then, a hesitation now and then. Never stage directions or parentheses (no "(laughs)"): what isn't said can't be heard.`
+  return `Speak like you TALK, not like you write: short sentences, restarts, small interjections${exemples}, your colleague's first name now and then.${hesiter} Never stage directions or parentheses (no "(laughs)", no "(hesitates)"): what isn't said can't be heard — a hesitation is WRITTEN with its words ("uh…").`
 }
 
 export function buildHostSystemPrompt(opts: {
@@ -77,8 +84,11 @@ export function buildHostSystemPrompt(opts: {
   /** 22/09/2026 — la date du jour en toutes lettres (« mardi 23 septembre 2026 »), pour que
    *  l'antenne sache quel jour on est. Jamais l'heure : l'émission est rediffusée toute la journée. */
   dateDuJour?: string
+  /** 07/10/2026 — demander les hésitations (« euh… », faux départs). Défaut : oui ;
+   *  faux quand HABILLAGE_DISFLUENCES=0. */
+  disfluences?: boolean
 }): string {
-  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective, pulseDirective, dateDuJour } = opts
+  const { host, kb, selectedEntries, topic, stationName, language, otherHosts, stationDescription, newsBlock, currentTurn, totalTurns, customInstructions, behaviorDirective, pulseDirective, dateDuJour, disfluences = true } = opts
 
   const otherHostsLine = otherHosts.length > 0
     ? `Tes confrères à l'antenne : ${otherHosts.map(h => `${h.name} (${h.trait})`).join(', ')}.`
@@ -141,7 +151,7 @@ ${newsSection}${structureSection}
 5. Tu N'ES PAS un assistant IA. Tu N'ES PAS Matrixia. Tu N'ES PAS Infinity. Tu es ${host.name}, point.
 6. Pas de méta-commentaire ("en tant qu'IA…"), pas d'avertissement moralisateur. Tu parles franchement, dans ton registre.
 7. Ne répète pas mécaniquement ce que les autres viennent de dire — réagis, rebondis, déplace l'angle.
-8. ${directiveOral(language)}
+8. ${directiveOral(language, disfluences)}
 9. ${directiveSloganSysteme(stationName, language)} N'écris jamais d'adresse web brute (pas de http, pas de www).
 10. ${consigneLangueTour(language)}
 

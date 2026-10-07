@@ -121,7 +121,7 @@ test('🔴 l’écriture sait où sont les pauses : lancer la musique, en reveni
   assert.match(gb, /dateDuJour,\n/, 'la date est passée au prompt')
   assert.match(gb, /plansVoix\[j\]\.court \? \{ emotionExaggeration: 0\.70 \} : \{\}/, 'une réaction courte se dit avec plus d’élan')
   const pe = readFileSync('src/lib/personas.ts', 'utf8')
-  assert.match(pe, /8\. \$\{directiveOral\(language\)\}/)
+  assert.match(pe, /8\. \$\{directiveOral\(language, disfluences\)\}/, "la consigne d’oralité porte les hésitations (07/10/2026)")
   assert.match(pe, /`Parle comme à l'ORAL/)
   assert.match(pe, /ne donne JAMAIS l'heure qu'il est/)
 })
