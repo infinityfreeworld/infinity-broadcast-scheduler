@@ -84,10 +84,10 @@ async function pourAbondance(station: RadioStation, date: string, maintenant: nu
       + `référence « nouveau » : ${new Date(reference).toISOString()} (${lecture.ok ? (lecture.derniere ? 'dernière émission' : 'première émission') : 'relais illisibles, repli'}) · `
       + `${a.nouveaux.length} nouveau(x), ${a.rotation.length} en rotation${a.campagne ? `, campagne « ${a.campagne.titre} »` : ''}`
       + `${liste.length ? '' : ' → raison d\'être'}`
-    return { concernee: true, actualites: a.actualites, rubrique: [], ligneEditoriale: a.ligneEditoriale, journal }
+    return { concernee: true, actualites: a.actualites, rubrique: [], ligneEditoriale: a.ligneEditoriale, ...(a.campagne ? { campagneDuJour: a.campagne.id } : {}), journal }
   } catch (err) {
     const a = antenneAbondance([], maintenant, date)
-    return { concernee: true, actualites: a.actualites, rubrique: [], ligneEditoriale: a.ligneEditoriale, journal: `relais injoignables (${err instanceof Error ? err.message : String(err)}) → raison d'être` }
+    return { concernee: true, actualites: a.actualites, rubrique: [], ligneEditoriale: a.ligneEditoriale, ...(a.campagne ? { campagneDuJour: a.campagne.id } : {}), journal: `relais injoignables (${err instanceof Error ? err.message : String(err)}) → raison d'être` }
   } finally {
     try { pool.close(relays) } catch { /* rien à fermer */ }
   }

@@ -121,6 +121,9 @@ export interface CartePourStation {
   rubrique: SujetCarte[]
   /** Station Manifestactions : sa ligne éditoriale. */
   ligneEditoriale?: string
+  /** Station Abondance : la campagne de soutien du jour (identifiant), pour l'écran des liens
+   *  (`liens-action.ts`) — jamais dans le prompt sous forme de lien. */
+  campagneDuJour?: string
   journal: string
 }
 

@@ -74,6 +74,7 @@ import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { sujetsCartePourStation } from '../lib/carte-relais'
 import { placerRubriqueCarte, sujetEnUneLigne, sansSigleAdministration } from '../lib/sujets-carte'
+import { liensActionCites } from '../lib/liens-action'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
 import { resumerEmission, ligneJournalResume } from '../lib/resume-emission'
 import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
@@ -436,6 +437,16 @@ async function generateBroadcastBytes(opts: {
   }
 
   if (turns.length === 0) throw new Error('Aucun tour généré')
+
+  // ── Liens d'action pour l'écran des liens (07/10/2026, lib/liens-action.ts) ─────────────
+  // LISTE FERMÉE (liste blanche) ; seulement les campagnes que les répliques ont RÉELLEMENT
+  // nommées. Ajoutés au fil APRÈS la dernière réplique écrite : le modèle ne les a jamais vus,
+  // la voix ne les lit jamais. L'écran des liens les retrouve dans l'actualité (`link`).
+  const liensAction = liensActionCites(turns.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
+  if (liensAction.length) {
+    news.push(...liensAction)
+    console.log(`    🔗 Liens d'action pour l'écran : ${liensAction.map(l => l.sourceTitle).join(' · ')}`)
+  }
 
   // ── PHASE 2 : TOUTE la synthèse, d'un seul trait ───────────────────
   //
