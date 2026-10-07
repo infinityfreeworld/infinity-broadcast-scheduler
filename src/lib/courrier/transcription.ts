@@ -41,8 +41,8 @@ export function reechantillonner16k(wav: DecodedWav): DecodedWav {
   return { samples: out, sampleRate: cible }
 }
 
-function dansLePath(nom: string): string | null {
-  for (const d of (process.env.PATH ?? '').split(delimiter)) {
+function dansLePath(nom: string, path = process.env.PATH): string | null {
+  for (const d of (path ?? '').split(delimiter)) {
     if (d && existsSync(join(d, nom))) return join(d, nom)
   }
   return null
@@ -58,7 +58,7 @@ function modeleParDefaut(): string {
 /** Le transcripteur de cette machine, ou la RAISON de son absence. Ne lève jamais. */
 export function transcripteurCourrier(env: NodeJS.ProcessEnv = process.env): Transcripteur | { indisponible: string } {
   if (env.COURRIER_TRANSCRIPTION === '0') return { indisponible: 'coupée (COURRIER_TRANSCRIPTION=0)' }
-  const binaire = env.OREILLE_BINAIRE || dansLePath('whisper-cli') || dansLePath('whisper-cpp')
+  const binaire = env.OREILLE_BINAIRE || dansLePath('whisper-cli', env.PATH) || dansLePath('whisper-cpp', env.PATH)
   if (!binaire || !existsSync(binaire)) return { indisponible: 'whisper-cli introuvable (brew install whisper-cpp)' }
   const modele = env.OREILLE_MODELE || modeleParDefaut()
   if (!existsSync(modele)) return { indisponible: `modèle Whisper absent (${modele})` }
