@@ -19,6 +19,11 @@ import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { delaiStationMs } from '../lib/sortie'
+import {
+  reglagesFenetre, finDeFenetre, echeanceVoixClonees, derniereChance, pauseAvantReprise, classerSortie,
+  heureLisible, type IssueStation,
+} from '../lib/fenetre-nuit'
+import { purgerChantiers } from '../lib/chantier'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
@@ -143,7 +148,6 @@ async function main() {
   }
 
   const startedAt = Date.now()
-  const results: Array<{ stationId: string; ok: boolean; error?: string }> = []
 
   // 🔴 Les stations à voix clonée passent EN TÊTE. Sans ce tri, elles sont
   // dispersées dans l'ordre de la seed et CHACUNE repaie un réveil complet
@@ -184,16 +188,29 @@ async function main() {
       + `${[...avecGpu].join(', ')}`)
   }
 
+  // ── LA FENÊTRE ET LES REPRISES (07/10/2026, lib/fenetre-nuit.ts) ──────────────────────
+  // 🔴 L'ancien budget — 150 min de voix clonée pour TOUTE la nuit — servait 3 à 5 stations :
+  // le GPU calcule à peu près en temps réel (~32 min par station), et les 9 à 11 suivantes
+  // partaient entières en Piper (88 % des tours perdus du 21/09 au 06/10). La nuit dure
+  // désormais jusqu'à RADIO_FIN_FENETRE (07:00) ; une station à qui il manque des voix est
+  // REPORTÉE (code 75) et reprise à un passage suivant, en ne refaisant que les tours manquants.
+  const reglages = reglagesFenetre()
+  const debutNuit = Date.now()
+  const finFenetre = finDeFenetre(debutNuit, reglages.finHeure, reglages.maxHeures)
   // Instant absolu au-delà duquel PLUS AUCUNE station n'attend le GPU.
   // Une échéance par station borne une station, pas la nuit.
-  const budgetNuitMin = Number.parseInt(process.env.CHATTERBOX_NUIT_MINUTES ?? '150', 10)
-  process.env.CHATTERBOX_FIN_NUIT = String(Date.now() + budgetNuitMin * 60_000)
-  console.log(`⏳ voix clonées jusqu'à ${new Date(Number(process.env.CHATTERBOX_FIN_NUIT))
-    .toLocaleTimeString('fr-FR')} — ensuite, tout en synthèse locale.`)
+  process.env.CHATTERBOX_FIN_NUIT = String(echeanceVoixClonees(debutNuit, finFenetre, reglages))
+  console.log(`⏳ fenêtre de fabrication jusqu'à ${heureLisible(finFenetre)} · voix clonées jusqu'à `
+    + `${heureLisible(Number(process.env.CHATTERBOX_FIN_NUIT))}${reglages.nuitMinutes !== null ? ` (CHATTERBOX_NUIT_MINUTES=${reglages.nuitMinutes})` : ''}`
+    + ` · ${reglages.maxPasses} passage(s) au plus`)
+  const purges = purgerChantiers()
+  if (purges.length > 0) console.log(`🧹 ${purges.length} chantier(s) de plus de 3 jours effacé(s)`)
 
-  for (const station of ordreNuit) {
+  /** Fabrique UNE station dans un sous-processus ; rend ce que dit son code de sortie. */
+  const fabriquer = async (station: (typeof SEED_STATIONS)[number], passe: number): Promise<{ issue: IssueStation; error?: string }> => {
+    const derniere = derniereChance(Date.now(), finFenetre, passe, reglages)
     console.log(`\n────────────────────────────────────────────────────────────`)
-    console.log(`▶ ${station.name} (${station.id})`)
+    console.log(`▶ ${station.name} (${station.id})${passe > 1 ? ` — reprise, passage ${passe}` : ''}${derniere ? ' · dernière chance' : ''}`)
     console.log(`────────────────────────────────────────────────────────────`)
     try {
       // On fork un sous-process tsx pour isoler les générations
@@ -203,37 +220,84 @@ async function main() {
         ['tsx', 'src/scripts/generate-broadcast.ts', station.id, targetDate],
         // Filet : une station qui ne rend pas la main (socket orpheline,
         // lib/sortie.ts) ne retient plus toute la nuit derrière elle.
-        { env: process.env, maxBuffer: 50 * 1024 * 1024, timeout: delaiStationMs(), killSignal: 'SIGTERM' },
+        {
+          env: { ...process.env, RADIO_DERNIERE_CHANCE: derniere ? '1' : '0' },
+          maxBuffer: 50 * 1024 * 1024, timeout: delaiStationMs(), killSignal: 'SIGTERM',
+        },
       )
       if (stdout) process.stdout.write(stdout)
       if (stderr) process.stderr.write(stderr)
-      results.push({ stationId: station.id, ok: true })
+      return { issue: classerSortie(0) }
     } catch (err) {
-      const suspendue = (err as { killed?: boolean })?.killed === true
+      const e = err as { killed?: boolean; code?: unknown; stdout?: string; stderr?: string }
+      const suspendue = e?.killed === true
+      const issue = classerSortie(e?.code, suspendue)
+      // Un report ou une veille gardée n'est pas une panne : son journal s'imprime en entier.
+      if (issue === 'a-reprendre' || issue === 'veille-gardee') {
+        if (e.stdout) process.stdout.write(e.stdout)
+        if (e.stderr) process.stderr.write(e.stderr)
+        return { issue }
+      }
       const msg = suspendue
         ? `abandonnée après ${delaiStationMs() / 60_000} min sans rendre la main (processus suspendu)`
         : err instanceof Error ? err.message : String(err)
       console.error(`✗ ${station.id} : ${msg}`)
-      results.push({ stationId: station.id, ok: false, error: msg })
+      return { issue, error: msg }
     }
   }
 
+  const results = new Map<string, { stationId: string; issue: IssueStation; error?: string; passe: number }>()
+  let aReprendre: typeof ordreNuit = []
+  let debutPasse = Date.now()
+  // Passage 1 : toutes les stations, dans l'ordre de la nuit.
+  for (const station of ordreNuit) {
+    const r = await fabriquer(station, 1)
+    results.set(station.id, { stationId: station.id, ...r, passe: 1 })
+    // Un échec franc (réseau coupé pendant l'écriture : « Aucun maillon LLM n'a répondu ») se
+    // retente aussi : une émission DÉJÀ publiée est reconnue par l'anti-doublon et rend la main.
+    if (r.issue === 'a-reprendre' || r.issue === 'echec') aReprendre.push(station)
+  }
+  // Passages suivants : seulement les stations reportées, après une pause.
+  for (let passe = 2; aReprendre.length > 0 && passe <= reglages.maxPasses; passe++) {
+    // Une coupure réseau peut tout reporter en quelques minutes : on la laisse passer.
+    const pause = pauseAvantReprise(Date.now(), debutPasse, finFenetre, reglages)
+    console.log(`\n🔁 Passage ${passe} : ${aReprendre.length} station(s) à reprendre (${aReprendre.map(s => s.id).join(', ')})`
+      + `${pause > 0 ? ` — pause de ${Math.round(pause / 60_000)} min d'abord` : ''}`)
+    if (pause > 0) await new Promise(r => setTimeout(r, pause))
+    debutPasse = Date.now()
+    const encore: typeof ordreNuit = []
+    for (const station of aReprendre) {
+      const r = await fabriquer(station, passe)
+      results.set(station.id, { stationId: station.id, ...r, passe })
+      if (r.issue === 'a-reprendre' || r.issue === 'echec') encore.push(station)
+    }
+    aReprendre = encore
+  }
+
   const totalSec = ((Date.now() - startedAt) / 1000).toFixed(0)
-  const okCount = results.filter(r => r.ok).length
-  const failCount = results.length - okCount
+  const liste = [...results.values()]
+  const compte = (i: IssueStation) => liste.filter(r => r.issue === i).length
+  const okCount = compte('publiee')
+  const failCount = compte('echec') + compte('suspendue')
 
   console.log(`\n╔══════════════════════════════════════════════════════════╗`)
-  console.log(`║  Résumé : ${okCount}/${results.length} OK · ${failCount} échec(s) · ${totalSec}s wall time  ║`)
+  console.log(`║  Résumé : ${okCount}/${liste.length} publiée(s) · ${compte('veille-gardee')} veille gardée · `
+    + `${compte('a-reprendre')} encore à reprendre · ${failCount} échec(s) · ${totalSec}s wall time  ║`)
   console.log(`╚══════════════════════════════════════════════════════════╝`)
+  for (const r of liste.filter(r => r.passe > 1)) console.log(`  🔁 ${r.stationId} : ${r.issue} au passage ${r.passe}`)
+  for (const r of liste.filter(r => r.issue === 'veille-gardee')) {
+    console.log(`  🛑 ${r.stationId} : NON publiée (voix de repli en fin de fenêtre) — l'émission précédente reste à l'antenne`)
+  }
 
   if (failCount > 0) {
     console.log('\nÉchecs :')
-    for (const r of results.filter(r => !r.ok)) {
+    for (const r of liste.filter(r => r.issue === 'echec' || r.issue === 'suspendue')) {
       console.log(`  - ${r.stationId}: ${r.error?.split('\n')[0] ?? '(no message)'}`)
     }
   }
 
-  if (okCount === 0) {
+  // Une veille gardée est une décision, pas une panne : seule l'absence TOTALE de résultat échoue.
+  if (okCount + compte('veille-gardee') === 0) {
     console.error('\n❌ Toutes les stations ont échoué.')
     process.exit(1)
   }

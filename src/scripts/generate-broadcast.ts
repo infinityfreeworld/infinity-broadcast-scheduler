@@ -78,6 +78,9 @@ import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
+import { preparerReprise, deciderOuArreter } from '../lib/reprise-branchement'
+import { ArretVolontaire } from '../lib/regle-publication'
+import type { RepriseEmission } from '../lib/reprise-emission'
 
 // ── Helpers date ─────────────────────────────────────────────────────
 
@@ -125,6 +128,9 @@ interface GenResult {
   voixObtenues:  number
 }
 
+/** Ce qu'un tour doit dire, et par quelle voix (gardé dans le chantier d'une reprise). */
+type PlanVoix = { texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean }
+
 async function generateBroadcastBytes(opts: {
   station:  RadioStation
   numTurns: number
@@ -132,6 +138,8 @@ async function generateBroadcastBytes(opts: {
   news:     NewsItem[]
   /** Date de l'émission : graine du tirage des musiques (Mac et secours tirent les mêmes). */
   date:     string
+  /** Reprise de nuit (lib/reprise-emission.ts) : chantier, oreille, report des tours manquants. */
+  reprise?: RepriseEmission<BroadcastTurn, PlanVoix>
 }): Promise<GenResult> {
   const { station, numTurns, topic, news } = opts
   const language = station.language ?? 'fr'
@@ -231,7 +239,17 @@ async function generateBroadcastBytes(opts: {
   // la clôture. Compteur de l'émission ; la garantie est dans `appliquerSlogan`.
   let slogansDits = 0
 
-  for (let i = 0; i < numTurns; i++) {
+  // 🔁 REPRISE (07/10/2026) : un passage précédent a déjà écrit cette émission — on reprend SON
+  // texte (aucun appel au modèle) et l'écriture ci-dessous ne tourne pas.
+  const repris = opts.reprise?.textesRepris() ?? null
+  if (repris) {
+    turns.push(...repris.turns)
+    plansVoix.push(...repris.plans)
+    voixAttendues = plansVoix.filter(p => p.voixPersonnage).length
+    console.log(`    🔁 reprise : texte du passage précédent (${turns.length} tours), seuls les tours manquants seront synthétisés`)
+  }
+
+  for (let i = 0; i < (repris ? 0 : numTurns); i++) {
     const isGuestTurn1   = guest !== null && i === guestStart        // réponse Q1
     const isGuestTurn2   = guest !== null && i === guestStart + 2    // réponse Q2
     const isGuestTurn    = isGuestTurn1 || isGuestTurn2
@@ -434,6 +452,7 @@ async function generateBroadcastBytes(opts: {
   // En groupant, la file reste alimentée le temps du lot et une seule
   // location sert toute la station.
   const aSynthetiser = plansVoix.filter(p => p.voixPersonnage).length
+  opts.reprise?.enregistrerTextes(turns, plansVoix)
   // 🚀 k tours EN VOL chez data-space (cf. lib/en-vol.ts) : un seul à la fois laissait leur station
   // chômer ~80 % du temps entre deux « 429 not_ready ». L'ordre, le décodage et les replis restent
   // ceux de la boucle ci-dessous, tour par tour.
@@ -441,7 +460,7 @@ async function generateBroadcastBytes(opts: {
   let fenetreRelancee = false
   const file = fileEnVol(
     plansVoix.length, enVolMax,
-    j => !!plansVoix[j].voixPersonnage,
+    j => !!plansVoix[j].voixPersonnage && !opts.reprise?.dejaFait(j),
     j => synthesizeWithChatterbox({
       voice:    plansVoix[j].voixPersonnage as string,
       text:     plansVoix[j].texte,
@@ -462,8 +481,14 @@ async function generateBroadcastBytes(opts: {
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
     file.remplir(i)
     const obtenuesAvant = voixObtenues
+    // Tour déjà dit par sa voix de personnage à un passage précédent : repris tel quel.
+    const garde = opts.reprise?.dejaFait(i) ? opts.reprise.reprendreTour(i) : null
 
-    if (plan.voixPersonnage) {
+    if (garde) {
+      wav = garde
+      voixObtenues++
+      process.stdout.write(`repris du chantier (${plan.voixPersonnage})\n`)
+    } else if (plan.voixPersonnage) {
       try {
         const buf = await file.prendre(i)
         // 🔴 23/09/2026 — LA FENÊTRE REPART AU PREMIER TOUR REÇU. Freeworld, première station de la
@@ -514,6 +539,12 @@ async function generateBroadcastBytes(opts: {
         const refus = err instanceof ChatterboxError ? err.dernierRefus : undefined
         if (refus) console.warn(`    ↳ dernier refus data-space : ${refus}`)
         if (!isFallbackPiperEnabled()) throw err
+        // Il reste une nuit derrière ce passage : pas de Piper, le tour sera repris plus tard.
+        if (opts.reprise?.reporterLesManques()) {
+          opts.reprise.manque(i, msg.slice(0, 80))
+          process.stdout.write('  (à reprendre plus tard)\n')
+          continue
+        }
         process.stdout.write('  (repli piper)\n')
       }
     }
@@ -538,14 +569,27 @@ async function generateBroadcastBytes(opts: {
     }
     // 🔍 Contrôle qualité de la réplique AVANT le montage (lib/controle-voix.ts) : blancs,
     // chuchotements, texte non dit → régénération, voix de secours, ou rognage. Ne lève jamais.
-    wav = await controleVoix.controler({
+    const secoursAvant = controleVoix.bilan().secours
+    wav = garde ?? await controleVoix.controler({
       numero: i + 1, locuteur: turns[i].hostName, texte: plan.texte, wav,
       viaClone: voixObtenues > obtenuesAvant, voixPersonnage: plan.voixPersonnage, voixLocale: plan.voixPiper,
     })
+    // 👂 L'oreille de contrôle, puis garder (chantier) ou reporter le tour (lib/reprise-emission.ts).
+    if (opts.reprise) {
+      const issue = await opts.reprise.apresTour({
+        i, texte: plan.texte, voixPersonnage: plan.voixPersonnage, voixLocale: plan.voixPiper, wav,
+        viaClone: voixObtenues > obtenuesAvant && controleVoix.bilan().secours === secoursAvant,
+      })
+      if (issue.aReprendre) continue
+      wav = issue.wav
+    }
     wavEntries.push({ wav })
   }
   const bilanVoix = controleVoix.ligneBilan()
   if (bilanVoix) console.log(`\n${bilanVoix}`)
+  if (opts.reprise) console.log(opts.reprise.ligneBilan())
+  // Des tours manquent et la nuit peut les reprendre : l'émission est REPORTÉE (ni montage, ni Piper).
+  opts.reprise?.verifierManques()
 
   // ── Habillage « humain » (lib/humain.ts) ─────────────────────────────────────────────
   // Niveaux égalisés entre les voix ; silences variables (plus long après une question, plus
@@ -906,6 +950,9 @@ async function main() {
     for (const a of attributions) console.log(`      · ${a}`)
   }
 
+  // 🔁 Reprise de nuit, oreille de contrôle, règle de publication (lib/reprise-branchement.ts).
+  const reprise = preparerReprise<BroadcastTurn, PlanVoix>(stationId, targetDate, langueStation, repetition)
+
   // 1.b — Sprint DE : ping Chatterbox jusqu'à ready si configuré.
   // Le Space HF peut être en cold start (sleep auto 15min). On le
   // réveille AVANT de commencer à synthétiser, pour éviter un long
@@ -951,6 +998,8 @@ async function main() {
         if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`)
       } else if (etat === 'injoignable') {
         console.warn('    ⚠ Service de synthèse injoignable — repli Piper actif pour toute l\'émission.')
+        // …sauf s'il reste une nuit derrière : on reporte AVANT d'écrire (ni modèle, ni Piper).
+        if (reprise.reporterLesManques()) reprise.reporterTout('service de synthèse injoignable')
       }
     }
   }
@@ -964,8 +1013,13 @@ async function main() {
   console.log('\n🤖 Dialogue + TTS…')
   const t0 = Date.now()
   const result = await generateBroadcastBytes({
-    station, numTurns, topic: '', news, date: targetDate,
+    station, numTurns, topic: '', news, date: targetDate, reprise,
   })
+  // ⚖️ Règle de publication (lib/regle-publication.ts) : publier, ou garder la veille (lève).
+  const decision = repetition ? null : await deciderOuArreter(reprise, async dates => {
+    const vus = await dTagsPublies(RADIO_BROADCAST_KIND, dates.map(d => broadcastDTag(stationId, d)), pubkeyDe(nostrPriv), getRelays())
+    return vus === null ? null : vus.size > 0
+  }, targetDate)
   const genSec = (Date.now() - t0) / 1000
   console.log(`    ✓ ${result.turns.length} tours, ${(result.durationSec / 60).toFixed(1)} min audio (${genSec.toFixed(0)}s wall)`)
   if (result.segments.length > 0) {
@@ -1096,6 +1150,8 @@ async function main() {
   }
 
   console.log(`\n✅ Broadcast ${stationId} pour ${targetDate} publié.`)
+  reprise.clore()
+  if (decision?.action === 'publier-alerte') console.warn(`\n⚠️  ${stationId} : ${decision.raison}`)
 
   // ── VERDICT DES VOIX — la partie qui manquait ────────────────────────
   //
@@ -1145,6 +1201,8 @@ main()
   // (lib/sortie.ts — nostr.mom retenait Free Press FM le 11/09/2026).
   .then(() => terminer(0))
   .catch(err => {
+    // Un report ou une veille gardée n'est pas une panne : on le dit, et le code le distingue.
+    if (err instanceof ArretVolontaire) { console.log(`\n${err.message}`); return terminer(err.code) }
     console.error('\n❌ Échec :', err)
     process.exit(1)
   })

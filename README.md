@@ -249,6 +249,67 @@ Deux conséquences dans le code :
 
 **Coût additionnel** : ~10 USD/mois (HF Space GPU T4 avec sleep auto).
 
+## Voix fiables : reprises de nuit, règle de publication, oreille de contrôle (07/10/2026)
+
+**Le constat** (journaux du 21/09 au 06/10/2026) : environ deux stations sur trois sortaient
+avec des tours en voix de repli Piper. Sur 2 171 tours perdus, **1 919 (88 %)** l'ont été sur
+« échéance de la NUIT dépassée » : la nuit n'accordait que 150 minutes de voix clonée à toutes
+les stations, alors que le GPU de data-space met ~32 minutes par station (il calcule à peu près
+en temps réel ; « file pleine » n'est que le relevé régulier d'un travail en cours). Les 3 à 5
+premières stations consommaient tout, les suivantes partaient entières en Piper. Le reste :
+coupures réseau du Mac (141 tours) et jeton data-space indérivable pendant ces coupures (401,
+81 tours).
+
+**Ce qui a changé** :
+
+- **La fenêtre** dure jusqu'à `RADIO_FIN_FENETRE` (heure locale, défaut `07:00`), au plus
+  `RADIO_FENETRE_MAX_H` heures après le départ (défaut `11`). Les voix clonées sont permises
+  jusqu'à la fin de la fenêtre moins `RADIO_MARGE_MONTAGE_MIN` (défaut `15`).
+  `CHATTERBOX_NUIT_MINUTES`, s'il est posé, remet l'ancien budget (dépannage seulement).
+  L'application joue la plus récente émission tant que celle du jour n'est pas publiée.
+- **Reprise** : une station dont un tour a perdu sa voix de personnage n'est plus dite en
+  Piper ; elle est **reportée** (code de sortie 75) et reprise à un passage suivant
+  (`RADIO_MAX_PASSES`, défaut `4`), après une pause (`RADIO_PAUSE_REPRISE_MIN`, défaut `10`).
+  Le **chantier** (`RADIO_CHANTIERS_DIR`, défaut `~/Library/Application Support/infinity-radio/chantiers`)
+  garde le texte écrit et chaque tour déjà dit par sa voix : une reprise n'appelle pas le modèle
+  de langue et ne redemande **que les tours manquants**. Chantier effacé à la publication, et
+  au bout de 3 jours. Un service injoignable au réveil reporte la station AVANT l'écriture.
+- **Dernière chance** : dernier passage, ou moins de `RADIO_MARGE_DERNIERE_CHANCE_MIN`
+  (défaut `45`) avant la fin de la fenêtre. Là seulement, le repli Piper reprend son rôle et la
+  règle de publication décide.
+
+**Règle de publication** (décision du Bâtisseur : « si elle sonne robotique ou
+incompréhensible, elle est refabriquée au lieu d'être diffusée ») :
+
+| Situation | Ce qui se passe |
+|---|---|
+| toutes les voix de personnage sont là | publiée |
+| des tours en repli, il reste du temps | **reportée**, reprise plus tard (seuls les tours manquants) |
+| fin de fenêtre, `RADIO_REPLI_FINAL=garder-veille` (**défaut**) | **non publiée** : l'émission précédente reste à l'antenne (code 76) |
+| …mais aucune émission de la station sur les `RADIO_VEILLE_MAX_JOURS` (défaut `2`) derniers jours, ou relais illisibles | publiée en repli, **avec alerte** (mieux qu'un silence) |
+| fin de fenêtre, `RADIO_REPLI_FINAL=publier-alerte` | publiée en repli, avec alerte (comportement d'avant) |
+
+`RADIO_REPLI_TOLERE` (défaut `0`) : nombre de tours en repli acceptés sans rien reporter.
+Un lancement à la main de `generate-broadcast` est une dernière chance (pas de nuit derrière) ;
+`--repetition` ne reporte jamais et n'applique pas la règle.
+
+**Oreille de contrôle** (`src/lib/oreille.ts`) : chaque tour dit par une voix de personnage est
+réécouté par **whisper.cpp** et comparé au texte prévu — taux d'erreur de mots (WER), part de
+mots perdus (la mesure de l'usine du Journal), fin entendue. Les nombres, noms propres, sigles
+et hésitations ne comptent pas ; en chinois on compte par caractère. Un tour refusé est
+régénéré tout de suite (`OREILLE_ESSAIS`, défaut `1`), puis reporté comme un tour manquant ; à
+la dernière chance, il est dit en voix locale plutôt qu'incompréhensible.
+
+- `OREILLE_SEUIL_WER` (défaut `0.5`), `OREILLE_SEUIL_PERDUS` (défaut `0.25`),
+  `OREILLE_FIN=0` (ne pas exiger la fin), `OREILLE_MOTS_MIN` (défaut `4` : en deçà on ne juge
+  pas), `OREILLE_DELAI_S` (défaut `120`), `OREILLE=0` (coupe l'oreille).
+- **Installation** sur la machine de nuit (sinon l'oreille se déclare indisponible et la nuit
+  continue sur le contrôle du signal seul) :
+  `brew install whisper-cpp`, puis le modèle
+  `curl -L -o "$HOME/Library/Application Support/infinity-radio/whisper/ggml-base.bin" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin`
+  (~150 Mo ; `OREILLE_MODELE` et `OREILLE_BINAIRE` pour d'autres chemins). Les seuils n'ont
+  pas encore été calibrés sur de vraies émissions.
+
 ## Maintenance
 
 **Coûts à surveiller** :
