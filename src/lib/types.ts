@@ -120,6 +120,12 @@ export interface RadioBroadcast {
   /** Pauses musicales et jingles (absent quand l'émission n'en a pas). */
   segments?:   BroadcastSegment[]
   newsRefs:    string[]
+  /**
+   * Les liens évoqués dans l'émission, chacun à l'instant où il est évoqué (07/10/2026,
+   * `lib/liens-emission.ts`). OPTIONNEL et RÉTROCOMPATIBLE : absent quand il n'y en a aucun,
+   * ignoré par les lecteurs qui ne le connaissent pas.
+   */
+  liens?:      import('./liens-emission').LienEmission[]
   model:       string
   /**
    * Titre court de l'émission (≤ 70 car., langue de la station) pour la liste « Émissions
