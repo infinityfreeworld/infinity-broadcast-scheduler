@@ -158,7 +158,8 @@ test('⭐ JAMAIS dans le texte destiné au modèle : aucune adresse, pour aucune
 test('⭐ branchement : les liens d’action entrent dans le fil APRÈS la dernière réplique écrite', () => {
   const src = readFileSync(fileURLToPath(new URL('../../scripts/generate-broadcast.ts', import.meta.url)), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-  const boucle = src.indexOf('for (let i = 0; i < numTurns; i++)')
+  // Depuis #81 (reprise de nuit), la boucle d'écriture s'écrit `i < (repris ? 0 : numTurns)`.
+  const boucle = src.search(/for \(let i = 0; i < (?:\(repris \? 0 : numTurns\)|numTurns); i\+\+\)/)
   const finBoucle = src.indexOf("if (turns.length === 0) throw new Error('Aucun tour généré')")
   const ajout = src.indexOf('news.push(...liensAction)')
   const prompts = [...src.matchAll(/formatNewsForPrompt\(news\)/g)].map(m => m.index!)
