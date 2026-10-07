@@ -14,6 +14,7 @@ import type { Event as NostrEvent, Filter } from 'nostr-tools'
 import { getRelays } from './nostr'
 import { adminPubkeys, ADMINS_RADIO_PAR_DEFAUT } from './admins-radio'
 import type { NewsItem, RadioStation } from './types'
+import { stationThema } from './stations-thema'
 import {
   KIND_MHE, KIND_AGORA, KINDS_BIOGAME, KIND_DECISION_BIOGAME, KIND_MODERATION_IHL, KIND_SUPPRESSION,
   confianceDepuisModeration, seuilsAnciennete, etablisDepuis, sujetsLisibles, retenirSujetsCarte,
@@ -125,6 +126,10 @@ export interface CartePourStation {
 
 /** Ce que la carte apporte à CETTE station. Les autres stations : rien, et aucune requête. */
 export async function sujetsCartePourStation(station: RadioStation, date: string): Promise<CartePourStation> {
+  // 07/10/2026 — stations thématiques (Abondance, OBF, Biogame) : leurs propres lectures. Import
+  // dynamique : `stations-thema-relais.ts` réutilise ce module, un import statique ferait un cycle.
+  const thema = stationThema(station)
+  if (thema !== null) return (await import('./stations-thema-relais')).sujetsStationThema(thema, station, date)
   const role = stationConcernee(station)
   if (role === null) return { concernee: false, actualites: [], rubrique: [], journal: '' }
   if (role === 'manifestactions') {

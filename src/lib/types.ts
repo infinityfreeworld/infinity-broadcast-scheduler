@@ -12,6 +12,8 @@ export type StationKind =
   | 'hydrogene' | 'g1' | 'deglingos' | 'diginomad' | 'tech'
   | 'pirate' | 'oasis'
   | 'manifestactions'   // 07/10/2026 — les Manifestactions de la carte, ou leur raison d'être
+  | 'abondance'         // 07/10/2026 — les projets d'Abondance, ou sa raison d'être
+  | 'obf'               // 07/10/2026 — le système d'alerte OBF, les crises, et comment le soutenir
   | 'user'
 
 export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh' | 'ru'

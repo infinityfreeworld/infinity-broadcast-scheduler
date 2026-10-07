@@ -78,6 +78,11 @@ export const ANIMATEURS_SANS_VOIX_INVENTEE: ReadonlySet<string> = new Set([
   // Manifestactions (07/10/2026) — voix à concevoir et déposer (workflow deposer-voix).
   'manifestactions-radio:ma-ines',
   'manifestactions-radio:ma-bastien',
+  // Abondance et OBF (07/10/2026) — idem.
+  'abondance-radio:ab-solene',
+  'abondance-radio:ab-yann',
+  'obf-radio:obf-maya',
+  'obf-radio:obf-gregoire',
 ])
 
 export function voixInventee(stationId: string, hostId: string): string | undefined {

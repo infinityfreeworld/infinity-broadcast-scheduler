@@ -80,25 +80,27 @@ const KB_FW_LEILA: HostKB = {
 // (module-help-content.ts, « biogame »). ⚠️ Aucun montant de prix : le module
 // n'a pas encore de modèle de dotation — les animateurs n'en inventent pas.
 
+// 07/10/2026 — fiches réécrites d'après le module Biogame de l'application (Règles du jeu, Hall,
+// Quêtes « We are », forêt des Biogames). Aucun montant de prix : le module n'en fixe pas.
 const KB_BG_NORA: HostKB = {
   hostId: 'bg-nora', stationId: 'bigballs-radio', updatedAt: NOW,
-  personality: "Coach de terrain, voix féminine enjouée et directe. Organise des défis, parle comme quelqu'un qui revient d'une journée dehors. Encourage sans flatter, donne toujours une action concrète à faire dans la semaine.",
+  personality: "Coach de terrain, voix féminine enjouée et directe. Parle comme quelqu'un qui revient d'une journée dehors. Encourage sans flatter, donne toujours une action concrète à faire dans la semaine. Rappelle volontiers que le lancement officiel des Biogames est prévu courant 2027.",
   entries: [
-    entry('e1', "Ce que sont les Biogames", "Jouer pour régénérer le vivant. Les points se gagnent dans le réel, pour ce qui est beau, constructif et vivant — pas pour le temps passé devant l'écran. Tournois, défis, quêtes d'entraide et concours.", ['biogames','principe'], 3),
-    entry('e2', "Run for Life", "Les défis Run for Life : courir, marcher ou pédaler pour une cause du vivant, seul ou en équipe. On rejoint un défi existant ou on en crée un, et on apporte ses preuves de participation.", ['défi','run-for-life','sport'], 3),
-    entry('e3', "Quêtes d'entraide", "Une quête d'entraide, c'est une mission utile près de chez soi : nettoyer une berge, aider un voisin, planter une haie. Petite à l'échelle, grande en effet quand beaucoup la font.", ['quête','entraide','local'], 3),
-    entry('e4', "Monter une équipe", "Une équipe tient quand chacun a un rôle clair et qu'on se donne rendez-vous en vrai. Commencer petit, se retrouver souvent, raconter ce qu'on a fait.", ['équipe','organisation'], 2),
+    entry('e1', "Ce que sont les Biogames", "Les Biogames transforment la coopération autour des besoins vitaux et le dépassement de soi en jeux réels, mesurables et géolocalisés. Pas de divertissement extractif : chaque partie produit de la valeur réelle — nourriture cultivée, déchets ramassés, chantiers livrés, savoirs transmis. On ne joue pas contre les autres, on joue pour le vivant.", ['biogames','principe'], 3),
+    entry('e2', "Compétitions et Défis", "Compétitions : trail, course, marche, plogging (on court en ramassant les déchets), seed-run (on sème en courant), vélo, orientation, Baston et Fight Wheel Cup, en présentiel ou à distance. Défis : des missions d'autonomie et d'entraide du quotidien — maraude, compagnie aux aînés, courses et démarches, distribution alimentaire, mentorat, coup de main, écoute, aide aux animaux.", ['compétitions','défis'], 3),
+    entry('e3', "Créer son Biogame", "Tout Bâtisseur peut créer sa compétition, son tournoi ou son défi : chaque formulaire a ses règles du jeu et ses prix. La création est soumise à l'administration et n'apparaît pour tous qu'une fois validée. On y participe en jouant, mais aussi en arbitrant, organisant, accueillant, filmant, votant, prêtant du matériel ou soutenant en mécénat.", ['créer','participer'], 3),
+    entry('e4', "Les Challenges du mois", "Chaque mois, un challenge des Biogames avec des prix à la clé et des résultats annoncés à la fin du mois. Jamais de tirage au sort : le classement se fait sur l'effort mesuré et validé.", ['challenges','mois'], 2),
   ],
 }
 
 const KB_BG_MALIK: HostKB = {
   hostId: 'bg-malik', stationId: 'bigballs-radio', updatedAt: NOW,
-  personality: "Arbitre et conteur des tournois, voix masculine posée et chaleureuse. Précis sur les règles, aime raconter les moments forts. Rappelle que la preuve compte plus que la parole.",
+  personality: "Arbitre et conteur des tournois, voix masculine posée et chaleureuse. Précis sur les règles, aime raconter la forêt des Biogames et ses lieux. Rappelle que la preuve compte plus que la parole.",
   entries: [
-    entry('e1', "Tournois et Ligue", "Les tournois opposent des équipes sur des épreuves du vivant. Les résultats nourrissent la Ligue et le Palmarès, avec des trophées pour les parcours remarquables.", ['tournoi','ligue','palmarès'], 3),
-    entry('e2', "Les preuves de participation", "Dans un Biogame, on ne se contente pas de dire qu'on a agi : on apporte une preuve. La co-présence vérifiée (VPM) montre qu'on était réellement là, ensemble.", ['preuve','vpm','co-présence'], 3),
-    entry('e3', "Concours", "Les concours récompensent les réalisations les plus belles ou les plus utiles. Le soutien et le financement passent par Abondance, le module des projets.", ['concours','abondance'], 2),
-    entry('e4', "L'esprit du jeu", "Un Biogame se gagne ensemble. Le classement motive, mais le vrai score, c'est ce qui reste sur le terrain une fois la partie finie.", ['esprit','fair-play'], 2),
+    entry('e1', "Tournois, Tribus et GTA", "Dans les Tournois, des équipes locales — les Tribus — rivalisent à qui produira le plus de valeur vitale, mesurée en kilos, mètres carrés, heures, personnes formées. Une fois par an, le Grand Tournoi de l'Autonomie réunit toutes les Tribus autour d'objectifs fixés pour l'année. Un tournoi peut être local, régional, national ou mondial ; la Ligue et le Palmarès gardent la mémoire des résultats validés.", ['tournoi','tribus','gta','ligue'], 3),
+    entry('e2', "Les preuves et le vote", "Dans un Biogame, on apporte une preuve. La validation de présence mutuelle (VPM) montre qu'on était réellement là, ensemble — de 3 à 50 valideurs selon ce que fixe le créateur. Les Paliers 3, humains certifiés, votent pour désigner les vainqueurs des épreuves jugées : une voix par épreuve, publique et modifiable.", ['preuve','vpm','vote'], 3),
+    entry('e3', "Les Quêtes « We are »", "Les Quêtes sont de grandes opérations collectives : We are Alive (régénération massive : reboiser, reconstruire après les incendies), We are Guardian, We are Justice, We are Builder, We are Human, We are Finance, We are Mecalibre, We are Fighters, We are Runners. Chacune a ses objectifs et ses règles, au service du vivant, des besoins vitaux et de l'émancipation.", ['quêtes','we-are-alive'], 3),
+    entry('e4', "La forêt des Biogames", "Dans l'application, on entre dans les Biogames par une forêt, le Teryaum, et ses portails : le sommet de l'Olympe au-dessus des nuages, les jardins nourriciers du GTA, Athlos la palestre, Brainstorm où l'on se réunit pour trouver des solutions, Hackers Libres, l'atelier Mecalibre, le dojo de Baston, la galerie des Super Héros, et six arènes du dépassement de soi.", ['forêt','dimensions'], 2),
   ],
 }
 
@@ -328,6 +330,48 @@ const KB_MA_BASTIEN: HostKB = {
   ],
 }
 
+// ── Abondance et OBF (07/10/2026) ─────────────────────────────────────────
+
+const KB_AB_SOLENE: HostKB = {
+  hostId: 'ab-solene', stationId: 'abondance-radio', updatedAt: NOW,
+  personality: "Chercheuse de pépites, voix féminine chaleureuse et curieuse. Raconte un projet comme une rencontre : ce qu'il fait, pourquoi il compte, ce qui lui manque. N'invente jamais un chiffre, un nom ni un lieu.",
+  entries: [
+    entry('e1', "Ce qu'est Abondance", "Abondance est l'économie d'entraide et le financement participatif d'Infinity : faire circuler les ressources et financer ensemble les projets qui servent le vivant, les besoins vitaux et l'émancipation. Un Bâtisseur y présente son projet ; l'administration le valide avant qu'il soit visible de tous.", ['abondance','principe'], 3),
+    entry('e2', "Les campagnes de soutien", "Abondance met aussi en avant des campagnes extérieures choisies par l'équipe : semences paysannes, secours, médias libres, monnaie libre, enfance… Le don ou l'achat se fait chez l'organisme, Infinity n'encaisse rien et n'invente aucun montant.", ['campagnes','soutien'], 2),
+    entry('e3', "Les thèmes", "Chaque projet dit ce qu'il fait par ses thèmes : alimentation et eau, semences, environnement, habitat et autonomie, santé, enfance, éducation, solidarité, entraide locale, secours, citoyenneté, droit, économie et monnaie, médias libres, numérique libre, art et culture, rencontres.", ['thèmes'], 2),
+  ],
+}
+
+const KB_AB_YANN: HostKB = {
+  hostId: 'ab-yann', stationId: 'abondance-radio', updatedAt: NOW,
+  personality: "Artisan de l'entraide, voix masculine posée et pratique. Pour chaque projet, il dit précisément comment aider : donner, prêter, venir, transmettre, faire connaître. Rappelle que l'argent n'est qu'une forme de soutien parmi d'autres.",
+  entries: [
+    entry('e1', "Les besoins d'un projet", "Un projet peut demander du financement, du bénévolat, du mécénat, du matériel, des compétences, du réseau, un lieu ou de la visibilité. Proposer son aide se fait depuis la page du projet dans Abondance : une proposition dirigée vers le porteur, qui l'accepte ou non.", ['besoins','aider'], 3),
+    entry('e2', "Financer sans intermédiaire", "Un porteur relie à son projet sa cagnotte, sa campagne participative ou son adresse en monnaie libre Ğ1. Infinity affiche les liens, le don se fait chez la plateforme. La cagnotte publique d'Abondance, elle, finance chaque mois des projets votés par les Paliers 3.", ['financement','ğ1','cagnotte'], 3),
+    entry('e3', "Suivre un projet", "On peut mettre un projet en favori et suivre ses nouvelles : le porteur y raconte où il en est. Un projet qu'on a aidé, c'est un projet qu'on a envie de voir grandir.", ['suivi','nouvelles'], 2),
+  ],
+}
+
+const KB_OBF_MAYA: HostKB = {
+  hostId: 'obf-maya', stationId: 'obf-radio', updatedAt: NOW,
+  personality: "Ancienne secouriste, voix féminine calme et précise. Ne dramatise jamais : elle transforme chaque crise en gestes concrets et en Manifestactions possibles. Rappelle toujours qu'en danger, on appelle d'abord les secours (112 en Europe).",
+  entries: [
+    entry('e1', "Les quatre niveaux", "Vert : sans danger vital (arbre sur la route, animal perdu). Bleu : danger réel mais pas imminent (disparition, personne à héberger, besoin vital). Orange : danger imminent et potentiellement létal (agression, incendie, menace). Rouge : urgence vitale, quelqu'un est déjà atteint. Dans le doute, on monte d'un niveau, jamais l'inverse.", ['niveaux','alerte'], 3),
+    entry('e2', "Sécuriser, éteindre, soigner", "La doctrine d'OBF pour plusieurs dangers à la fois : d'abord la police si quelqu'un menace, puis les pompiers s'il y a le feu, puis les soins. Un seul service suffit, celui qui prime. Les numéros d'urgence sont ceux du pays où l'on se trouve.", ['doctrine','secours'], 3),
+    entry('e3', "Soutenir par des Manifestactions", "Avant la crise : former aux premiers secours, cartographier les points d'eau, débroussailler, préparer des kits d'urgence, créer des réseaux de veilleurs de quartier. Pendant : héberger, ravitailler, relayer les consignes officielles. Après : reconstruire, replanter, accompagner — c'est l'esprit de We are Alive.", ['manifestactions','stratégies'], 3),
+  ],
+}
+
+const KB_OBF_GREGOIRE: HostKB = {
+  hostId: 'obf-gregoire', stationId: 'obf-radio', updatedAt: NOW,
+  personality: "Veilleur de la Sentinelle, voix masculine grave et mesurée. Strictement factuel sur les catastrophes et les conflits : il cite sa source, ne prend pas parti entre belligérants, ne donne jamais de bilan qu'il n'a pas. Engagé, en revanche, sur ce que chacun peut faire.",
+  entries: [
+    entry('e1', "La Sentinelle", "La Sentinelle d'OBF agrège en temps réel des sources ouvertes : séismes (USGS), incendies, tempêtes et volcans (NASA EONET), alertes de catastrophes (GDACS), et conflits (GDELT). Chaque événement a sa gravité, sa zone, sa source.", ['sentinelle','veille'], 3),
+    entry('e2', "Les conflits", "Dans un conflit, OBF ne choisit pas de camp : il aide à voir où sont les dangers pour les civils, à alerter, à se protéger. Les modes Flash et Ghost protègent ceux qu'on pourrait pister : Flash signale sa position à qui l'on veut, Ghost masque tout.", ['conflits','protection'], 3),
+    entry('e3', "Une alerte se signe", "Une alerte OBF porte le nom, l'alias et l'identifiant public de son auteur : cela dissuade les fausses alertes et permet de le contacter. Les alertes orange et rouge demandent le Palier 2. Une fausse alerte ou une alerte discriminatoire peut faire révoquer le profil.", ['règlement','responsabilité'], 2),
+  ],
+}
+
 // ── Map publique ───────────────────────────────────────────────────────────
 
 export const SEED_HOST_KBS: Record<string, HostKB> = {
@@ -363,6 +407,11 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   // 07/10/2026 — Manifestactions
   'ma-ines':     KB_MA_INES,
   'ma-bastien':  KB_MA_BASTIEN,
+  // 07/10/2026 — Abondance et OBF
+  'ab-solene':   KB_AB_SOLENE,
+  'ab-yann':     KB_AB_YANN,
+  'obf-maya':    KB_OBF_MAYA,
+  'obf-gregoire': KB_OBF_GREGOIRE,
 }
 
 /** True si la KB de cet animateur est seed (lecture seule en UI). */

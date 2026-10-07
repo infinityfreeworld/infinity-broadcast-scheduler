@@ -26,6 +26,7 @@ export const RELAIS = [
 export const RADIOS = [
   'wtf-radio', 'freeworld-radio', 'bigballs-radio', 'mindctrl-radio', 'hydrogene-radio', 'g1-radio',
   'deglingos-radio', 'diginomad-radio', 'tech-radio', 'pirate-radio', 'oasis-fm', 'manifestactions-radio',
+  'abondance-radio', 'obf-radio',
   'free-press-fm', 'voces-libres', 'svoboda-fm', 'zi-you-zhi-sheng',
 ]
 export const CANAUX_TV = ['tv-main-1', 'tv-nature']

@@ -1,9 +1,9 @@
 /**
  * @module Infinity/Radio/SeedStations
- * @description Les stations de départ du générateur — 16 au 07/10/2026 : 12 en français
- *   (dont Manifestactions, ajoutée le 07/10/2026, et Biogame, qui a remplacé Big Balls Radio le
- *   16/09/2026 sous le même identifiant `bigballs-radio`) et une par langue en anglais, espagnol,
- *   russe et chinois.
+ * @description Les stations de départ du générateur — 18 au 07/10/2026 : 14 en français
+ *   (dont Manifestactions, Abondance et OBF, ajoutées le 07/10/2026, et Biogame, qui a remplacé
+ *   Big Balls Radio le 16/09/2026 sous le même identifiant `bigballs-radio`) et une par langue en
+ *   anglais, espagnol, russe et chinois.
  *
  * ⚠️ CONTRAT avec l'application (`infinity/src/modules/radio/stations/seed-stations.ts`) : même
  *   identifiant, même fréquence, même langue, mêmes animateurs pour chaque station présente des
@@ -92,8 +92,10 @@ export const SEED_STATIONS: RadioStation[] = [
     language: 'fr',
     frequency: 108.5,
     name: 'Biogame',
-    tagline: 'Les Biogames, terrain par terrain.',
-    description: "Les Biogames organisées : tournois, défis Run for Life, quêtes d'entraide et concours. Des points qui se gagnent dans le réel, pour ce qui est beau, constructif et vivant. On y prépare, on y raconte, on y donne rendez-vous.",
+    tagline: 'On ne joue pas contre les autres, on joue pour le vivant.',
+    // 07/10/2026 — raison d'être enrichie (demande du Bâtisseur) : le concept, les types, les activités,
+    // la forêt des Biogames, et le lancement officiel courant 2027. Sujets de fond : lib/sujets-biogame.ts.
+    description: "La station des Biogames : des jeux réels, mesurables et géolocalisés qui transforment la coopération autour des besoins vitaux et le dépassement de soi en parties qui produisent de la valeur réelle — nourriture cultivée, déchets ramassés, chantiers livrés, savoirs transmis. Compétitions, Tournois des Tribus et Grand Tournoi de l'Autonomie, Défis, Challenges du mois, Quêtes « We are » comme We are Alive, la Ligue, le Palmarès et le vote des Paliers 3. Lancement officiel prévu courant 2027.",
     color: '#ffb320',
     hosts: [
       { id: 'bg-nora',  name: 'Nora',  gender: 'female', trait: 'coach de terrain, organise les défis, énergie communicative', color: '#ffb320', avatar: '🏃' },
@@ -307,6 +309,55 @@ export const SEED_STATIONS: RadioStation[] = [
       { id: 'ma-bastien', name: 'Bastien', gender: 'male',  trait: 'naturaliste et conteur du vivant, relie chaque action aux besoins vitaux', color: '#ff9ab8', avatar: '🌿' },
     ],
     sources: [],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+
+  // ── 07/10/2026 — Abondance et OBF (décisions du Bâtisseur) ─────────────
+  // Abondance : TOUS les projets d'Abondance — un projet nouvellement validé est raconté en détail, les
+  // autres tournent chaque jour, les campagnes de soutien aussi ; sans projet, la raison d'être
+  // (lib/sujets-abondance.ts). Pas de flux RSS : son actualité, c'est Abondance.
+  // OBF : le système d'alerte expliqué en détail, les conflits, et le soutien par des Manifestactions ;
+  // l'actualité des crises par des sources factuelles, réglables ensuite dans l'IHL (lib/sujets-obf.ts).
+  // Voix Piper sous licence permise (lib/voix.ts) ; pas encore de voix inventée (data/voix-inventees.ts).
+  {
+    id: 'abondance-radio',
+    kind: 'abondance',
+    language: 'fr',
+    frequency: 93.6,
+    name: 'Abondance',
+    tagline: 'Chaque projet mérite d\'être porté.',
+    description: "La station d'Abondance, l'économie d'entraide d'Infinity : elle met en avant tous les projets qui y figurent — ce qu'ils font, où, ce dont ils ont besoin (financement, bénévolat, matériel, compétences, un lieu…) et comment les soutenir — et raconte en détail chaque nouveau projet dès qu'il apparaît. Sa raison d'être : faire circuler les ressources et financer ensemble ce qui sert le vivant, les besoins vitaux et l'émancipation.",
+    color: '#e8b730',
+    hosts: [
+      { id: 'ab-solene', name: 'Solène', gender: 'female', trait: 'chercheuse de pépites, raconte les projets et ceux qui les portent avec chaleur', color: '#e8b730', avatar: '🌻' },
+      { id: 'ab-yann',   name: 'Yann',   gender: 'male',   trait: 'artisan de l\'entraide, concret sur les besoins et la façon d\'aider',            color: '#f4d06f', avatar: '🤲' },
+    ],
+    sources: [],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+  {
+    id: 'obf-radio',
+    kind: 'obf',
+    language: 'fr',
+    frequency: 112.0,
+    name: 'OBF',
+    tagline: 'Veiller, alerter, se relever ensemble.',
+    description: "La station d'OBF — Overwatch Blaze Field, l'alerte communautaire d'Infinity face aux urgences : comment elle marche dans le détail (quatre niveaux, Alerter, Moniteur, Sentinelle, protection Flash et Ghost), ce que la veille mondiale montre des catastrophes et des conflits, et pourquoi la soutenir — en organisant des Manifestactions adaptées à chaque situation, avant, pendant et après la crise. Neutre et factuelle sur les faits, engagée sur l'action.",
+    color: '#e85555',
+    hosts: [
+      { id: 'obf-maya',     name: 'Maya',     gender: 'female', trait: 'ancienne secouriste, calme et précise, transforme chaque crise en gestes concrets', color: '#e85555', avatar: '🛟' },
+      { id: 'obf-gregoire', name: 'Grégoire', gender: 'male',   trait: 'veilleur de la Sentinelle, factuel sur les conflits et les catastrophes, sans sensationnalisme', color: '#f4c842', avatar: '🔭' },
+    ],
+    sources: [
+      { type: 'rss', url: 'https://news.un.org/feed/subscribe/fr/news/topic/humanitarian-aid/feed/rss.xml', title: 'ONU Info — aide humanitaire' },
+      { type: 'rss', url: 'https://news.un.org/feed/subscribe/fr/news/topic/climate-change/feed/rss.xml',   title: 'ONU Info — climat et catastrophes' },
+      { type: 'rss', url: 'https://www.msf.fr/rss.xml',                                                      title: 'Médecins Sans Frontières' },
+      { type: 'rss', url: 'https://www.gdacs.org/xml/rss.xml',                                               title: 'GDACS (alertes de catastrophes, ONU et Commission européenne)' },
+    ],
     tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,
