@@ -25,6 +25,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { SEED_HOST_KBS } from '../data/seed-host-kbs'
+import { extraireLiensEmission, champLiens } from '../lib/liens-emission'
 import type { RadioStation, RadioHost, HostKB, BroadcastTurn, RadioBroadcast, NewsItem, BroadcastSegment } from '../lib/types'
 import { appelerLLM, maillonsDisponibles, bilanDesMaillons, type LLMMessage } from '../lib/llm'
 import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } from '../lib/personas'
@@ -1206,6 +1207,8 @@ async function main() {
     turns:       result.turns,
     ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
+    // L'écran des liens de l'appli (07/10/2026) : chaque lien évoqué, à l'instant où il l'est.
+    ...champLiens(extraireLiensEmission({ turns: result.turns, news })),
     model,
     ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
     ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
