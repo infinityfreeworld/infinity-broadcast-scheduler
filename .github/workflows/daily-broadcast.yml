@@ -248,6 +248,9 @@ jobs:
           # voix). Vide = filtrage par la FORME des events, ce qui suffit
           # mais laisse la porte plus large. Voir src/lib/pulse.ts.
           RADIO_ADMIN_PUBKEYS: ${{ vars.RADIO_ADMIN_PUBKEYS || '' }}
+          # Courrier des auditeurs (07/10/2026, src/lib/courrier/) : clé « courrier radio ».
+          # Absente = aucun vrai message lu, l'émission se fait comme avant.
+          RADIO_COURRIER_NSEC: ${{ secrets.RADIO_COURRIER_NSEC || '' }}
           # ── Synthèse Chatterbox (data-space, GPU à la demande) ────────
           CHATTERBOX_TTS_URL:        ${{ secrets.CHATTERBOX_TTS_URL || '' }}
           CHATTERBOX_API_KEY:        ${{ secrets.CHATTERBOX_API_KEY || '' }}

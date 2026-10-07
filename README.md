@@ -276,6 +276,22 @@ Deux conséquences dans le code :
 - **Secrets GitHub** : encrypted at rest, jamais loggés
 - **Clé NOSTR privée** : appartient à l'admin scheduler, signe les broadcasts. Compromission = quelqu'un peut publier de faux broadcasts au nom de l'admin (mais pas accéder aux clés Anthropic/Pinata).
 
+## Courrier et appels des auditeurs (07/10/2026, `src/lib/courrier/`)
+
+Les Bâtisseurs écrivent à une station depuis l'app (✉️ dans l'en-tête Radio) : message, dédicace
+ou message vocal (≤ 60 s), CHIFFRÉ (NIP-59) vers la clé « courrier radio ». Le soir, pour chaque
+station, le générateur relève ces enveloppes, les juge (liste d'insultes, puis modèle de langue ;
+vocaux transcrits par whisper.cpp) : insulte → écartée et comptée ; douteux → envoyé chiffré aux
+admins radio (IHL › Pirate › Radio › Courrier) ; propre → lu à l'antenne le lendemain à la place du
+courrier inventé. Les appels réglés dans la fiche de la station (30091 `appels`) passent les VRAIS
+vocaux d'abord, puis des auditeurs JOUÉS (personnages inventés, voix inventées). Protocole complet :
+`docs/radio-courrier-auditeurs.md` dans l'app.
+- `RADIO_COURRIER_NSEC` (secret, nsec ou 64 hex) : SANS lui, aucun vrai message n'est lu ; les
+  appels joués suivent seulement le réglage de la station ;
+- `COURRIER_AUDITEURS=0` coupe tout (courrier et appels) ;
+- `COURRIER_TRANSCRIPTION=0` coupe la transcription (les vocaux vont alors à l'IHL) ;
+  `OREILLE_BINAIRE` / `OREILLE_MODELE` : les mêmes que l'oreille de contrôle.
+
 ## Musique dans les émissions (22/09/2026)
 
 Chaque émission contient des **pauses musicales cuites dans le fichier** (`src/lib/musique.ts`),

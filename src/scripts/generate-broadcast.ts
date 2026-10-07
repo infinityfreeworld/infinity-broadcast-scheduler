@@ -78,6 +78,12 @@ import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
 import { consigneTour, type GenreTour } from '../lib/consignes-tour'
 import { terminer } from '../lib/sortie'
 import { licenceDe } from '../lib/voix-licences'
+// Courrier des auditeurs et appels (07/10/2026) — tout vit dans lib/courrier/ ; ici, quelques points d'accroche.
+import { preparerCourrierDuJour, marquerDiffuses, type CourrierDuJour } from '../lib/courrier/courrier-du-jour'
+import { planCourrier, tourDeCourrier } from '../lib/courrier/plan-courrier'
+import { consigneCourrier, promptAuditeurInvente, consigneAuditeurInvente } from '../lib/courrier/consignes-courrier'
+import { transcripteurCourrier } from '../lib/courrier/transcription'
+import { contientInsulte } from '../lib/courrier/filtre-insultes'
 
 // ── Helpers date ─────────────────────────────────────────────────────
 
@@ -123,6 +129,8 @@ interface GenResult {
   voixAttendues: number
   /** Tours qui ont RÉELLEMENT été dits par cette voix. */
   voixObtenues:  number
+  /** Messages d'auditeurs RÉELLEMENT passés dans cette émission (références opaques). */
+  refsCourrier:  string[]
 }
 
 async function generateBroadcastBytes(opts: {
@@ -132,13 +140,18 @@ async function generateBroadcastBytes(opts: {
   news:     NewsItem[]
   /** Date de l'émission : graine du tirage des musiques (Mac et secours tirent les mêmes). */
   date:     string
+  /** Vrai courrier et appels du jour (lib/courrier) ; absent = comme avant. */
+  courrier?: CourrierDuJour | null
 }): Promise<GenResult> {
   const { station, numTurns, topic, news } = opts
   const language = station.language ?? 'fr'
   const turns: BroadcastTurn[] = []
   const wavEntries: ConcatEntry[] = []
   /** Ce qu'il faudra faire dire, et par quelle voix — rempli en phase 1. */
-  const plansVoix: Array<{ texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean }> = []
+  const plansVoix: Array<{ texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean; audio?: import('../lib/audio').DecodedWav }> = []
+  /** Pour chaque tour produit : l'indice de boucle d'où il vient (un vocal ou un auditeur s'insère APRÈS son annonce). */
+  const indexBoucle: number[] = []
+  const refsCourrier: string[] = []
   // ── Le plan « humain » de l'émission (lib/humain.ts), connu AVANT d'écrire ──────────────
   // Les pauses musicales sont décidées ici aussi (même tirage que le montage) : l'animateur qui
   // précède une pause LANCE le morceau, celui qui suit REVIENT de la musique.
@@ -225,6 +238,12 @@ async function generateBroadcastBytes(opts: {
   if (humain.courts.size > 0 || humain.courrier !== null) {
     console.log(`    🗣  réactions courtes aux tours ${[...humain.courts].map(i => i + 1).sort((a, b) => a - b).join(', ') || '—'} · courrier des auditeurs au tour ${humain.courrier !== null ? humain.courrier + 1 : '—'}`)
   }
+  // Vrai courrier et appels (lib/courrier/plan-courrier.ts) : ils prennent des tours ordinaires.
+  const courrier = opts.courrier ?? null
+  const planC = courrier
+    ? planCourrier({ nbTours: numTurns, exclus, courts: humain.courts, courrierHumain: humain.courrier, nbTextes: courrier.textes.length, nbVocaux: courrier.vocaux.length, nbAppels: courrier.auditeursInventes.length })
+    : new Map()
+  const inseres = new Set<string>()
 
   // Phrase d'appel « Rejoignez <station> sur Infinity-freeworld.com » (Bâtisseur,
   // 04/10/2026) : une ou deux fois par émission, jamais plus — à l'ouverture et à
@@ -332,10 +351,14 @@ async function generateBroadcastBytes(opts: {
       : humain.courts.has(i) ? { type: 'court' }
       : humain.courrier === i ? { type: 'courrier', anonyme: host.name === 'Anonyme' }
       : { type: 'courant' }
+    const place = planC.get(i)
+    const tourC = place && courrier ? tourDeCourrier(place, courrier, inseres) : null
     const userMessage: LLMMessage = {
       role: 'user',
       content: consigneTour(genreTour, language, consigneSlogan),
     }
+    // Vrai courrier / appel : sa consigne remplace celle du tour (même langue, même slogan).
+    if (tourC) userMessage.content = consigneCourrier(tourC, language, consigneSlogan)
 
     process.stdout.write(`  [${i + 1}/${numTurns}] ${isGuestTurn ? '🎭 ' : ''}${host.name}… `)
 
@@ -407,11 +430,65 @@ async function generateBroadcastBytes(opts: {
       tEnd:     0,
     }
     turns.push(turn)
+    indexBoucle.push(i)
     // La VOIX reçoit le domaine sous sa forme parlée (« Infiniti tiret Friwourld point
     // com ») ; le nettoyage (astérisques, didascalies…) est fait à l'entrée de chaque moteur.
     plansVoix.push({ texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i) })
 
     console.log(`${turnText.slice(0, 60)}${turnText.length > 60 ? '…' : ''}`)
+
+    // ── Courrier des auditeurs : ce qui passe APRÈS ce tour (vocal, auditeur joué) ──
+    if (place && courrier && tourC) {
+      if (place.type === 'texte') refsCourrier.push(courrier.textes[place.k].ref)
+      if (place.type === 'vocal-intro') {
+        const v = courrier.vocaux[place.k]
+        turns.push({
+          id: `bcast-${i}v-${Date.now().toString(36).slice(-4)}`, hostId: 'auditeur',
+          hostName: v.message.pseudo ?? (language === 'fr' ? 'Auditeur' : 'Listener'),
+          color: '#9aa4b2', avatar: '📞',
+          text: v.transcription ?? (language === 'fr' ? '(message vocal)' : '(voice message)'),
+          tStart: 0, tEnd: 0,
+        })
+        indexBoucle.push(i)
+        plansVoix.push({ texte: '', voixPiper: voiceId, voixPersonnage: null, court: false, audio: v.wav })
+        refsCourrier.push(v.ref)
+        inseres.add(`vocal:${place.k}`)
+        console.log(`  [${i + 1}+] 📞 message vocal d'auditeur (${v.wav.samples.length / v.wav.sampleRate | 0} s)`)
+      }
+      if (place.type === 'appel-intro') {
+        const a = courrier.auditeursInventes[place.k]
+        process.stdout.write(`  [${i + 1}+] 📞 ${a.prenom} (auditeur joué)… `)
+        const appel = {
+          systemPrompt: promptAuditeurInvente(a, station.name, language, topic),
+          messages: [
+            ...turns.slice(-HISTORY_DEPTH).map(t => ({ role: 'assistant' as const, content: `[${t.hostName}] ${t.text}` })),
+            { role: 'user' as const, content: consigneAuditeurInvente(language) },
+          ],
+        }
+        const rep = await appelerLLM(appel)
+        costIn += rep.inputTokens
+        costOut += rep.outputTokens
+        // Même règle d'or que les animateurs : dans la langue de la station, ou pas du tout.
+        const gA = await garantirLangue(retirerEtiquetteLocuteur(rep.text.trim()), language, async (fautif, demande) => {
+          const r2 = await appelerLLM({ ...appel, messages: [...appel.messages, { role: 'assistant', content: fautif }, { role: 'user', content: demande }] })
+          costIn += r2.inputTokens
+          costOut += r2.outputTokens
+          return r2.text
+        })
+        const dit = gA.texte
+        if (gA.horsLangue || !dit || !resteADire(dit) || contientInsulte(dit)) {
+          console.log('(appel sauté)')
+        } else {
+          const voixA = a.voixInventee && chatterboxBranche() ? a.voixInventee : null
+          if (voixA) voixAttendues++
+          turns.push({ id: `bcast-${i}a-${Date.now().toString(36).slice(-4)}`, hostId: `auditeur-joue-${place.k}`, hostName: a.prenom, color: '#9aa4b2', avatar: '📞', text: dit, tStart: 0, tEnd: 0 })
+          indexBoucle.push(i)
+          plansVoix.push({ texte: prononcerDomaine(dit, language), voixPiper: voixPourLangue(language, a.genre, `auditeur-${a.prenom}`) ?? voiceId, voixPersonnage: voixA, court: false })
+          inseres.add(`appel:${place.k}`)
+          console.log(`${dit.slice(0, 60)}${dit.length > 60 ? '…' : ''}`)
+        }
+      }
+    }
   }
 
   if (turns.length === 0) throw new Error('Aucun tour généré')
@@ -462,6 +539,12 @@ async function generateBroadcastBytes(opts: {
     process.stdout.write(`  [${i + 1}/${plansVoix.length}] `)
     file.remplir(i)
     const obtenuesAvant = voixObtenues
+    // Le message vocal d'un auditeur : SA voix, telle quelle — ni synthèse, ni contrôle de voix.
+    if (plan.audio) {
+      process.stdout.write('vocal d\'auditeur\n')
+      wavEntries.push({ wav: plan.audio })
+      continue
+    }
 
     if (plan.voixPersonnage) {
       try {
@@ -561,7 +644,9 @@ async function generateBroadcastBytes(opts: {
   }
 
   // Montage : tours + pauses musicales + jingles, puis encodage.
-  const { entries, segmentsPrevus, finVoix } = await monterAvecMusique(station, wavEntries, opts.date)
+  // Un vocal ou un auditeur inséré décale les entrées : les pauses restent alors APRÈS le bon tour.
+  const alignement = turns.length !== new Set(indexBoucle).size ? { indexBoucle, nbTours: numTurns } : undefined
+  const { entries, segmentsPrevus, finVoix } = await monterAvecMusique(station, wavEntries, opts.date, alignement)
   const merged = concatWavs(entries, habillageActif('HABILLAGE_FOND') ? { bruitDb: -58, rand: prng(`${station.id}:${opts.date}:fond`) } : {})
   for (let i = 0; i < turns.length; i++) {
     turns[i].tStart = wavEntries[i].tStart ?? 0
@@ -584,6 +669,7 @@ async function generateBroadcastBytes(opts: {
     costOutputTokens: costOut,
     voixAttendues,
     voixObtenues,
+    refsCourrier,
   }
 }
 
@@ -599,6 +685,8 @@ async function generateBroadcastBytes(opts: {
  */
 async function monterAvecMusique(
   station: RadioStation, wavEntries: ConcatEntry[], date: string,
+  /** Courrier inséré : l'indice de boucle de chaque entrée, et le nombre de tours prévus. */
+  alignement?: { indexBoucle: number[]; nbTours: number },
 ): Promise<{
   entries: ConcatEntry[]
   segmentsPrevus: Array<{ entry: ConcatEntry; track: import('../lib/types').TrackRef; type: BroadcastSegment['type']; tStartRel?: number }>
@@ -612,7 +700,7 @@ async function monterAvecMusique(
   const r = reglagesMusique(station)
   const sampleRate = wavEntries[0].wav.sampleRate
   const voixDb = rmsDbGlobal(wavEntries.map(e => e.wav.samples))
-  const plan = planifierPauses(station, date, wavEntries.length, r)
+  const plan = planifierPauses(station, date, alignement ? alignement.nbTours : wavEntries.length, r)
   const jingles = (station.jingles ?? []).filter(j => !!j.cid || !!j.url)
   const talkOver = habillageActif('HABILLAGE_TALKOVER')
   if (plan.length > 0 || jingles.length > 0) {
@@ -670,7 +758,7 @@ async function monterAvecMusique(
     superposerLit(wavEntries[0].wav.samples, tete, 4, sampleRate, 'debut', 0)
   }
 
-  const pausesApres = new Map(plan.map(p => [p.apresTour, p.track]))
+  const pausesApres = new Map(plan.map(p => [alignement ? alignement.indexBoucle.lastIndexOf(p.apresTour) : p.apresTour, p.track]))
   for (let i = 0; i < wavEntries.length; i++) {
     entries.push(wavEntries[i])
     const track = pausesApres.get(i)
@@ -960,11 +1048,22 @@ async function main() {
   const news = await fetchNewsForStation(station, 8)
   console.log(`    ${news.length} item(s) récupérés`)
 
+  // 2.b — Courrier des auditeurs et appels du jour (lib/courrier). Ne fait jamais échouer l'émission.
+  console.log('\n✉️  Courrier des auditeurs…')
+  const transcripteur = transcripteurCourrier()
+  if ('indisponible' in transcripteur) console.log(`    · transcription des vocaux indisponible (${transcripteur.indisponible}) — les vocaux iront à l'IHL`)
+  const courrier = await preparerCourrierDuJour({
+    station, date: targetDate, sampleRate: 24_000, repetition,
+    nomsReels: [...station.hosts.map(h => h.name), ...unifiedGuestsForStation(station.id, langueStation).map(p => p.displayName)],
+    juge: (systeme, message) => appelerLLM({ systemPrompt: systeme, messages: [{ role: 'user', content: message }], maxTokens: 150, temperature: 0 }).then(r => r.text),
+    transcripteur: 'indisponible' in transcripteur ? null : transcripteur,
+  }).catch(err => { console.warn(`    ⚠ courrier sauté : ${(err as Error).message.slice(0, 100)}`); return null })
+
   // 3. Génération
   console.log('\n🤖 Dialogue + TTS…')
   const t0 = Date.now()
   const result = await generateBroadcastBytes({
-    station, numTurns, topic: '', news, date: targetDate,
+    station, numTurns, topic: '', news, date: targetDate, courrier,
   })
   const genSec = (Date.now() - t0) / 1000
   console.log(`    ✓ ${result.turns.length} tours, ${(result.durationSec / 60).toFixed(1)} min audio (${genSec.toFixed(0)}s wall)`)
@@ -1096,6 +1195,8 @@ async function main() {
   }
 
   console.log(`\n✅ Broadcast ${stationId} pour ${targetDate} publié.`)
+  // Les messages d'auditeurs passés à l'antenne ne repasseront jamais (registre chiffré du courrier).
+  await marquerDiffuses(result.refsCourrier, targetDate).catch(err => console.warn(`    ⚠ registre du courrier : ${(err as Error).message.slice(0, 100)}`))
 
   // ── VERDICT DES VOIX — la partie qui manquait ────────────────────────
   //
