@@ -9,16 +9,18 @@
  *   table `LIENS_ACTION` ci-dessous, et SEULEMENT elle.
  *
  *   Les adresses sont COPIÉES de l'application (`src/modules/abondance/campagnes-soutien.ts`, champs
- *   `don` / `boutique`), jamais inventées :
- *     1. « Oak Camping Car »        → la cagnotte Papayoux de « F'Aaron of Korrigan Oak » (`don`) ;
+ *   `don` / `boutique`), jamais inventées. Règle du Bâtisseur (07/10, 18 h 50) : quand
+ *   l'application a DEUX liens pour une campagne (don + boutique), les deux figurent ; sinon le seul
+ *   qu'elle a :
+ *     1. « Oak Camping Car »        → la cagnotte Papayoux de « F'Aaron of Korrigan Oak » (`don`, confirmé par le Bâtisseur) ;
  *     2. « Axiom Team »             → ses collectes pour la monnaie libre (`don`) ;
- *     3. « Emancipactions »         → la BOUTIQUE (billet virtuel) ;
+ *     3. « Emancipactions »         → la BOUTIQUE (billet virtuel ; l'application n'a pas de don) ;
  *     4. la cagnotte pour Infinity  → ABSENTE : l'application n'a aucun lien externe pour elle (sa
  *                                     cagnotte est interne : adresse Ğ1 + rail euros, pas encore
  *                                     ouverte). À ajouter ici le jour où une adresse existe ;
- *     5. « Désobéissance Fertile »  → son formulaire de don HelloAsso (`don`) ;
+ *     5. « Désobéissance Fertile »  → le don HelloAsso ET la boutique (le livre) ;
  *     6. « les pompiers »           → l'Œuvre des Pupilles des Sapeurs-Pompiers (`don`) ;
- *     7. « les Enfants Phare »      → la BOUTIQUE du Pharandol.
+ *     7. « les Enfants Phare »      → le don HelloAsso ET la BOUTIQUE du Pharandol.
  *
  *   ── QUAND un lien part à l'écran ───────────────────────────────────────────────────────────
  *   Seulement si l'émission parle RÉELLEMENT de la campagne : son nom est dans une réplique
@@ -40,10 +42,9 @@ export interface LienAction {
   campagne: string
   /** Nom affiché à côté du lien quand le nom cité est trop court pour se suffire. */
   nom:      string
-  /** Ce qu'ouvre le lien. */
-  nature:   'don' | 'boutique'
-  /** Adresse EXACTE, copiée de l'application. */
-  url:      string
+  /** Les adresses EXACTES, copiées de l'application : le don (`don`), puis la boutique
+   *  (`boutique`) quand l'application a les deux — sinon la seule qu'elle a. */
+  adresses: ReadonlyArray<{ nature: 'don' | 'boutique'; url: string }>
   /** La campagne est CITÉE dans une réplique : motif strict (son nom propre). */
   motif:    RegExp
   /** Sujet du jour de la station Abondance : motif plus libre, valable ce jour-là seulement. */
@@ -55,36 +56,42 @@ export interface LienAction {
  */
 export const LIENS_ACTION: readonly LienAction[] = Object.freeze([
   {
-    campagne: 'aaron-korrigan-oak', nom: "F'Aaron of Korrigan Oak", nature: 'don',
-    url: 'https://www.papayoux.com/fr/cagnotte/f-aaron-of-korrigan-oak',
+    campagne: 'aaron-korrigan-oak', nom: "F'Aaron of Korrigan Oak", 
+    adresses: [{ nature: 'don', url: 'https://www.papayoux.com/fr/cagnotte/f-aaron-of-korrigan-oak' }],
     motif: /korrigan[\s-]+oak|f['’ ]?\s?aaron\b|\boak[\s-]+camping[\s-]?car/iu,
     motifSujet: /korrigan|f['’ ]?\s?aaron\b/iu,
   },
   {
-    campagne: 'axiom-team', nom: 'Axiom-Team', nature: 'don',
-    url: 'https://axiom-team.fr/collectes',
+    campagne: 'axiom-team', nom: 'Axiom-Team', 
+    adresses: [{ nature: 'don', url: 'https://axiom-team.fr/collectes' }],
     motif: /axiom[\s-]?team/iu,
   },
   {
-    campagne: 'emancipactions', nom: "Émancip'Actions", nature: 'boutique',
-    url: 'https://emancipactions.fr/billet-virtuel/',
+    campagne: 'emancipactions', nom: "Émancip'Actions", 
+    adresses: [{ nature: 'boutique', url: 'https://emancipactions.fr/billet-virtuel/' }],
     motif: /[ée]mancip['’\s-]?actions?\b/iu,
   },
   {
-    campagne: 'desobeissance-fertile', nom: 'Désobéissance Fertile', nature: 'don',
-    url: 'https://www.helloasso.com/associations/desobeissance-fertile/formulaires/1',
+    campagne: 'desobeissance-fertile', nom: 'Désobéissance Fertile', 
+    adresses: [
+      { nature: 'don', url: 'https://www.helloasso.com/associations/desobeissance-fertile/formulaires/1' },
+      { nature: 'boutique', url: 'https://www.lalibrairie.com/livres/la-desobeissance-fertile--pour-une-ecologie-offensive_0-7005189_9782228927178.html' },
+    ],
     motif: /d[ée]sob[ée]issance[\s-]+fertile/iu,
   },
   {
-    campagne: 'pompiers-odp', nom: 'Pupilles des Sapeurs-Pompiers', nature: 'don',
-    url: 'https://don.odp-pompiers.fr/odp-2024',
+    campagne: 'pompiers-odp', nom: 'Pupilles des Sapeurs-Pompiers', 
+    adresses: [{ nature: 'don', url: 'https://don.odp-pompiers.fr/odp-2024' }],
     // « les pompiers » tout court parle souvent d'une autre actualité : cité ailleurs, il faut l'Œuvre.
     motif: /pupilles\s+des\s+sapeurs[\s-]+pompiers|soutenir\s+les\s+sapeurs[\s-]+pompiers/iu,
     motifSujet: /(?:les\s+)?sapeurs[\s-]+pompiers|(?:les\s+)?pompiers/iu,
   },
   {
-    campagne: 'enfants-phare', nom: 'Les Enfants-Phare', nature: 'boutique',
-    url: 'https://lesenfantsphare.fr/le-pharandol/boutique/',
+    campagne: 'enfants-phare', nom: 'Les Enfants-Phare', 
+    adresses: [
+      { nature: 'don', url: 'https://www.helloasso.com/associations/les-enfants-phare/formulaires/1' },
+      { nature: 'boutique', url: 'https://lesenfantsphare.fr/le-pharandol/boutique/' },
+    ],
     motif: /enfants[\s-]+phares?\b|\bpharandol\b/iu,
   },
 ] satisfies LienAction[])
@@ -115,7 +122,7 @@ export function lienSur(brut: string): string | null {
 
 /** Les adresses de la liste blanche, normalisées (une entrée qui ne passe pas `lienSur` est écartée). */
 const AUTORISES: ReadonlySet<string> = new Set(
-  LIENS_ACTION.map(l => lienSur(l.url)).filter((u): u is string => u !== null),
+  LIENS_ACTION.flatMap(l => l.adresses.map(a => lienSur(a.url))).filter((u): u is string => u !== null),
 )
 
 /** L'adresse est-elle dans la liste fermée ? Toute autre adresse est refusée. */
@@ -127,7 +134,8 @@ export function lienAutorise(url: string): boolean {
 /**
  * Les liens d'action que l'émission a RÉELLEMENT évoqués, sous la forme d'actualités à glisser
  * dans le fil APRÈS l'écriture (cf. en-tête) : `title` = l'extrait de la première réplique qui
- * cite la campagne, `link` = l'adresse de la liste blanche. Au plus un par campagne.
+ * cite la campagne, `link` = une adresse de la liste blanche. Une campagne citée donne toutes
+ * ses adresses (don, puis boutique) — une ou deux.
  *
  * @param repliques    le texte des répliques, dans l'ordre de l'émission ;
  * @param campagneDuJour l'identifiant de la campagne du jour de la station Abondance, s'il y en a une.
@@ -137,8 +145,6 @@ export function liensActionCites(
 ): NewsItem[] {
   const out: NewsItem[] = []
   for (const l of LIENS_ACTION) {
-    const url = lienSur(l.url)
-    if (!url || !lienAutorise(url)) continue
     const motifs = l.campagne === opts.campagneDuJour && l.motifSujet ? [l.motif, l.motifSujet] : [l.motif]
     let extrait: string | null = null
     for (const r of repliques) {
@@ -150,11 +156,16 @@ export function liensActionCites(
       if (extrait) break
     }
     if (!extrait) continue
-    out.push({
-      title: extrait,
-      link: url,
-      sourceTitle: l.nature === 'boutique' ? `Boutique — ${l.nom}` : `Faire un don — ${l.nom}`,
-    })
+    // Toutes les adresses de la campagne (don, puis boutique), chacune passée par la porte.
+    for (const a of l.adresses) {
+      const url = lienSur(a.url)
+      if (!url || !lienAutorise(url)) continue
+      out.push({
+        title: extrait,
+        link: url,
+        sourceTitle: a.nature === 'boutique' ? `Boutique — ${l.nom}` : `Faire un don — ${l.nom}`,
+      })
+    }
   }
   return out
 }

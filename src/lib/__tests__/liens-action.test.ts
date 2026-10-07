@@ -17,30 +17,42 @@ import { actualitesStationManifestactions, ligneEditorialeManifestactions, sujet
 import { CAMPAGNES_ABONDANCE } from '../../data/campagnes-abondance'
 import { formatNewsForPrompt } from '../news'
 
-/** La liste fermée attendue — 6 des 7 demandées (la cagnotte pour Infinity n'a pas d'adresse externe). */
-const ATTENDUS: Readonly<Record<string, string>> = {
-  'aaron-korrigan-oak':    'https://www.papayoux.com/fr/cagnotte/f-aaron-of-korrigan-oak',
-  'axiom-team':            'https://axiom-team.fr/collectes',
-  'emancipactions':        'https://emancipactions.fr/billet-virtuel/',
-  'desobeissance-fertile': 'https://www.helloasso.com/associations/desobeissance-fertile/formulaires/1',
-  'pompiers-odp':          'https://don.odp-pompiers.fr/odp-2024',
-  'enfants-phare':         'https://lesenfantsphare.fr/le-pharandol/boutique/',
+/** La liste fermée attendue — 6 des 7 campagnes demandées (la cagnotte pour Infinity n'a pas d'adresse
+ *  externe) ; don + boutique quand l'application a les deux (Bâtisseur, 07/10 18 h 50). */
+const ATTENDUS: Readonly<Record<string, readonly string[]>> = {
+  'aaron-korrigan-oak':    ['https://www.papayoux.com/fr/cagnotte/f-aaron-of-korrigan-oak'],
+  'axiom-team':            ['https://axiom-team.fr/collectes'],
+  'emancipactions':        ['https://emancipactions.fr/billet-virtuel/'],
+  'desobeissance-fertile': [
+    'https://www.helloasso.com/associations/desobeissance-fertile/formulaires/1',
+    'https://www.lalibrairie.com/livres/la-desobeissance-fertile--pour-une-ecologie-offensive_0-7005189_9782228927178.html',
+  ],
+  'pompiers-odp':          ['https://don.odp-pompiers.fr/odp-2024'],
+  'enfants-phare':         [
+    'https://www.helloasso.com/associations/les-enfants-phare/formulaires/1',
+    'https://lesenfantsphare.fr/le-pharandol/boutique/',
+  ],
 }
 
 test('⭐ liste FERMÉE : exactement ces liens, chacun rattaché à une campagne connue', () => {
   assert.deepEqual(
-    Object.fromEntries(LIENS_ACTION.map(l => [l.campagne, l.url])),
+    Object.fromEntries(LIENS_ACTION.map(l => [l.campagne, l.adresses.map(a => a.url)])),
     ATTENDUS,
   )
   assert.equal(LIENS_ACTION.length, Object.keys(ATTENDUS).length)
   for (const l of LIENS_ACTION) {
     assert.ok(CAMPAGNES_ABONDANCE.some(c => c.id === l.campagne), l.campagne)
-    assert.equal(lienSur(l.url), l.url, `${l.campagne} : adresse déjà propre`)
-    assert.ok(lienAutorise(l.url), l.campagne)
+    assert.ok(l.adresses.length >= 1 && l.adresses.length <= 2, l.campagne)
+    // Le don d'abord, puis la boutique ; jamais deux fois la même nature.
+    assert.deepEqual(l.adresses.map(a => a.nature), l.adresses.length === 2 ? ['don', 'boutique'] : [l.adresses[0].nature], l.campagne)
+    for (const a of l.adresses) {
+      assert.equal(lienSur(a.url), a.url, `${l.campagne} : adresse déjà propre`)
+      assert.ok(lienAutorise(a.url), l.campagne)
+    }
   }
-  // Emancipactions et les Enfants-Phare : la BOUTIQUE (consigne du Bâtisseur).
-  assert.equal(LIENS_ACTION.find(l => l.campagne === 'emancipactions')!.nature, 'boutique')
-  assert.equal(LIENS_ACTION.find(l => l.campagne === 'enfants-phare')!.nature, 'boutique')
+  // Emancipactions : la BOUTIQUE seule (l'application n'a pas de don) ; les Enfants-Phare : la boutique y est.
+  assert.deepEqual(LIENS_ACTION.find(l => l.campagne === 'emancipactions')!.adresses.map(a => a.nature), ['boutique'])
+  assert.ok(LIENS_ACTION.find(l => l.campagne === 'enfants-phare')!.adresses.some(a => a.nature === 'boutique'))
 })
 
 test('⭐ hors liste : refusé — même une vraie cagnotte, même un site de la même campagne', () => {
@@ -49,7 +61,8 @@ test('⭐ hors liste : refusé — même une vraie cagnotte, même un site de la
     'https://www.leetchi.com/fr/c/une-cagnotte-quelconque',
     'https://desobeissancefertile.com/',                    // site, pas le lien retenu
     'https://emancipactions.fr/',                           // site, pas la boutique
-    'https://www.helloasso.com/associations/les-enfants-phare/formulaires/1',  // don, pas la boutique
+    'https://lesenfantsphare.fr/',                          // site, ni don ni boutique
+    'https://kokopelli-semences.fr/fr/',                    // campagne de l'app, mais hors liste
     'https://infinity-freeworld.com/e/naddr1qqqq',         // pas de fiche Infinity pour l'instant
   ]) assert.equal(lienAutorise(u), false, u)
 })
@@ -80,14 +93,18 @@ test('⭐ montré seulement si l’émission CITE la campagne ; extrait = nom te
     'Et la Désobéissance Fertile continue de semer.',
     'Encore Axiom-Team !',
   ])
-  assert.deepEqual(l.map(x => x.link), [ATTENDUS['axiom-team'], ATTENDUS['desobeissance-fertile']])
+  // Désobéissance Fertile citée : ses DEUX liens (don, puis boutique), même extrait.
+  assert.deepEqual(l.map(x => x.link), [...ATTENDUS['axiom-team'], ...ATTENDUS['desobeissance-fertile']])
   assert.equal(l[0].title, 'Axiom Team')
   assert.equal(l[1].title, 'Désobéissance Fertile')
+  assert.equal(l[2].title, 'Désobéissance Fertile')
+  assert.match(l[1].sourceTitle, /^Faire un don/)
+  assert.match(l[2].sourceTitle, /^Boutique/)
   for (const x of l) assert.ok(x.title.length >= EXTRAIT_MIN)
   // « émancipation » n'est pas « Émancip'Actions » ; « Manifestactions » non plus.
   assert.deepEqual(liensActionCites(["L'émancipation par les Manifestactions."]), [])
-  assert.deepEqual(liensActionCites(["Le festival Émancip'Actions en replay."]).map(x => x.link), [ATTENDUS.emancipactions])
-  assert.deepEqual(liensActionCites(['Le Pharandol des Enfants-Phare.']).map(x => x.link), [ATTENDUS['enfants-phare']])
+  assert.deepEqual(liensActionCites(["Le festival Émancip'Actions en replay."]).map(x => x.link), [...ATTENDUS.emancipactions])
+  assert.deepEqual(liensActionCites(['Le Pharandol des Enfants-Phare.']).map(x => x.link), [...ATTENDUS['enfants-phare']])
 })
 
 test('⭐ « les pompiers » : un sujet d’actualité ailleurs ≠ la campagne — sauf campagne du jour', () => {
@@ -95,13 +112,13 @@ test('⭐ « les pompiers » : un sujet d’actualité ailleurs ≠ la campagne 
   assert.deepEqual(liensActionCites(r), [])
   assert.deepEqual(liensActionCites(r, { campagneDuJour: 'axiom-team' }), [])
   const l = liensActionCites(r, { campagneDuJour: 'pompiers-odp' })
-  assert.deepEqual(l.map(x => x.link), [ATTENDUS['pompiers-odp']])
+  assert.deepEqual(l.map(x => x.link), [...ATTENDUS['pompiers-odp']])
   assert.equal(l[0].title, 'Les pompiers')
   // Cité par son nom propre : partout.
   assert.equal(liensActionCites(["L'Œuvre des Pupilles des Sapeurs-Pompiers aide les familles."]).length, 1)
   // « Oak » : Korrigan Oak / F'Aaron, ou « Oak Camping Car ».
-  assert.equal(liensActionCites(["La cagnotte de F'Aaron of Korrigan Oak."])[0].link, ATTENDUS['aaron-korrigan-oak'])
-  assert.equal(liensActionCites(['Le Oak Camping-Car de Nina.'])[0].link, ATTENDUS['aaron-korrigan-oak'])
+  assert.deepEqual(liensActionCites(["La cagnotte de F'Aaron of Korrigan Oak."]).map(x => x.link), [...ATTENDUS['aaron-korrigan-oak']])
+  assert.deepEqual(liensActionCites(['Le Oak Camping-Car de Nina.']).map(x => x.link), [...ATTENDUS['aaron-korrigan-oak']])
   assert.deepEqual(liensActionCites(['Un chêne, an oak tree.']), [])
 })
 
@@ -162,6 +179,10 @@ test('⭐ les adresses sont celles de l’application (origin/main), pour la bon
     assert.ok(debut > 0, l.campagne)
     const fin = src.indexOf('\n  },', debut)
     const bloc = src.slice(debut, fin)
-    assert.ok(bloc.includes(`${l.nature}: '${l.url}'`), `${l.campagne} : ${l.nature} = ${l.url}`)
+    // Chaque adresse = celle de l'application, à l'identique, pour la même nature…
+    for (const a of l.adresses) assert.ok(bloc.includes(`${a.nature}: '${a.url}'`), `${l.campagne} : ${a.nature} = ${a.url}`)
+    // … et TOUTES celles que l'application a (don, boutique) : ni plus, ni moins.
+    const dansApp = [...bloc.matchAll(/\n {4}(don|boutique): '([^']+)'/g)].map(m => `${m[1]} ${m[2]}`).sort()
+    assert.deepEqual(l.adresses.map(a => `${a.nature} ${a.url}`).sort(), dansApp, l.campagne)
   }
 })
