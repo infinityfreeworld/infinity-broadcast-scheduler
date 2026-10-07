@@ -14,7 +14,9 @@
  *     · guestIds ;
  *     · sources — remplacent celles de la seed (une liste vide ne remplace rien) ;
  *     · rythme / actualite / appels (nouveaux, voir lib/fiche-station.ts) ;
- *     · tracks, jingles, skipMusic, pauses, pauseDureeS (comme avant).
+ *     · tracks, jingles, skipMusic, pauses, pauseDureeS (comme avant) ;
+ *     · musique (07/10/2026) — les RÈGLES musicales de la station (étiquettes, énergie,
+ *       exclusions), appliquées avec la bibliothèque 30108 par lib/bibliotheque-musique.ts.
  *   Un champ absent ou illisible garde la valeur de la seed : une fiche ancienne ne casse rien.
  *
  *   ⚠️ DATE BUTOIR (07/10/2026) : des fiches de juin 2026, que le générateur ignorait, portaient
@@ -35,6 +37,7 @@ import { getRelays } from './nostr'
 import { adminPubkeys } from './admins-radio'
 import { langueSynthetisable } from './voix'
 import { INTERVENTION_RATES, GLOBAL_MOODS, VERBOSITIES, DEFAULT_RHYTHM, DEFAULT_BEHAVIOR } from './pulse'
+import { lireReglesMusique, type ReglesMusiqueStation } from './selection-musique'
 import type {
   RadioStation, TrackRef, RadioHost, NewsSource, StationLanguage, StationKind,
   RythmeStation, ActualiteStation, AppelsStation,
@@ -59,6 +62,7 @@ export interface ReglagesStation {
   rythme?:      RythmeStation
   actualite?:   ActualiteStation
   appels?:      AppelsStation
+  musique?:     ReglesMusiqueStation
 }
 
 const FORME_CID = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{20,})$/
@@ -197,6 +201,7 @@ export function lireReglages(content: string): ReglagesStation | null {
   const rythme = lireRythme(c.rythme);          if (rythme) out.rythme = rythme
   const actualite = lireActualite(c.actualite); if (actualite) out.actualite = actualite
   const appels = lireAppels(c.appels);          if (appels) out.appels = appels
+  const musique = lireReglesMusique(c.musique); if (musique) out.musique = musique
   return out
 }
 
@@ -215,7 +220,8 @@ export function ficheCompleteDepuis(env: NodeJS.ProcessEnv = process.env): numbe
 /**
  * Une fiche signée AVANT la date butoir ne garde que ce que le générateur en reprenait déjà avant
  * le 07/10/2026 (musiques, jingles, pauses) : ses autres champs dataient d'une époque où ils ne
- * passaient pas à l'antenne, et certains sont faux. Pure.
+ * passaient pas à l'antenne, et certains sont faux. Les RÈGLES musicales (`musique`) en font partie :
+ * seule une fiche enregistrée depuis la date butoir peut en poser. Pure.
  */
 export function restreindreFicheAncienne(
   r: ReglagesStation | null, createdAt: number, depuis: number,
@@ -277,6 +283,7 @@ export function appliquerReglages(station: RadioStation, r: ReglagesStation | nu
     ...(r.rythme ? { rythme: r.rythme } : {}),
     ...(r.actualite ? { actualite: r.actualite } : {}),
     ...(r.appels ? { appels: r.appels } : {}),
+    ...(r.musique ? { musique: r.musique } : {}),
   }
 }
 
@@ -299,6 +306,7 @@ export function resumerReglages(r: ReglagesStation, station?: RadioStation): str
     r.rythme ? `rythme ${r.rythme.globalMood}/${r.rythme.dialogueDensity}` : null,
     r.actualite ? `actualité ${r.actualite.part} %` : null,
     r.appels ? `appels ${r.appels.actifs ? `${r.appels.nombre}/${r.appels.tousLesNJours} j` : 'coupés'}` : null,
+    r.musique ? `règles musicales${r.musique.etiquettes?.genres ? ` genres ${r.musique.etiquettes.genres.join('/')}` : ''}${r.musique.energie ? ` énergie ${r.musique.energie.join('-')}` : ''}${r.musique.exclure ? ` −${r.musique.exclure.length}` : ''}` : null,
   ].filter(Boolean).join(', ')
 }
 

@@ -34,6 +34,7 @@ import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
 import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
+import { stationAvecSaMusique } from '../lib/bibliotheque-musique'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
 import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
@@ -927,8 +928,12 @@ async function main() {
   // complète (lib/station-reglages.ts).
   const seed = SEED_STATIONS.find(s => s.id === stationId)
   if (seed && seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
-  const station = seed ? await stationSelonIHL(seed) : await stationAjouteeSelonIHL(stationId, SEED_STATIONS)
-  if (!station) throw new Error(`Station inconnue : ${stationId} (ni dans la seed, ni fiche IHL d'administrateur complète)`)
+  const stationFiche = seed ? await stationSelonIHL(seed) : await stationAjouteeSelonIHL(stationId, SEED_STATIONS)
+  if (!stationFiche) throw new Error(`Station inconnue : ${stationId} (ni dans la seed, ni fiche IHL d'administrateur complète)`)
+  // 07/10/2026 — la musique de la station = ses choix + ce que ses règles prennent dans la
+  // bibliothèque 30108 des admins (jamais une musique sans droits). Remplace `tracks` AVANT toute
+  // décision musicale de la nuit (lib/bibliotheque-musique.ts, même règle que l'app).
+  const station = await stationAvecSaMusique(stationFiche)
 
   // Aucune voix commercialisable dans cette langue ⇒ on RENONCE, avant
   // d'avoir dépensé un seul jeton. Publier quand même reviendrait à

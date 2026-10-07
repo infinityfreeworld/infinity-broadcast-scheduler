@@ -1,0 +1,66 @@
+{
+  "_lisezmoi": "Cas de la règle de sélection musicale. FICHIER IDENTIQUE dans l'app (src/modules/radio/musique/__tests__/) et dans le générateur (src/lib/__tests__/) : les deux suites l'éprouvent. `attendu` = clés (CID ou adresse) de la liste résultante, dans l'ordre.",
+  "bibliotheque": [
+    { "title": "Aube", "artiste": "Lena", "cid": "bafyaube00000000000000000000000000000000000000000000000001", "genres": ["électro", "chill"], "ambiances": ["calme"], "energie": 2, "droits": { "type": "licence", "licence": "CC BY 4.0", "auteur": "Lena" } },
+    { "title": "Orage", "cid": "bafyorage0000000000000000000000000000000000000000000000002", "genres": ["rock"], "ambiances": ["énergique"], "energie": 5, "droits": { "type": "libre-de-droits", "auteur": "Équipe Infinity" } },
+    { "title": "Marée", "cid": "bafymaree0000000000000000000000000000000000000000000000003", "genres": ["Électro"], "ambiances": ["festive"], "energie": 4, "droits": { "type": "licence", "licence": "CC0" } },
+    { "title": "Sans droits", "cid": "bafysansdroits000000000000000000000000000000000000000004", "genres": ["électro"], "ambiances": ["calme"], "energie": 2 },
+    { "title": "Licence vide", "cid": "bafylicencevide00000000000000000000000000000000000000005", "genres": ["électro"], "energie": 3, "droits": { "type": "licence", "auteur": "Quelqu'un" } },
+    { "title": "Sans énergie", "url": "https://exemple.org/sans-energie.mp3", "genres": ["électro"], "droits": { "type": "libre-de-droits", "auteur": "X" } }
+  ],
+  "cas": [
+    {
+      "nom": "station sans règles : exactement ses choix explicites (même hors bibliothèque, même en double)",
+      "station": { "tracks": [ { "title": "Default Track 01", "cid": "bafydefault01" }, { "title": "Default Track 01", "cid": "bafydefault01" } ] },
+      "attendu": ["bafydefault01", "bafydefault01"]
+    },
+    {
+      "nom": "un choix explicite d'une musique de la bibliothèque SANS droits n'est jamais diffusé",
+      "station": { "tracks": [ { "title": "Sans droits", "cid": "bafysansdroits000000000000000000000000000000000000000004" }, { "title": "Aube", "cid": "bafyaube00000000000000000000000000000000000000000000000001" } ] },
+      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001"]
+    },
+    {
+      "nom": "règle genre « électro » : les musiques électro AVEC droits (majuscules indifférentes), triées par clé",
+      "station": { "musique": { "etiquettes": { "genres": ["Électro"] } } },
+      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001", "bafymaree0000000000000000000000000000000000000000000000003", "https://exemple.org/sans-energie.mp3"]
+    },
+    {
+      "nom": "genre ET énergie : tous les critères doivent tenir ; sans énergie déclarée, pas de correspondance",
+      "station": { "musique": { "etiquettes": { "genres": ["électro"] }, "energie": [3, 5] } },
+      "attendu": ["bafymaree0000000000000000000000000000000000000000000000003"]
+    },
+    {
+      "nom": "fourchette d'énergie inversée : remise dans l'ordre",
+      "station": { "musique": { "energie": [5, 4] } },
+      "attendu": ["bafymaree0000000000000000000000000000000000000000000000003", "bafyorage0000000000000000000000000000000000000000000000002"]
+    },
+    {
+      "nom": "ambiances : une seule ambiance voulue suffit",
+      "station": { "musique": { "etiquettes": { "ambiances": ["festive", "énergique"] } } },
+      "attendu": ["bafymaree0000000000000000000000000000000000000000000000003", "bafyorage0000000000000000000000000000000000000000000000002"]
+    },
+    {
+      "nom": "explicites d'abord, puis la règle, sans doublon ; les exclusions valent pour les deux",
+      "station": {
+        "tracks": [ { "title": "Default Track 02", "cid": "bafydefault02" }, { "title": "Marée (choisie)", "cid": "bafymaree0000000000000000000000000000000000000000000000003" }, { "title": "Default Track 03", "cid": "bafydefault03" } ],
+        "musique": { "etiquettes": { "genres": ["électro"] }, "exclure": ["bafydefault03", "https://exemple.org/sans-energie.mp3"] }
+      },
+      "attendu": ["bafydefault02", "bafymaree0000000000000000000000000000000000000000000000003", "bafyaube00000000000000000000000000000000000000000000000001"]
+    },
+    {
+      "nom": "des exclusions seules n'ajoutent rien",
+      "station": { "tracks": [ { "title": "Aube", "cid": "bafyaube00000000000000000000000000000000000000000000000001" } ], "musique": { "exclure": ["bafyaube00000000000000000000000000000000000000000000000001"] } },
+      "attendu": []
+    },
+    {
+      "nom": "règles illisibles : ignorées (station inchangée)",
+      "station": { "tracks": [ { "title": "Default Track 04", "cid": "bafydefault04" } ], "musique": { "etiquettes": { "genres": "électro" }, "energie": [0], "exclure": "bafydefault04" } },
+      "attendu": ["bafydefault04"]
+    },
+    {
+      "nom": "un genre que personne ne porte : rien de plus",
+      "station": { "musique": { "etiquettes": { "genres": ["jazz"] } } },
+      "attendu": []
+    }
+  ]
+}

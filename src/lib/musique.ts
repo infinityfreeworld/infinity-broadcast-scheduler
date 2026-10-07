@@ -181,9 +181,24 @@ export function encadrerDeSilence(samples: Float32Array, sampleRate: number, ava
   return out
 }
 
-/** Télécharge un CID (ou une URL) depuis la passerelle data-space, borné en taille et en temps. */
+/**
+ * Télécharge un CID depuis la passerelle data-space, borné en taille et en temps. 07/10/2026 :
+ * une musique envoyée depuis l'IHL porte aussi son adresse de secours (copie Blossom) — si le CID
+ * ne répond pas, on essaie l'adresse avant de renoncer à la pause.
+ */
 export async function telechargerPiste(track: TrackRef, passerelle = PASSERELLE_DATASPACE): Promise<Buffer> {
-  const url = track.cid ? `${passerelle.replace(/\/$/, '')}/${track.cid}` : track.url!
+  const adresses = [
+    ...(track.cid ? [`${passerelle.replace(/\/$/, '')}/${track.cid}`] : []),
+    ...(track.url ? [track.url] : []),
+  ]
+  let echec: Error | null = null
+  for (const url of adresses) {
+    try { return await telechargerAdresse(url) } catch (e) { echec = e as Error }
+  }
+  throw echec ?? new Error('piste sans CID ni adresse')
+}
+
+async function telechargerAdresse(url: string): Promise<Buffer> {
   const r = await fetch(url, { signal: AbortSignal.timeout(180_000) })
   if (!r.ok) throw new Error(`HTTP ${r.status} en lisant ${url}`)
   const taille = Number(r.headers.get('content-length'))

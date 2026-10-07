@@ -8,6 +8,7 @@
  */
 
 import type { InterventionRate, GlobalMood, Verbosity } from './pulse'
+import type { ReglesMusiqueStation } from './selection-musique'
 
 export type StationKind =
   | 'wtf' | 'freeworld' | 'bigballs' | 'mindctrl'
@@ -77,6 +78,12 @@ export interface RadioStation {
   actualite?:   ActualiteStation
   /** 07/10/2026 — appels d'auditeurs (IHL, kind 30091). Lu, PAS encore fabriqué. */
   appels?:      AppelsStation
+  /**
+   * 07/10/2026 — RÈGLES MUSICALES de la station (IHL, kind 30091) : en plus de ses `tracks`,
+   * elle prend les musiques de la bibliothèque (30108, admins seulement) qui répondent à ses
+   * étiquettes et à son énergie, moins ses exclusions (lib/selection-musique.ts, identique à l'app).
+   */
+  musique?:     ReglesMusiqueStation
 }
 
 /**
