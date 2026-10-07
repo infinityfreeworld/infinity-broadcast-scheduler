@@ -8,7 +8,7 @@ import {
 import { SEED_STATIONS } from '../../data/seed-stations'
 import type { Event as NostrEvent } from 'nostr-tools/core'
 
-const CID = 'bafybeibhjj5cyhauwnrrjntrkwncl6y3bhyetzow54jieku47f2igchw7e'
+const CID = 'bafybeihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku'
 const pirate = SEED_STATIONS.find(s => s.id === 'pirate-radio')!
 /** Une date APRÈS la date butoir du 07/10/2026 : la fiche entière compte. */
 const RECENT = FICHE_COMPLETE_DEPUIS_DEFAUT + 3600

@@ -30,7 +30,44 @@
  *      bibliothèque qui a ses droits et qui répond à TOUS ses critères (un genre voulu au
  *      moins, une ambiance voulue au moins, une énergie dans la fourchette), triée par clé.
  *   Une station sans règles garde exactement ses choix explicites.
+ *
+ *   ── LES PISTES RETIRÉES (décision de Med du 07/10/2026) ──
+ *   Les 10 « Default Track » de mai 2026 n'ont aucune mention de droits : elles sont RETIRÉES.
+ *   Elles ne sont plus dans les stations de départ, mais d'anciennes fiches 30091 publiées par
+ *   des admins les citent encore dans `tracks`. Une piste de `PISTES_RETIREES` n'est JAMAIS
+ *   sélectionnée : ni comme choix explicite, ni par une règle, ni depuis la bibliothèque.
  */
+
+/**
+ * Les CID retirés de l'antenne — décision de Med du 07/10/2026 (« Default Track 01 » à « 10 »,
+ * ancienne bibliothèque par défaut de mai 2026, sans aucune mention de droits). UN SEUL ENDROIT :
+ * toute exclusion de ces pistes, dans l'application comme dans le générateur, passe par ici.
+ * La « Chanson festive Russe » (bibliothèque 30108) n'en fait PAS partie : elle reste, et sera
+ * diffusée dès que ses droits seront indiqués dans l'IHL.
+ */
+export const PISTES_RETIREES: readonly string[] = [
+  'bafybeibhjj5cyhauwnrrjntrkwncl6y3bhyetzow54jieku47f2igchw7e', // Default Track 01
+  'bafybeiey67moux547ib62r5uojwssqz3iu63ro3d2hvr7z62npifw3dlq4', // Default Track 02
+  'bafybeiewnkzqs33a4x5oahytej2zhora3tqpgihgaym6fvyp2tqb5gffeu', // Default Track 03
+  'bafybeifmfsamtn76ugitlps5vf62uguypp7lxjhusj5piwhglkcavjrjhq', // Default Track 04
+  'bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q', // Default Track 05
+  'bafybeihg4uu22uqrgwdxwdio6te7oukj4zpwumlxpccbu4duah3ml36e5q', // Default Track 06
+  'bafybeihqozxwaq4ucefvq3bdqbj6u7as32uadzgngkqtltey646vutdjhu', // Default Track 07
+  'bafybeieygru4cmsv4oygx5becnl5qhx5ooms7eavz75asqneo6ts45utam', // Default Track 08
+  'bafybeic4zr3xf3kzlbjbaadx6csfesmmkkx57ebfg7erndahhqt47vx4pi', // Default Track 09
+  'bafybeiafjpji5ltdmgvhb7mpre6krpftwbsr2pzkdprj36uhyrkcya7trm', // Default Track 10
+]
+
+/**
+ * Une piste est-elle retirée ? Par son CID, ou par une adresse qui pointe vers un CID retiré
+ * (passerelle `…/ipfs/<cid>`, sous-domaine `<cid>.ipfs…`).
+ */
+export function estPisteRetiree(p: { cid?: unknown; url?: unknown }): boolean {
+  const cid = typeof p.cid === 'string' ? p.cid.trim() : ''
+  if (cid && PISTES_RETIREES.includes(cid)) return true
+  const url = typeof p.url === 'string' ? p.url : ''
+  return !!url && PISTES_RETIREES.some(c => url.includes(c))
+}
 
 export const ENERGIE_MIN = 1
 export const ENERGIE_MAX = 5
@@ -209,11 +246,16 @@ export function pistesDeLaStationDetaillees<T extends PisteJouable>(
   const regles = lireReglesMusique(station.musique)
   const exclues = new Set(regles?.exclure ?? [])
   const parCle = new Map<string, PisteBibliotheque>()
-  for (const b of bibliotheque) { const k = cleDePiste(b); if (k && !parCle.has(k)) parCle.set(k, b) }
+  for (const b of bibliotheque) {
+    if (estPisteRetiree(b)) continue
+    const k = cleDePiste(b)
+    if (k && !parCle.has(k)) parCle.set(k, b)
+  }
 
   const out: Array<{ piste: T | PisteJouable; origine: OriginePiste }> = []
   const vues = new Set<string>()
   for (const t of station.tracks ?? []) {
+    if (estPisteRetiree(t)) continue
     const k = cleDePiste(t)
     if (k) {
       if (exclues.has(k)) continue

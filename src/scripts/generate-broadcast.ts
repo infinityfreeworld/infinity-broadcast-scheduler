@@ -737,6 +737,10 @@ async function monterAvecMusique(
     console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB${talkOver ? ', talk-over' : ''}`)
   } else if (!r.actif && (station.tracks?.length ?? 0) > 0) {
     console.log('\n🎶 Musique : désactivée pour cette émission (skipMusic, MUSIQUE_DESACTIVEE ou 0 pause)')
+  } else if ((station.tracks?.length ?? 0) === 0) {
+    // 07/10/2026 — plus de musiques par défaut (décision de Med) : tant qu'aucune musique AVEC
+    // droits n'est donnée à la station dans l'IHL, l'émission sort sans pause ni lit. Elle reste valide.
+    console.log('\n🎶 Musique : aucune musique diffusable pour cette station (droits à indiquer dans l\'IHL) — émission sans pause musicale')
   }
 
   // Jingle : au début (le premier), et à la fin (le dernier) quand il y en a au moins un.

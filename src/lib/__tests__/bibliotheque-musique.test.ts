@@ -29,7 +29,7 @@ for (const c of CAS.cas) {
 
 const ADMIN = 'a'.repeat(64)
 const INTRUS = 'b'.repeat(64)
-const CID_A = 'bafybeibhjj5cyhauwnrrjntrkwncl6y3bhyetzow54jieku47f2igchw7e'
+const CID_A = 'bafybeihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku'
 const CID_B = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi'
 const DROITS = { type: 'licence', licence: 'CC BY 4.0', auteur: 'Lena' }
 
