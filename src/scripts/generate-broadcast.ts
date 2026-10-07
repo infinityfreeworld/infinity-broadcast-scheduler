@@ -72,6 +72,8 @@ import { jetonDataspace } from '../lib/dataspace-jeton'
 import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
+import { sujetsCartePourStation } from '../lib/carte-relais'
+import { placerRubriqueCarte, sujetEnUneLigne, sansSigleAdministration } from '../lib/sujets-carte'
 import { garantirLangue, retirerEtiquetteLocuteur } from '../lib/langue-station'
 import { resumerEmission, ligneJournalResume } from '../lib/resume-emission'
 import { ControleQualiteVoix, moteursReels } from '../lib/controle-voix'
@@ -221,6 +223,18 @@ async function generateBroadcastBytes(opts: {
 
   const exclus = new Set<number>([0, numTurns - 1, ...pauseApres.keys(), ...retourApres.keys()])
   if (guest !== null) for (let k = guestStart - 1; k <= guestStart + 3; k++) exclus.add(k)
+  // ── La carte d'Infinity (07/10/2026, lib/sujets-carte.ts) ───────────────────────────────
+  // Station Manifestactions : ses sujets (Manifestactions réelles, sinon leur raison d'être) en tête
+  // de l'actualité, et sa ligne éditoriale. Freeworld : la rubrique « Pendant ce temps sur la
+  // carte », placée AVANT le plan humain (qui n'y pose ni réaction courte ni courrier). Les autres
+  // stations : rien, aucune requête.
+  const carte = await sujetsCartePourStation(station, opts.date)
+  if (carte.journal) console.log(`    🗺  Carte : ${carte.journal}`)
+  news.unshift(...carte.actualites)
+  const rubrique = carte.rubrique
+  const toursCarte = placerRubriqueCarte(numTurns, exclus, rubrique.length, `${station.id}:${opts.date}:carte`)
+  for (const k of toursCarte) exclus.add(k)
+  if (toursCarte.length) console.log(`    🗺  « Pendant ce temps sur la carte » aux tours ${toursCarte.map(k => k + 1).join(', ')}`)
   const humain = habillageActif('HABILLAGE_ECRITURE') ? planHumain(numTurns, exclus, `${station.id}:${opts.date}:humain`) : { courts: new Set<number>(), courrier: null }
   if (humain.courts.size > 0 || humain.courrier !== null) {
     console.log(`    🗣  réactions courtes aux tours ${[...humain.courts].map(i => i + 1).sort((a, b) => a - b).join(', ') || '—'} · courrier des auditeurs au tour ${humain.courrier !== null ? humain.courrier + 1 : '—'}`)
@@ -296,6 +310,7 @@ async function generateBroadcastBytes(opts: {
       : buildHostSystemPrompt({
           host:               effectiveHost,
           kb, selectedEntries, topic,
+          consigneCarte:      carte.ligneEditoriale,
           stationName:        station.name,
           stationDescription: station.description,
           newsBlock:          formatNewsForPrompt(news),
@@ -329,6 +344,10 @@ async function generateBroadcastBytes(opts: {
       : i === numTurns - 1 ? { type: 'cloture' }
       : pauseApres.has(i) ? { type: 'avant-pause', morceau: pauseApres.get(i)! }
       : retourApres.has(i) ? { type: 'retour-pause', morceau: retourApres.get(i)!, station: station.name }
+      : toursCarte.includes(i) ? {
+          type: 'carte', sujet: sujetEnUneLigne(rubrique[toursCarte.indexOf(i)]),
+          ouvre: toursCarte.indexOf(i) === 0, ferme: toursCarte.indexOf(i) === toursCarte.length - 1,
+        }
       : humain.courts.has(i) ? { type: 'court' }
       : humain.courrier === i ? { type: 'courrier', anonyme: host.name === 'Anonyme' }
       : { type: 'courant' }
@@ -346,6 +365,8 @@ async function generateBroadcastBytes(opts: {
     costIn += resp.inputTokens
     costOut += resp.outputTokens
     let turnText = retirerEtiquetteLocuteur(resp.text.trim())
+    // « L'IHL ne se nomme JAMAIS » (décision du Bâtisseur) — stations de la carte.
+    if (carte.concernee) turnText = sansSigleAdministration(turnText)
     if (!turnText) {
       console.log('(vide, skip)')
       continue

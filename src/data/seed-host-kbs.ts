@@ -279,6 +279,28 @@ const KB_OA_AICHA: HostKB = {
   ],
 }
 
+// ── Manifestactions (07/10/2026) ──────────────────────────────────────────
+
+const KB_MA_INES: HostKB = {
+  hostId: 'ma-ines', stationId: 'manifestactions-radio', updatedAt: NOW,
+  personality: "Organisatrice de terrain, voix féminine vive et chaleureuse. Concrète : à chaque sujet, elle dit où, quand, et comment s'y rendre. Donne envie d'agir sans culpabiliser personne. Esprit « From Screen To Action ».",
+  entries: [
+    entry('e1', "De l'écran à l'action", "Une Manifestaction se trouve sur la carte d'Infinity et dans l'onglet Manifestactions. On ouvre sa fiche, on s'inscrit, on prend l'itinéraire. L'écran sert à se retrouver ; l'action se passe dehors, ensemble.", ['fsta','rejoindre'], 3),
+    entry('e2', "Lancer sa Manifestaction", "Un titre, un lieu, une date, ce qu'on va faire, combien on espère être : elle apparaît sur la carte. Une petite action près de chez soi compte autant qu'une grande. Le bouton Booster, gratuit, aide les autres à la voir.", ['créer','booster'], 3),
+    entry('e3', "Venir, même une heure", "Personne n'a besoin d'être expert pour rejoindre une action : porter, planter, cuisiner, accueillir, écouter. Venir une heure, c'est déjà en être.", ['participer','accueil'], 2),
+  ],
+}
+
+const KB_MA_BASTIEN: HostKB = {
+  hostId: 'ma-bastien', stationId: 'manifestactions-radio', updatedAt: NOW,
+  personality: "Naturaliste et conteur, voix masculine posée. Relie chaque action aux besoins vitaux et au vivant. Raconte plus qu'il n'explique, sans jamais inventer de chiffre ni de témoin.",
+  entries: [
+    entry('e1', "Les besoins vitaux", "Eau, nourriture, abri, santé, énergie : les Manifestactions partent de ces besoins-là. Les satisfaire ensemble, localement, c'est gagner en autonomie et en liberté.", ['besoins-vitaux','autonomie'], 3),
+    entry('e2', "Œuvrer pour le vivant", "Planter une haie, creuser une mare, protéger une source, ramasser les déchets d'une berge : chaque geste pour le vivant répare un lien entre les humains et la terre qui les nourrit.", ['vivant','écologie'], 3),
+    entry('e3', "Hors de l'Enclos", "MHE veut dire Manifestactions Hors de l'Enclos : plutôt que défiler pour demander, agir pour construire — reprendre des terres, cultiver, bâtir des habitats sains. L'émancipation se pratique.", ['émancipation','mhe'], 2),
+  ],
+}
+
 // ── Map publique ───────────────────────────────────────────────────────────
 
 export const SEED_HOST_KBS: Record<string, HostKB> = {
@@ -309,6 +331,9 @@ export const SEED_HOST_KBS: Record<string, HostKB> = {
   'oa-lea':      KB_OA_LEA,
   'oa-theo':     KB_OA_THEO,
   'oa-aicha':    KB_OA_AICHA,
+  // 07/10/2026 — Manifestactions
+  'ma-ines':     KB_MA_INES,
+  'ma-bastien':  KB_MA_BASTIEN,
 }
 
 /** True si la KB de cet animateur est seed (lecture seule en UI). */

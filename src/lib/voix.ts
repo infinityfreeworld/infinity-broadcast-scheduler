@@ -66,6 +66,9 @@ const VOIX_FR_PAR_ANIMATEUR: Record<string, string> = {
   'oa-lea':      'fr_FR-siwis-medium',
   'oa-theo':     'fr_FR-gilles-low',
   'oa-aicha':    'fr_FR-siwis-medium',
+  // Manifestactions (07/10/2026) — siwis : CC BY 4.0 (crédit dit au journal), gilles : CC0.
+  'ma-ines':     'fr_FR-siwis-medium',
+  'ma-bastien':  'fr_FR-gilles-low',
 }
 
 const VOIX_FR_PAR_GENRE: Record<Genre, string> = {

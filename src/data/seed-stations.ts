@@ -1,11 +1,15 @@
 /**
  * @module Infinity/Radio/SeedStations
- * @description 4 stations de base livrées avec le module Radio.
+ * @description Les stations de départ du générateur — 15 au 07/10/2026 : 11 en français
+ *   (dont Manifestactions, ajoutée le 07/10/2026) et une par langue en anglais, espagnol, russe
+ *   et chinois. Big Balls Radio (108.5) a été supprimée le 14/09/2026 ; sa fréquence reste
+ *   réservée côté application (station « Biogame », même identifiant `bigballs-radio`).
  *
- * Phase R.0 : données mock, aucun audio. Les fréquences sont symboliques
- * (87.5–144.0 MHz) et figées pour éviter toute collision avec les stations
- * créées par les Bâtisseurs (qui devront publier des kind:30090 avec une
- * fréquence libre — Phase R.2).
+ * ⚠️ CONTRAT avec l'application (`infinity/src/modules/radio/stations/seed-stations.ts`) : même
+ *   identifiant, même fréquence, même langue, mêmes animateurs pour chaque station présente des
+ *   deux côtés — les émissions (kind 30093) référencent ces identifiants. Les fréquences sont
+ *   symboliques (87.5–144.0 MHz), figées, et ne se chevauchent pas. La radio se règle ensuite
+ *   UNIQUEMENT depuis l'IHL (fiche kind 30091 des administrateurs radio).
  */
 
 import type { RadioStation, TrackRef } from '../lib/types'
@@ -254,6 +258,29 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://basta.media/spip.php?page=backend',             title: 'Bastamag (luttes, eau)' },
       { type: 'rss', url: 'https://www.monde-diplomatique.fr/recents.xml',         title: 'Le Monde Diplomatique' },
     ],
+    tracks: DEFAULT_TRACKS,
+    live: false,
+    creatorPubkey: null,
+  },
+
+  // ── 07/10/2026 — Manifestactions (décision du Bâtisseur) ───────────────
+  // Parle des Manifestactions publiées sur la carte (lib/sujets-carte.ts) ; sans nouveauté, de leur
+  // raison d'être. Pas de flux RSS : son actualité, c'est la carte. Voix Piper sous licence permise
+  // (lib/voix.ts) ; pas encore de voix inventée déposée (data/voix-inventees.ts).
+  {
+    id: 'manifestactions-radio',
+    kind: 'manifestactions',
+    language: 'fr',
+    frequency: 113.7,
+    name: 'Manifestactions',
+    tagline: 'De l\'écran à l\'action.',
+    description: "Chaîne des Manifestactions : les actions concrètes que les Bâtisseurs proposent sur la carte d'Infinity — où, quand, ce qu'on y fait, comment rejoindre. Et quand rien de neuf n'est publié, leur raison d'être : œuvrer en faveur du vivant, des besoins vitaux et de l'émancipation. From Screen To Action.",
+    color: '#f25f8c',
+    hosts: [
+      { id: 'ma-ines',   name: 'Inès',   gender: 'female', trait: 'organisatrice de terrain, concrète et entraînante, donne envie d\'y aller', color: '#f25f8c', avatar: '📣' },
+      { id: 'ma-bastien', name: 'Bastien', gender: 'male',  trait: 'naturaliste et conteur du vivant, relie chaque action aux besoins vitaux', color: '#ff9ab8', avatar: '🌿' },
+    ],
+    sources: [],
     tracks: DEFAULT_TRACKS,
     live: false,
     creatorPubkey: null,

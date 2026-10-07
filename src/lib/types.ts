@@ -11,6 +11,7 @@ export type StationKind =
   | 'wtf' | 'freeworld' | 'bigballs' | 'mindctrl'
   | 'hydrogene' | 'g1' | 'deglingos' | 'diginomad' | 'tech'
   | 'pirate' | 'oasis'
+  | 'manifestactions'   // 07/10/2026 — les Manifestactions de la carte, ou leur raison d'être
   | 'user'
 
 export type StationLanguage = 'fr' | 'en' | 'es' | 'it' | 'pt' | 'hi' | 'ja' | 'zh' | 'ru'
