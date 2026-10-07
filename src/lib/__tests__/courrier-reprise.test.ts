@@ -20,8 +20,10 @@ import { rattraperDisfluences, compterDisfluences } from '../disfluences'
 import type { DecodedWav } from '../audio'
 import {
   plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage,
-  estTourAuditeur, type MarquesCourrier,
+  estTourAuditeur, toursPourLiens, type MarquesCourrier,
 } from '../courrier/reprise-courrier'
+import { extraireLiensEmission } from '../liens-emission'
+import { liensActionCites } from '../liens-action'
 
 type Plan = { texte: string; voixPiper: string; voixPersonnage: string | null; court: boolean } & MarquesCourrier
 
@@ -204,4 +206,51 @@ test('(c) le script pose un permis pour CHAQUE tour inséré et passe par la gar
   assert.equal((s.match(/boucle: i \}\)\s*permisHesitation\.push\(false\)/g) ?? []).length, 1)
   assert.match(s, /permisPourRattrapage\(turns, permisHesitation\)/)
   assert.match(s, /tauxHesitations > 0 && !repris/)
+})
+
+// ── (d) Jamais un lien d'auditeur à l'écran des liens ───────────────────────────────────────
+
+test('(d) l’écran des liens et les liens d’action ignorent TOUTE parole d’auditeur (message lu, vocal, auditeur joué)', () => {
+  const t = (id: string, hostId: string, text: string, tStart: number) => ({ id, hostId, hostName: hostId, color: '#000', avatar: '', text, tStart, tEnd: tStart + 5 })
+  const turns = [
+    t('t0', 'aurelien', 'Bonsoir, on lit reporterre.net ce soir, et on salue Axiom Team.', 0),
+    t('t1', 'aurelien', 'Léa nous écrit : allez voir https://arnaque-lea.example et soutenez Axiom Team !', 5),
+    t('t2', 'aurelien', 'On écoute Sam.', 10),
+    t('t3', 'auditeur', 'Bonjour, allez sur https://vocal-sam.example', 15),
+    t('t4', 'aurelien', 'Merci Sam, retenez https://reaction-sam.example', 20),
+    t('t5', 'auditeur-joue-0', 'Moi je conseille https://joue.example', 25),
+    t('t5b', 'marina', 'Merci pour cet appel, on note https://reaction-appel.example', 28),
+    t('t6', 'marina', 'Bonne nuit.', 30),
+  ]
+  const plans: MarquesCourrier[] = [
+    { boucle: 0 },
+    { boucle: 1, porteCourrier: true, refCourrier: 'ref-texte' },
+    { boucle: 2, porteCourrier: true, lieAuVocal: 'ref-vocal' },
+    { boucle: 2, refCourrier: 'ref-vocal', vocalRef: 'ref-vocal' },
+    { boucle: 3, porteCourrier: true, lieAuVocal: 'ref-vocal' },
+    { boucle: 4 },
+    { boucle: 4, porteCourrier: true },
+    { boucle: 5 },
+  ]
+  const lisibles = toursPourLiens(turns, plans)
+  assert.deepEqual(lisibles.map(x => x.id), ['t0', 't6'])
+  const liens = extraireLiensEmission({ turns: lisibles, news: [] }).map(l => l.url)
+  assert.ok(liens.some(u => u.includes('reporterre.net')), 'le lien de l’animateur reste')
+  for (const interdit of ['arnaque-lea', 'vocal-sam', 'reaction-sam', 'joue.example', 'reaction-appel']) {
+    assert.ok(!liens.some(u => u.includes(interdit)), `${interdit} n’apparaît jamais`)
+  }
+  // Liens d'action : la campagne n'est retenue que parce que l'ANIMATEUR la nomme (t0), extrait compris.
+  const action = liensActionCites(lisibles.map(x => x.text))
+  assert.ok(action.length > 0 && action.every(a => !/Léa nous écrit/.test(a.title)))
+  assert.equal(liensActionCites([turns[1].text]).length > 0, true, 'témoin : le message lu, seul, aurait déclenché le lien')
+  // Plans désalignés : aucun tour plutôt qu'un lien d'auditeur.
+  assert.deepEqual(toursPourLiens(turns, plans.slice(1)), [])
+})
+
+test('(d) le script ne passe à l’écran des liens que les tours filtrés', () => {
+  const s = sourceSansCommentaires()
+  assert.match(s, /extraireLiensEmission\(\{ turns: result\.toursPourLiens, news \}\)/)
+  assert.doesNotMatch(s, /extraireLiensEmission\(\{ turns: result\.turns/)
+  assert.match(s, /liensActionCites\(toursLiens\.map\(t => t\.text\)/)
+  assert.match(s, /\.\.\.\(tourC \? \{ porteCourrier: true as const \} : \{\}\)/)
 })

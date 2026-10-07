@@ -36,6 +36,8 @@ export interface MarquesCourrier {
   vocalRef?:    string
   /** Ce tour annonce le vocal ou y réagit : il tombe avec lui si le vocal est perdu. */
   lieAuVocal?:  string
+  /** Tour d'animateur qui porte le courrier (message lu, annonce ou réaction d'un vocal ou d'un appel). */
+  porteCourrier?: true
 }
 
 /** Préfixe de `hostId` des tours d'auditeurs (vocal : `auditeur` ; joué : `auditeur-joue-k`). */
@@ -122,4 +124,21 @@ export function permisPourRattrapage(
 ): Array<{ texte: string; permis: boolean }> {
   const aligne = permis.length === turns.length
   return turns.map((t, k) => ({ texte: t.text, permis: aligne && permis[k] === true && !estTourAuditeur(t.hostId) }))
+}
+
+/**
+ * ── (d) JAMAIS UN LIEN D'AUDITEUR À L'ÉCRAN DES LIENS ──
+ * L'écran des liens (kind 30093, champ `liens`) et les liens d'action sont une LISTE FERMÉE
+ * (décision de Med, 07/10/2026). Une adresse glissée par un auditeur — dans un message lu à
+ * l'antenne, la transcription d'un vocal, ou la réplique d'un auditeur joué — n'y entre jamais.
+ * Rend les seuls tours dont on peut lire les liens. Plans désalignés : AUCUN tour (pas de lien
+ * plutôt qu'un lien d'auditeur).
+ */
+export function paroleAuditeur(t: { hostId: string }, plan: MarquesCourrier | undefined): boolean {
+  return estTourAuditeur(t.hostId) || !!plan?.vocalRef || !!plan?.refCourrier || !!plan?.lieAuVocal || !!plan?.porteCourrier
+}
+
+export function toursPourLiens<T extends { hostId: string }>(turns: readonly T[], plans: readonly MarquesCourrier[]): T[] {
+  if (plans.length !== turns.length) return []
+  return turns.filter((t, k) => !paroleAuditeur(t, plans[k]))
 }

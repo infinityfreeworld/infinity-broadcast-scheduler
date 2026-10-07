@@ -92,7 +92,7 @@ import { consigneCourrier, promptAuditeurInvente, consigneAuditeurInvente } from
 import { transcripteurCourrier } from '../lib/courrier/transcription'
 import { contientInsulte } from '../lib/courrier/filtre-insultes'
 import {
-  plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage,
+  plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage, toursPourLiens,
   type MarquesCourrier,
 } from '../lib/courrier/reprise-courrier'
 import { preparerReprise, deciderOuArreter } from '../lib/reprise-branchement'
@@ -145,6 +145,8 @@ interface GenResult {
   voixObtenues:  number
   /** Messages d'auditeurs RÉELLEMENT passés dans cette émission (références opaques). */
   refsCourrier:  string[]
+  /** Les tours dont les liens peuvent aller à l'écran : jamais la parole d'un auditeur. */
+  toursPourLiens: BroadcastTurn[]
 }
 
 /** Ce qu'un tour doit dire, et par quelle voix (gardé dans le chantier d'une reprise). */
@@ -509,6 +511,7 @@ async function generateBroadcastBytes(opts: {
     plansVoix.push({
       texte: prononcerDomaine(turnText, language), voixPiper: voiceId, voixPersonnage: chatterboxVoice, court: humain.courts.has(i),
       boucle: i,
+      ...(tourC ? { porteCourrier: true as const } : {}),
       ...(place?.type === 'texte' && tourC && courrier ? { refCourrier: courrier.textes[place.k].ref } : {}),
       ...((place?.type === 'vocal-intro' || place?.type === 'vocal-reaction') && tourC && courrier ? { lieAuVocal: courrier.vocaux[place.k].ref } : {}),
     })
@@ -797,7 +800,9 @@ async function generateBroadcastBytes(opts: {
   // LISTE FERMÉE (liste blanche) ; seulement les campagnes que les répliques ont RÉELLEMENT
   // nommées, dans leur texte DÉFINITIF. Ajoutés au fil APRÈS la dernière réplique écrite : le modèle ne les a jamais vus,
   // la voix ne les lit jamais. L'écran des liens les retrouve dans l'actualité (`link`).
-  const liensAction = liensActionCites(turns.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
+  // Jamais un lien glissé par un auditeur (message lu, vocal, auditeur joué) : reprise-courrier.ts.
+  const toursLiens = toursPourLiens(turns, plansVoix)
+  const liensAction = liensActionCites(toursLiens.map(t => t.text), { campagneDuJour: carte.campagneDuJour })
   if (liensAction.length) {
     news.push(...liensAction)
     console.log(`    🔗 Liens d'action pour l'écran : ${liensAction.map(l => l.sourceTitle).join(' · ')}`)
@@ -814,6 +819,7 @@ async function generateBroadcastBytes(opts: {
     voixAttendues,
     voixObtenues,
     refsCourrier,
+    toursPourLiens: toursLiens,
   }
 }
 
@@ -1334,7 +1340,7 @@ async function main() {
     ...(result.segments.length > 0 ? { segments: result.segments } : {}),
     newsRefs:    news.map(n => n.link).filter((l): l is string => !!l),
     // L'écran des liens de l'appli (07/10/2026) : chaque lien évoqué, à l'instant où il l'est.
-    ...champLiens(extraireLiensEmission({ turns: result.turns, news })),
+    ...champLiens(extraireLiensEmission({ turns: result.toursPourLiens, news })),
     model,
     ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
     ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
