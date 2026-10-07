@@ -24,6 +24,7 @@ import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/hos
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { fetchPulse, exportPulseToEnv } from '../lib/pulse'
+import { fetchStationsAjoutees } from '../lib/station-reglages'
 import { fetchRadioPersonas, exportRadioPersonasToEnv, unifiedGuestsForStation, resolvePersonaForStation } from '../lib/radio-personas'
 
 const exec = promisify(execFile)
@@ -111,8 +112,16 @@ async function main() {
   // (« blocked: event kind 30101 not allowed ») — corrigé le même jour
   // dans infinity-relay. Sans ce correctif déployé, la récolte reste
   // vide et le scheduler retombe sur les valeurs par défaut.
+  // ── Stations AJOUTÉES par un administrateur dans l'IHL (07/10/2026) ──────────────────
+  // Une fiche 30091 d'admin dont le d-tag n'est pas dans la seed, et COMPLÈTE (nom, langue
+  // ayant une voix, au moins un animateur) : fabriquée comme les autres, après elles.
+  console.log(`\n📨 Stations ajoutées dans l'IHL (NOSTR kind:30091, administrateurs seulement)…`)
+  const ajoutees = await fetchStationsAjoutees(SEED_STATIONS)
+  console.log(`   ✓ ${ajoutees.length} station(s) ajoutée(s)${ajoutees.length ? ' : ' + ajoutees.map(s => `${s.name} (${s.id}, ${s.language})`).join(', ') : ''}`)
+  const STATIONS_NUIT = [...SEED_STATIONS, ...ajoutees]
+
   console.log(`\n📨 Fetch Pulse (NOSTR kinds:30101/30102/30103)…`)
-  const pulse = await fetchPulse(SEED_STATIONS.map(s => s.id))
+  const pulse = await fetchPulse(STATIONS_NUIT.map(s => s.id))
   exportPulseToEnv(pulse)
   const nbStation = Object.keys(pulse.byStation).length
   const nbPersona = Object.keys(pulse.byPersona).length
@@ -130,7 +139,7 @@ async function main() {
   // ne les lisait pas — 7 personas publiées depuis juin 2026 n'avaient
   // jamais pris l'antenne.
   console.log(`\n📨 Fetch personas unifiées (NOSTR kinds:30104/30105)…`)
-  const unified = await fetchRadioPersonas(SEED_STATIONS.map(s => s.id))
+  const unified = await fetchRadioPersonas(STATIONS_NUIT.map(s => s.id))
   exportRadioPersonasToEnv(unified)
   const listePersonas = Object.values(unified.personas)
   console.log(`   ✓ ${listePersonas.length} persona(s) unifiée(s), ${Object.keys(unified.overrides).length} affinage(s) per-station`)
@@ -165,7 +174,7 @@ async function main() {
   // Même logique que `lister-stations.ts`, qui la tenait juste depuis le
   // début. Deux endroits doivent s'accorder ; un test le vérifie.
   const avecGpu = new Set<string>()
-  for (const st of SEED_STATIONS) {
+  for (const st of STATIONS_NUIT) {
     const lg = st.language ?? 'fr'
     const invites = unifiedGuestsForStation(st.id, lg)
     const parInvite = invites.length
@@ -176,8 +185,8 @@ async function main() {
     if (parInvite || parAnimateur) avecGpu.add(st.id)
   }
   const ordreNuit = [
-    ...SEED_STATIONS.filter(s => avecGpu.has(s.id)),
-    ...SEED_STATIONS.filter(s => !avecGpu.has(s.id)),
+    ...STATIONS_NUIT.filter(s => avecGpu.has(s.id)),
+    ...STATIONS_NUIT.filter(s => !avecGpu.has(s.id)),
   ]
   if (avecGpu.size > 0) {
     console.log(`\n🎭 ${avecGpu.size} station(s) à voix clonée passent en tête : `
