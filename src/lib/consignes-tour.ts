@@ -29,6 +29,9 @@ export type GenreTour =
   | { type: 'retour-pause'; morceau: string; station: string }
   | { type: 'court' }
   | { type: 'courrier'; anonyme: boolean }
+  /** Rubrique « pendant ce temps sur la carte » (Freeworld, 07/10/2026) : `sujet` est RÉEL (relais),
+   *  `ouvre` / `ferme` disent si ce tour ouvre et/ou referme la rubrique. */
+  | { type: 'carte'; sujet: string; ouvre: boolean; ferme: boolean }
   | { type: 'courant' }
 
 function fr(t: GenreTour): string {
@@ -44,6 +47,7 @@ function fr(t: GenreTour): string {
     case 'retour-pause': return `On REVIENT d'une pause musicale (« ${t.morceau} »). Commence par une phrase de retour d'antenne dans ton style (« De retour sur ${t.station}… », « C'était… »), puis enchaîne sur la phase courante (cf. STRUCTURE). 2-3 phrases.`
     case 'court': return `Tour COURT : réagis en UNE seule phrase de 3 à 10 mots (rire, étonnement, relance, approbation, désaccord, taquinerie). Rien d'autre, pas de développement.`
     case 'courrier': return `Le standard a reçu un message d'auditeur en lien avec le sujet en cours. Invente un prénom et une ville, lis le message à l'antenne (2 phrases, à la première personne de l'auditeur, introduites par « ${t.anonyme ? 'quelqu\'un' : 'un auditeur'} nous écrit »), puis réponds-lui en une phrase en l'appelant par son prénom.`
+    case 'carte': return `${t.ouvre ? `Tu ouvres la rubrique « Pendant ce temps sur la carte » : annonce-la par son nom, puis raconte ce qui se passe sur la carte d'Infinity.` : `Toujours dans la rubrique « Pendant ce temps sur la carte » : rebondis sur ce que vient de dire ton confrère, puis enchaîne avec autre chose qui se passe sur la carte.`} Le sujet (RÉEL, à dire tel quel, sans rien inventer — ni lieu plus précis, ni participants, ni chiffres) : ${t.sujet} Dis le titre, la ville, la date, ce qu'on y fait et comment rejoindre, et donne envie d'y aller.${t.ferme ? ' Puis referme la rubrique en une phrase et reviens au fil de l\'émission.' : ''} 2-3 phrases.`
     case 'courant': return 'Ton tour. Continue le dialogue en respectant la phase courante (cf. STRUCTURE).'
   }
 }
@@ -70,6 +74,7 @@ function en(t: GenreTour, anglais: boolean, ecriturePropre = false): string {
     case 'retour-pause': return `We're BACK from a music break (${titre(t.morceau)}). Start with a back-on-air sentence in your style (${ex(`"Back on ${t.station}…", "That was…"`)}), then continue with the current phase (see STRUCTURE). 2-3 sentences.`
     case 'court': return `SHORT turn: react in ONE single sentence of 3 to 10 words (laugh, surprise, follow-up, agreement, disagreement, teasing). Nothing else, no development.`
     case 'courrier': return `The switchboard received a listener message related to the current topic. Make up a first name and a city, read the message on air (2 sentences, in the listener's first person, introduced by ${ex(t.anonyme ? '"someone writes to us"' : '"a listener writes in"')}), then answer them in one sentence, calling them by their first name.`
+    case 'carte': return `${t.ouvre ? `You open the segment ${ex('"Meanwhile on the map"')}: announce it by name, then tell what is happening on the Infinity map.` : `Still in the ${ex('"Meanwhile on the map"')} segment: bounce off what your colleague just said, then move on to something else happening on the map.`} The item (REAL, to be said as given, inventing nothing — no more precise place, no participants, no figures): ${t.sujet} Say the title, the city, the date, what people do there and how to join, and make listeners want to go.${t.ferme ? ' Then close the segment in one sentence and get back to the show.' : ''} 2-3 sentences.`
     case 'courant': return 'Your turn. Keep the dialogue going, following the current phase (see STRUCTURE).'
   }
 }

@@ -65,6 +65,26 @@ export const VOIX_INVENTEES: Readonly<Record<string, string>> = Object.freeze({
   'zi-you-zhi-sheng:zy-jian':        'inv-zy-jian',
 })
 
+/**
+ * Animateurs SANS voix inventée, en attendant le dépôt de leur référence au catalogue (on n'ajoute
+ * une ligne à `VOIX_INVENTEES` qu'APRÈS ce dépôt, cf. en-tête). Ils parlent avec leur voix Piper
+ * sous licence permise (`lib/voix.ts`) jusqu'au choix du fondateur à l'écoute. Le test exige que
+ * chaque animateur soit dans UNE des deux listes : ni oubli, ni animateur fantôme.
+ */
+export const ANIMATEURS_SANS_VOIX_INVENTEE: ReadonlySet<string> = new Set([
+  // 16/09/2026 — Biogame remplace Big Balls Radio : Nora et Malik sont neufs.
+  'bigballs-radio:bg-nora',
+  'bigballs-radio:bg-malik',
+  // Manifestactions (07/10/2026) — voix à concevoir et déposer (workflow deposer-voix).
+  'manifestactions-radio:ma-ines',
+  'manifestactions-radio:ma-bastien',
+  // Abondance et OBF (07/10/2026) — idem.
+  'abondance-radio:ab-solene',
+  'abondance-radio:ab-yann',
+  'obf-radio:obf-maya',
+  'obf-radio:obf-gregoire',
+])
+
 export function voixInventee(stationId: string, hostId: string): string | undefined {
   return VOIX_INVENTEES[`${stationId}:${hostId}`]
 }

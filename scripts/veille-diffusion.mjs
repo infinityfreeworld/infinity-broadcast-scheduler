@@ -24,9 +24,10 @@ export const RELAIS = [
 ]
 // ⚠️ Doivent rester égales à `seed-stations.ts` et `seed-tv-channels.ts` : un test le vérifie.
 export const RADIOS = [
-  'wtf-radio', 'freeworld-radio', 'mindctrl-radio', 'hydrogene-radio', 'g1-radio',
-  'deglingos-radio', 'diginomad-radio', 'tech-radio', 'pirate-radio', 'oasis-fm', 'free-press-fm',
-  'voces-libres', 'svoboda-fm', 'zi-you-zhi-sheng',
+  'wtf-radio', 'freeworld-radio', 'bigballs-radio', 'mindctrl-radio', 'hydrogene-radio', 'g1-radio',
+  'deglingos-radio', 'diginomad-radio', 'tech-radio', 'pirate-radio', 'oasis-fm', 'manifestactions-radio',
+  'abondance-radio', 'obf-radio',
+  'free-press-fm', 'voces-libres', 'svoboda-fm', 'zi-you-zhi-sheng',
 ]
 export const CANAUX_TV = ['tv-main-1', 'tv-nature']
 export const KIND_RADIO = 30093

@@ -78,6 +78,9 @@ export function buildHostSystemPrompt(opts: {
   /** 07/10/2026 — part d'actualité de la station, consigne de CE tour (fiche-station.ts). */
   consigneActualite?:  string
   newsBlock?:     string
+  /** 07/10/2026 — Ce que la station raconte de la CARTE d'Infinity (station Manifestactions :
+   *  Manifestactions réelles, ou leur raison d'être — lib/sujets-carte.ts). Vide = pas d'injection. */
+  consigneCarte?: string
   /** Position du tour courant (1-indexé). Si fourni avec totalTurns, le prompt
    *  inclut une section STRUCTURE qui guide le LLM selon sa position dans
    *  l'émission (intro / développement / conclusion). */
@@ -145,6 +148,9 @@ ${kb.personality || '(non renseignée — sois naturel selon ton trait dominant)
 ${customInstructions && customInstructions.trim().length > 0 ? `
 # INSTRUCTIONS ADMIN
 ${customInstructions.trim()}
+` : ''}${opts.consigneCarte && opts.consigneCarte.trim().length > 0 ? `
+# LA CARTE D'INFINITY
+${opts.consigneCarte.trim()}
 ` : ''}${behaviorDirective ? `
 # TON DU JOUR
 ${behaviorDirective}
