@@ -17,6 +17,12 @@
  *     · tracks, jingles, skipMusic, pauses, pauseDureeS (comme avant).
  *   Un champ absent ou illisible garde la valeur de la seed : une fiche ancienne ne casse rien.
  *
+ *   ⚠️ DATE BUTOIR (07/10/2026) : des fiches de juin 2026, que le générateur ignorait, portaient
+ *   des erreurs de saisie (noms de WTF et des Déglingos inversés, animateurs retirés). Une fiche
+ *   SIGNÉE avant `RADIO_FICHE_COMPLETE_DEPUIS` (défaut 2026-10-07, UTC) ne garde donc que ce
+ *   qu'elle réglait déjà avant : musiques, jingles, pauses (`restreindreFicheAncienne`). Seules les
+ *   fiches enregistrées depuis peuvent changer nom, raison d'être, animateurs, sources, rythme…
+ *
  *   Qui a le droit : la liste blanche `admins-radio.ts` (la même que pour les voix, personas et
  *   Pulse). Le « créateur de la station » n'est PLUS reconnu : un 30091 d'un non-admin est ignoré.
  *
@@ -194,6 +200,36 @@ export function lireReglages(content: string): ReglagesStation | null {
   return out
 }
 
+/** Défaut de `RADIO_FICHE_COMPLETE_DEPUIS` : 2026-10-07 00:00 UTC (secondes). */
+export const FICHE_COMPLETE_DEPUIS_DEFAUT = Date.UTC(2026, 9, 7) / 1000
+
+/** La date butoir en secondes : `RADIO_FICHE_COMPLETE_DEPUIS` (AAAA-MM-JJ, UTC) si lisible, sinon le défaut. */
+export function ficheCompleteDepuis(env: NodeJS.ProcessEnv = process.env): number {
+  const brut = (env.RADIO_FICHE_COMPLETE_DEPUIS ?? '').trim()
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(brut)
+  if (!m) return FICHE_COMPLETE_DEPUIS_DEFAUT
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000
+  return Number.isFinite(t) ? t : FICHE_COMPLETE_DEPUIS_DEFAUT
+}
+
+/**
+ * Une fiche signée AVANT la date butoir ne garde que ce que le générateur en reprenait déjà avant
+ * le 07/10/2026 (musiques, jingles, pauses) : ses autres champs dataient d'une époque où ils ne
+ * passaient pas à l'antenne, et certains sont faux. Pure.
+ */
+export function restreindreFicheAncienne(
+  r: ReglagesStation | null, createdAt: number, depuis: number,
+): ReglagesStation | null {
+  if (!r || createdAt >= depuis) return r
+  const out: ReglagesStation = {}
+  if (r.tracks) out.tracks = r.tracks
+  if (r.jingles) out.jingles = r.jingles
+  if (r.skipMusic !== undefined) out.skipMusic = r.skipMusic
+  if (r.pauses !== undefined) out.pauses = r.pauses
+  if (r.pauseDureeS !== undefined) out.pauseDureeS = r.pauseDureeS
+  return out
+}
+
 /** Auteur reconnu ? `admins` null = filtre levé (`RADIO_ADMIN_PUBKEYS='*'`, explicitement). */
 export function estAdmin(pubkey: string, admins: ReadonlySet<string> | null): boolean {
   return admins === null || admins.has(pubkey.toLowerCase())
@@ -283,8 +319,8 @@ export function stationAjoutee(
   if (seeds.some(s => Math.abs(s.frequency - frequency) <= TOLERANCE_FREQUENCE)) {
     return { station: null, motif: `fréquence ${frequency} déjà prise par une station de départ (l'app ne l'affiche pas)` }
   }
-  const r = lireReglages(e.content)
-  if (!r?.name) return { station: null, motif: 'sans nom' }
+  const r = restreindreFicheAncienne(lireReglages(e.content), e.created_at, ficheCompleteDepuis())
+  if (!r?.name) return { station: null, motif: e.created_at < ficheCompleteDepuis() ? 'fiche antérieure à la date butoir' : 'sans nom' }
   if (!r.language) return { station: null, motif: 'sans langue' }
   if (!langueSynthetisable(r.language)) return { station: null, motif: `langue ${r.language} sans voix commercialisable` }
   if (!r.hosts || r.hosts.length === 0) return { station: null, motif: 'aucun animateur complet' }
@@ -341,8 +377,9 @@ export async function stationSelonIHL(station: RadioStation, timeoutMs = 8000): 
       console.log(`    [station] aucune fiche IHL d'administrateur pour ${station.id} — seed`)
       return station
     }
-    const r = lireReglages(e.content)
+    const r = restreindreFicheAncienne(lireReglages(e.content), e.created_at, ficheCompleteDepuis())
     if (!r) return station
+    if (e.created_at < ficheCompleteDepuis()) console.log(`    [station] fiche antérieure à la date butoir : seuls musiques, jingles et pauses sont repris`)
     console.log(`    [station] fiche IHL de ${e.pubkey.slice(0, 8)} (${new Date(e.created_at * 1000).toISOString().slice(0, 10)}) : ${resumerReglages(r, station) || 'rien d\'utile'}`)
     return appliquerReglages(station, r)
   } catch (err) {

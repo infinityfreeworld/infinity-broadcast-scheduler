@@ -3,12 +3,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   lireReglages, retenirEvent, appliquerReglages, stationsAjouteesIHL, stationAjoutee, KIND_RADIO_STATION,
+  restreindreFicheAncienne, ficheCompleteDepuis, FICHE_COMPLETE_DEPUIS_DEFAUT,
 } from '../station-reglages'
 import { SEED_STATIONS } from '../../data/seed-stations'
 import type { Event as NostrEvent } from 'nostr-tools/core'
 
 const CID = 'bafybeibhjj5cyhauwnrrjntrkwncl6y3bhyetzow54jieku47f2igchw7e'
 const pirate = SEED_STATIONS.find(s => s.id === 'pirate-radio')!
+/** Une date APRÈS la date butoir du 07/10/2026 : la fiche entière compte. */
+const RECENT = FICHE_COMPLETE_DEPUIS_DEFAUT + 3600
 const HOTE = { id: 'ranouna', name: 'Ranouna', gender: 'male', trait: 'showman', color: '#888888', avatar: '🎙️' }
 
 test('les musiques et jingles collés dans l’IHL sont lus, les entrées sans CID valable écartées', () => {
@@ -112,19 +115,51 @@ test('stations hors seed : seules les fiches d’admin COMPLÈTES sont fabriqué
   const admin = 'a'.repeat(64), tiers = 'b'.repeat(64)
   const complete = { kind: 'user', frequency: 140.1, name: 'Radio Neuve', language: 'fr', hosts: [HOTE], description: 'Ligne' }
   const events = [
-    ev(admin, 'radio-neuve', 10, JSON.stringify(complete)),
-    ev(tiers, 'radio-tiers', 10, JSON.stringify({ ...complete, frequency: 141.1 })),
-    ev(admin, 'sans-hote', 10, JSON.stringify({ ...complete, frequency: 142.1, hosts: [] })),
-    ev(admin, 'en-japonais', 10, JSON.stringify({ ...complete, frequency: 143.1, language: 'ja' })),
-    ev(admin, 'sur-pirate', 10, JSON.stringify({ ...complete, frequency: pirate.frequency + 0.01 })),
-    ev(admin, 'bigballs-radio', 10, JSON.stringify({ deleted: true })),
-    ev(admin, 'pirate-radio', 10, JSON.stringify(complete)),   // seed : pas une station ajoutée
+    ev(admin, 'radio-neuve', RECENT, JSON.stringify(complete)),
+    ev(tiers, 'radio-tiers', RECENT, JSON.stringify({ ...complete, frequency: 141.1 })),
+    ev(admin, 'sans-hote', RECENT, JSON.stringify({ ...complete, frequency: 142.1, hosts: [] })),
+    ev(admin, 'en-japonais', RECENT, JSON.stringify({ ...complete, frequency: 143.1, language: 'ja' })),
+    ev(admin, 'sur-pirate', RECENT, JSON.stringify({ ...complete, frequency: pirate.frequency + 0.01 })),
+    ev(admin, 'bigballs-radio', RECENT, JSON.stringify({ deleted: true })),
+    ev(admin, 'pirate-radio', RECENT, JSON.stringify(complete)),   // seed : pas une station ajoutée
   ]
   const { stations, ecartees } = stationsAjouteesIHL(events, new Set([admin]), SEED_STATIONS)
   assert.deepEqual(stations.map(s => s.id), ['radio-neuve'])
   assert.equal(stations[0].name, 'Radio Neuve'); assert.equal(stations[0].description, 'Ligne')
   assert.deepEqual(ecartees.map(e => e.id).sort(), ['bigballs-radio', 'en-japonais', 'sans-hote', 'sur-pirate'])
   assert.ok(!ecartees.some(e => e.id === 'radio-tiers'), 'la fiche d’un tiers n’est même pas examinée')
-  assert.equal(stationAjoutee(ev(admin, 'x1', 1, JSON.stringify({ ...complete, name: '' })), SEED_STATIONS).motif, 'sans nom')
-  assert.equal(stationAjoutee(ev(admin, 'x2', 1, JSON.stringify({ ...complete, language: undefined })), SEED_STATIONS).motif, 'sans langue')
+  assert.equal(stationAjoutee(ev(admin, 'x1', RECENT, JSON.stringify({ ...complete, name: '' })), SEED_STATIONS).motif, 'sans nom')
+  assert.equal(stationAjoutee(ev(admin, 'x2', RECENT, JSON.stringify({ ...complete, language: undefined })), SEED_STATIONS).motif, 'sans langue')
+})
+
+test('date butoir : une fiche signée AVANT le 07/10/2026 ne garde que musiques, jingles et pauses', () => {
+  // Fiche de juin 2026 avec les erreurs relevées le 07/10 : noms inversés, un seul animateur.
+  const juin = Date.UTC(2026, 5, 15) / 1000
+  const r = lireReglages(JSON.stringify({
+    name: 'Les Déglingos', description: 'Autre ligne', hosts: [HOTE], language: 'fr',
+    tracks: [{ title: 'Morceau', cid: CID }], pauses: 2, skipMusic: false,
+  }))
+  const ancienne = restreindreFicheAncienne(r, juin, FICHE_COMPLETE_DEPUIS_DEFAUT)!
+  assert.deepEqual(Object.keys(ancienne).sort(), ['pauses', 'skipMusic', 'tracks'])
+  const s = appliquerReglages(pirate, ancienne)
+  assert.equal(s.name, pirate.name, 'le nom de juin ne passe pas')
+  assert.equal(s.hosts, pirate.hosts, 'les animateurs de juin ne passent pas')
+  assert.equal(s.pauses, 2, 'les pauses passent, comme avant')
+  // La même fiche signée après la date butoir passe entière.
+  assert.equal(restreindreFicheAncienne(r, RECENT, FICHE_COMPLETE_DEPUIS_DEFAUT), r)
+  assert.equal(restreindreFicheAncienne(null, juin, FICHE_COMPLETE_DEPUIS_DEFAUT), null)
+})
+
+test('date butoir : une station ajoutée avant la date butoir n’est pas fabriquée, et on dit pourquoi', () => {
+  const admin = 'a'.repeat(64)
+  const complete = { kind: 'user', frequency: 140.1, name: 'Radio Neuve', language: 'fr', hosts: [HOTE] }
+  const juin = Date.UTC(2026, 5, 15) / 1000
+  assert.equal(stationAjoutee(ev(admin, 'radio-neuve', juin, JSON.stringify(complete)), SEED_STATIONS).motif,
+    'fiche antérieure à la date butoir')
+})
+
+test('date butoir : réglable par RADIO_FICHE_COMPLETE_DEPUIS (AAAA-MM-JJ), défaut sinon', () => {
+  assert.equal(ficheCompleteDepuis({}), FICHE_COMPLETE_DEPUIS_DEFAUT)
+  assert.equal(ficheCompleteDepuis({ RADIO_FICHE_COMPLETE_DEPUIS: '2026-01-01' }), Date.UTC(2026, 0, 1) / 1000)
+  assert.equal(ficheCompleteDepuis({ RADIO_FICHE_COMPLETE_DEPUIS: 'n’importe quoi' }), FICHE_COMPLETE_DEPUIS_DEFAUT)
 })
