@@ -29,6 +29,14 @@
  *   Pulse). Le « créateur de la station » n'est PLUS reconnu : un 30091 d'un non-admin est ignoré.
  *
  *   Sans relais, sans réponse, sans admin reconnu : la seed, et on le dit.
+ *
+ *   ── 08/10/2026 : STATION DÉSACTIVÉE ──
+ *   Décision du Bâtisseur : depuis l'IHL, un administrateur radio peut DÉSACTIVER une station
+ *   (`active: false` dans la fiche 30091, réversible) : elle disparaît de la radio partout, et la
+ *   nuit ne la FABRIQUE PLUS tant qu'elle l'est (`ficheDesactivee`). Le champ est né le 08/10 : seule
+ *   une fiche signée depuis la date butoir peut désactiver (une fiche plus ancienne ne le porte pas,
+ *   et une date forgée en arrière ne ferait rien de plus que l'ignorer). Une fiche plus récente sans
+ *   le champ réactive. Relais illisibles : on fabrique (mieux vaut une émission de trop qu'un silence).
  */
 
 import { SimplePool } from 'nostr-tools/pool'
@@ -236,6 +244,41 @@ export function restreindreFicheAncienne(
   return out
 }
 
+/**
+ * La fiche retenue d'une station la DÉSACTIVE-t-elle ? `active === false` (et rien d'autre : absent,
+ * `true` ou illisible = active), sur une fiche signée depuis la date butoir. Pure.
+ */
+export function ficheDesactivee(e: NostrEvent | null, depuis: number = ficheCompleteDepuis()): boolean {
+  if (!e || e.kind !== KIND_RADIO_STATION || e.created_at < depuis) return false
+  try {
+    const c = JSON.parse(e.content) as unknown
+    return estObjet(c) && c.deleted !== true && c.active === false
+  } catch { return false }
+}
+
+/**
+ * Parmi `ids`, les stations dont la fiche la plus récente d'un ADMIN les désactive. Pure.
+ * Rend aussi la date de la désactivation, pour le journal de la nuit.
+ */
+export function stationsDesactiveesIHL(
+  events: NostrEvent[], admins: ReadonlySet<string> | null, ids: Iterable<string>, depuis: number = ficheCompleteDepuis(),
+): Array<{ id: string; le: string }> {
+  const out: Array<{ id: string; le: string }> = []
+  for (const id of ids) {
+    const e = retenirEvent(events, id, admins)
+    if (e && ficheDesactivee(e, depuis)) out.push({ id, le: new Date(e.created_at * 1000).toISOString().slice(0, 16).replace('T', ' ') })
+  }
+  return out
+}
+
+/** Les stations que la nuit fabrique : départ + ajoutées, moins les désactivées. Pure. */
+export function stationsAFabriquer(
+  seeds: readonly RadioStation[], ajoutees: readonly RadioStation[], desactivees: ReadonlyArray<{ id: string }>,
+): RadioStation[] {
+  const off = new Set(desactivees.map(d => d.id))
+  return [...seeds, ...ajoutees].filter(s => !off.has(s.id))
+}
+
 /** Auteur reconnu ? `admins` null = filtre levé (`RADIO_ADMIN_PUBKEYS='*'`, explicitement). */
 export function estAdmin(pubkey: string, admins: ReadonlySet<string> | null): boolean {
   return admins === null || admins.has(pubkey.toLowerCase())
@@ -321,6 +364,7 @@ export function stationAjoutee(
   let c: Record<string, unknown>
   try { c = JSON.parse(e.content) as Record<string, unknown> } catch { return { station: null, motif: 'contenu illisible' } }
   if (!estObjet(c) || c.deleted === true) return { station: null, motif: 'pierre tombale' }
+  if (ficheDesactivee(e)) return { station: null, motif: 'désactivée dans l\'IHL' }
   if (!(TYPES_STATION as readonly unknown[]).includes(c.kind)) return { station: null, motif: 'type de station inconnu de l\'app' }
   const frequency = Number(c.frequency)
   if (!Number.isFinite(frequency)) return { station: null, motif: 'sans fréquence' }
@@ -409,6 +453,41 @@ export async function stationAjouteeSelonIHL(
     return station
   } catch (err) {
     console.warn(`    [station] relais illisibles (${(err as Error).message.slice(0, 80)})`)
+    return null
+  }
+}
+
+/**
+ * La nuit en une seule lecture des relais (08/10/2026) : les stations AJOUTÉES (complètes, actives)
+ * et les stations DÉSACTIVÉES (seed comprises). Relais illisibles → aucune ajoutée, aucune désactivée
+ * (on fabrique les stations de départ), et on le dit.
+ */
+export async function fetchFichesNuit(
+  seeds: readonly RadioStation[], timeoutMs = 8000,
+  /** Où écrire le journal (`lister-stations` réserve la sortie standard à sa liste JSON). */
+  journal: (ligne: string) => void = console.log,
+): Promise<{ ajoutees: RadioStation[]; desactivees: Array<{ id: string; le: string }>; lu: boolean }> {
+  try {
+    const events = await lireEvents({}, timeoutMs)
+    const admins = adminPubkeys()
+    const { stations, ecartees } = stationsAjouteesIHL(events, admins, seeds)
+    for (const x of ecartees) journal(`   · ${x.id} écartée : ${x.motif}`)
+    const ids = new Set<string>(seeds.map(s => s.id))
+    for (const e of events) { const d = e.tags.find(t => t[0] === 'd')?.[1]; if (e.kind === KIND_RADIO_STATION && d) ids.add(d) }
+    return { ajoutees: stations, desactivees: stationsDesactiveesIHL(events, admins, [...ids].sort()), lu: true }
+  } catch (err) {
+    console.warn(`   ⚠ relais illisibles (${(err as Error).message.slice(0, 80)}) — aucune station ajoutée ni désactivée prise en compte cette nuit`)
+    return { ajoutees: [], desactivees: [], lu: false }
+  }
+}
+
+/** Une station est-elle désactivée dans l'IHL ? (une seule station ; relais illisibles → non, en le disant) */
+export async function stationDesactiveeSelonIHL(stationId: string, timeoutMs = 8000): Promise<{ id: string; le: string } | null> {
+  try {
+    const events = await lireEvents({ '#d': [stationId] }, timeoutMs)
+    return stationsDesactiveesIHL(events, adminPubkeys(), [stationId])[0] ?? null
+  } catch (err) {
+    console.warn(`    [station] relais illisibles (${(err as Error).message.slice(0, 80)}) — désactivation non vérifiée, on fabrique`)
     return null
   }
 }
