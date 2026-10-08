@@ -9,6 +9,10 @@
  * doit être à nous. Ce script épingle tout ce que les stations déclarent (seed + IHL 30091)
  * sur le compte du générateur, sous un nom lisible `radio/<station>/<titre>`.
  *
+ * 07/10/2026 — les 10 pistes par défaut sont RETIRÉES (décision de Med : aucune mention de
+ * droits) : la règle partagée (`PISTES_RETIREES`, lib/selection-musique.ts) les écarte avant
+ * l'inventaire, même si une ancienne fiche 30091 les cite encore. Elles ne sont plus épinglées.
+ *
  * Usage :  npx tsx src/scripts/epingler-pistes.ts [--executer] [--station <id>]
  * Sans `--executer` : inventaire seulement. Clé : DATASPACE_NOSTR_KEY (ou DATASPACE_API_KEY).
  */
@@ -17,6 +21,7 @@ import 'dotenv/config'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { jetonDataspace } from '../lib/dataspace-jeton'
 import { stationSelonIHL } from '../lib/station-reglages'
+import { stationAvecSaMusique } from '../lib/bibliotheque-musique'
 import type { TrackRef } from '../lib/types'
 
 const URL_PIN = 'https://data-space.world/api/v1/pin'
@@ -52,7 +57,8 @@ async function main() {
   const cibles = new Map<string, Cible>()
   for (const seed of SEED_STATIONS) {
     if (seule && seed.id !== seule) continue
-    const station = await stationSelonIHL(seed)
+    // 07/10/2026 — aussi les musiques que ses règles prennent dans la bibliothèque 30108.
+    const station = await stationAvecSaMusique(await stationSelonIHL(seed))
     const pistes: Array<[TrackRef, string]> = [
       ...(station.tracks ?? []).map(t => [t, 'musique'] as [TrackRef, string]),
       ...(station.jingles ?? []).map(t => [t, 'jingle'] as [TrackRef, string]),
