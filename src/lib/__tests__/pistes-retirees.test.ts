@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PISTES_RETIREES, estPisteRetiree } from '../selection-musique'
+import { PISTES_COMMUNES, PISTES_RETIREES, estPisteRetiree } from '../selection-musique'
 import { avecSaMusique } from '../bibliotheque-musique'
 import { appliquerReglages, lireReglages } from '../station-reglages'
 import { choisirPistes, planifierPauses, reglagesMusique } from '../musique'
@@ -31,13 +31,23 @@ test('🚫 aucune station de départ ne porte de musique', () => {
   for (const s of SEED_STATIONS) assert.deepEqual(s.tracks ?? [], [], s.id)
 })
 
-test('🚫 une ancienne fiche d’admin qui ne cite que les pistes retirées : aucune musique dans l’émission', () => {
+test('🚫 une ancienne fiche d’admin qui ne cite que les pistes retirées : aucune ne revient, seules les musiques de toutes les radios', () => {
   const pirate = SEED_STATIONS.find(s => s.id === 'pirate-radio')!
   // La fiche telle qu'elle est sur les relais (tracks = les 10 anciennes pistes, pauses demandées).
   const fiche = appliquerReglages(pirate, lireReglages(JSON.stringify({ tracks: anciennes, pauses: 2 })))
   assert.equal(fiche.tracks?.length, 10, 'la fiche est bien lue telle quelle…')
   const s = avecSaMusique(fiche, [{ title: 'Chanson festive Russe', cid: CHANSON_RUSSE }])
-  assert.deepEqual(s.tracks, [], '…mais la règle n’en garde aucune (et la chanson russe, sans droits, non plus)')
+  // …mais la règle n'en garde aucune ; restent les musiques de toutes les radios (Med, 08/10/2026,
+  // droits déclarés par l'administration — la chanson russe comprise).
+  assert.deepEqual(s.tracks, [...PISTES_COMMUNES])
+  assert.ok(!s.tracks?.some(estPisteRetiree))
+})
+
+test('🚫 sans musique diffusable (toutes les musiques communes exclues par une fiche récente) : l’émission reste valide', () => {
+  const pirate = SEED_STATIONS.find(s => s.id === 'pirate-radio')!
+  const fiche = appliquerReglages(pirate, lireReglages(JSON.stringify({ tracks: anciennes, pauses: 2, musique: { exclure: PISTES_COMMUNES.map(p => p.cid) } })))
+  const s = avecSaMusique(fiche, [{ title: 'Chanson festive Russe', cid: CHANSON_RUSSE }])
+  assert.deepEqual(s.tracks, [], 'ni retirée, ni chanson russe hors liste commune (sans droits)')
 
   // L'émission reste valide : musique inactive, aucune pause, aucun lit, aucune consigne de pause.
   const r = reglagesMusique(s, {})

@@ -25,17 +25,25 @@
  *
  *   ── LA LISTE D'UNE STATION ──
  *   1. ses choix explicites, sauf ceux qu'elle exclut et sauf une musique de la bibliothèque
- *      dont les droits ne sont pas indiqués ;
- *   2. puis, si elle a au moins un critère (genre, ambiance ou énergie), chaque musique de la
+ *      dont les droits ne sont pas indiqués (une piste COMMUNE, elle, a ses droits) ;
+ *   2. puis les MUSIQUES DE TOUTES LES RADIOS (`PISTES_COMMUNES`, décision de Med du
+ *      08/10/2026), sauf celles qu'elle exclut et celles déjà présentes — même quand une fiche
+ *      30091, ancienne ou récente, remplace `tracks` ;
+ *   3. puis, si elle a au moins un critère (genre, ambiance ou énergie), chaque musique de la
  *      bibliothèque qui a ses droits et qui répond à TOUS ses critères (un genre voulu au
  *      moins, une ambiance voulue au moins, une énergie dans la fourchette), triée par clé.
- *   Une station sans règles garde exactement ses choix explicites.
+ *   Une station sans règles garde ses choix explicites et les musiques communes.
+ *
+ *   ── LES JINGLES GARANTIS (décision de Med du 08/10/2026) ──
+ *   `JINGLES_GARANTIS` : les jingles qu'une station a TOUJOURS (Radio Pirate : 3 jingles), même
+ *   quand une fiche 30091 remplace `jingles`. `jinglesDeLaStation` les ajoute après les siens.
  *
  *   ── LES PISTES RETIRÉES (décision de Med du 07/10/2026) ──
  *   Les 10 « Default Track » de mai 2026 n'ont aucune mention de droits : elles sont RETIRÉES.
  *   Elles ne sont plus dans les stations de départ, mais d'anciennes fiches 30091 publiées par
  *   des admins les citent encore dans `tracks`. Une piste de `PISTES_RETIREES` n'est JAMAIS
- *   sélectionnée : ni comme choix explicite, ni par une règle, ni depuis la bibliothèque.
+ *   sélectionnée : ni comme choix explicite, ni par une règle, ni depuis la bibliothèque, ni
+ *   comme musique commune, ni comme jingle garanti. Les pistes retirées passent AVANT tout.
  */
 
 /**
@@ -67,6 +75,54 @@ export function estPisteRetiree(p: { cid?: unknown; url?: unknown }): boolean {
   if (cid && PISTES_RETIREES.includes(cid)) return true
   const url = typeof p.url === 'string' ? p.url : ''
   return !!url && PISTES_RETIREES.some(c => url.includes(c))
+}
+
+/**
+ * LES MUSIQUES DE TOUTES LES RADIOS — décision de Med du 08/10/2026 : musiques de toutes les
+ * radios, droits déclarés par l'administration. UN SEUL ENDROIT : chaque station les reçoit,
+ * dans l'application comme dans le générateur, même si une fiche 30091 (ancienne ou récente)
+ * remplace ses `tracks`. Une station peut seulement en retirer par `musique.exclure` (clé = CID).
+ * Elles sont réputées avoir leurs droits (déclaration de Med), y compris la « Chanson festive
+ * Russe » même si son 30108 n'en indique pas. `PISTES_RETIREES` reste prioritaire.
+ * Titres : les fichiers ne portent aucune étiquette lisible (ID3/Vorbis) — « Musique NN ».
+ */
+export const PISTES_COMMUNES: readonly PisteJouable[] = [
+  { title: 'Musique 01', cid: 'Qmckfwx4DrCGBKi7wEEQMjZ2sJyNcjGJRsLGFzz2ADB6Q2' },
+  { title: 'Chanson festive Russe', cid: 'QmU7Htd4J9EQttvs2s2wWm6TyiV3wPY7nxYLLRYvX7j4tE' },
+  { title: 'Musique 03', cid: 'Qme5G3bbfoHb3iSo5EFjm9yKYpcWAZs7E4ThEpyTygpcR1' },
+  { title: 'Musique 04', cid: 'QmZ3XTXyBdZ5jP2ncVso95FtE4yGz71tEmzf3w3iYU5Zvq' },
+  { title: 'Musique 05', cid: 'QmXvAZxepnUXMyH6cJaFKdVVPdySZZvd3fWYTTvh2UhKV3' },
+  { title: 'Musique 06', cid: 'QmSW7mxs64EcNEn8dVBhD2wMjpm4XhXV34bP1veEjiGdC1' },
+  { title: 'Musique 07', cid: 'QmcRSP1cD1vyV4nRKRCnveQ47WruKEXegPPmGWvEqda5Qg' },
+  { title: 'Musique 08', cid: 'QmdtVzZ6zttHGAAS7vrFYwosHeLEgn4xZb53LLoJeyEZ6d' },
+  { title: 'Musique 09', cid: 'QmRVsYuoiGWnjaWWhqip8CfZJcFXKfQVUXB2t3YLFwvacy' },
+  { title: 'Musique 10', cid: 'QmTFCPmL7tFbAhCAhqMvNTdLsPPV18B3dK8xMhLvh5Mk86' },
+  { title: 'Musique 11', cid: 'QmddeAB9ZGctVymCrE26GkMKa4UcsyQbZcfXrfPBVLUfvE' },
+  { title: 'Musique 12', cid: 'QmQEJwPgDQKRDiARYVcByy1XVtcHVkMLoW282EPRtKYrsH' },
+  { title: 'Musique 13', cid: 'Qmdw16YifvRG4PQE7kvcVeoxnAqKMHrCwqZ82PqkYRZYKS' },
+  { title: 'Musique 14', cid: 'QmZyvJ58RxmiQ3vGue9FFoDZQojz7J4jYYKiDeEzLJRNhZ' },
+  { title: 'Musique 15', cid: 'QmfZt1PENnsxfLZCAMXtPYRGCF8xFzj2nRkghQMvCpk2hp' },
+  { title: 'Musique 16', cid: 'QmTehprkW9Dhp4RnPmDUseAbAQodA6k7yLG7WCfUSCZKLc' },
+  { title: 'Musique 17', cid: 'QmXE2RqC9wC78duY145JWUAuMcr5zKUKngcdY1rYWfyXTe' },
+  { title: 'Musique 18', cid: 'QmfYTxBM8evfHczJNsSx7Rx9JW6mDzg4TTfdF7We35pGur' },
+  { title: 'Musique 19', cid: 'QmeJY3ggivnLnJjNz3V8EFfWqc2RAiQzfDZ89sFBHnYLJU' },
+  { title: 'Musique 20', cid: 'QmQ292duCfvK2Wye4VabSoTCZ2NVAovugkzm5YeHtgrb6a' },
+  { title: 'Musique 21', cid: 'QmWsNgVYYsUVad7qFnFgsg6PGsxcHBWSyc3TZDGCY5DVLU' },
+  { title: 'Musique 22', cid: 'QmcE7zxduMCwpXueNLgiPgTSvLBwKWEy4uDL75CW2p91cV' },
+  { title: 'Musique 23', cid: 'QmY2aYYWxGzavVnqao4PNiWXJTQu8ZAWhur1rMmTfa3H2B' },
+  { title: 'Musique 24', cid: 'QmShgRDt2fLL1PA2Z1rHZ7pg5AXvPALTGHU7NuUtE4EhQX' },
+]
+
+/**
+ * Les JINGLES qu'une station a TOUJOURS — décision de Med du 08/10/2026 (Radio Pirate). Ils
+ * s'ajoutent à ceux de sa fiche 30091 (même quand elle remplace `jingles`), jamais en double.
+ */
+export const JINGLES_GARANTIS: Readonly<Record<string, readonly PisteJouable[]>> = {
+  'pirate-radio': [
+    { title: 'Jingle Pirate 1', cid: 'QmPtEQYerW11BZYGtdELADDS6tudhWH8c2qpsnhCgQtpze' },
+    { title: 'Jingle Pirate 2', cid: 'QmPxBqbPCUeXbHXC2dVdVNDiwHCGCYCeby2ky3pCGWMBYV' },
+    { title: 'Jingle Pirate 3', cid: 'Qmca2PLnqMng4wyaENirBpgLcsLmsgWkRFDjGdSrbyD3D5' },
+  ],
 }
 
 export const ENERGIE_MIN = 1
@@ -232,8 +288,52 @@ export function pisteJouable(p: PisteBibliotheque): PisteJouable {
   }
 }
 
+/** Les clés (CID ou adresse) d'une liste de pistes. */
+function clesDe(pistes: readonly PisteJouable[]): Set<string> {
+  const out = new Set<string>()
+  for (const p of pistes) { const k = cleDePiste(p); if (k) out.add(k) }
+  return out
+}
+
+/** Une piste fait-elle partie des musiques de toutes les radios ? (par sa clé) */
+export function estPisteCommune(p: { cid?: string; url?: string }, communes: readonly PisteJouable[] = PISTES_COMMUNES): boolean {
+  const k = cleDePiste(p)
+  return !!k && clesDe(communes).has(k)
+}
+
+/** Les jingles garantis d'une station (aucun pour la plupart). */
+export function jinglesGarantis(id: string): readonly PisteJouable[] {
+  return Object.prototype.hasOwnProperty.call(JINGLES_GARANTIS, id) ? JINGLES_GARANTIS[id] : []
+}
+
+/**
+ * Les jingles d'une station : les siens (fiche ou départ), sauf les pistes retirées, PUIS ses
+ * jingles garantis qui n'y sont pas déjà. Pure et déterministe, ici et dans le générateur.
+ */
+export function jinglesDeLaStation<T extends PisteJouable>(
+  station: { id: string; jingles?: readonly T[] },
+  garantis: readonly PisteJouable[] = jinglesGarantis(station.id),
+): Array<T | PisteJouable> {
+  const out: Array<T | PisteJouable> = []
+  const vues = new Set<string>()
+  for (const j of station.jingles ?? []) {
+    if (estPisteRetiree(j)) continue
+    const k = cleDePiste(j)
+    if (k) vues.add(k)
+    out.push(j)
+  }
+  for (const g of garantis) {
+    if (estPisteRetiree(g)) continue
+    const k = cleDePiste(g)
+    if (!k || vues.has(k)) continue
+    vues.add(k)
+    out.push(g)
+  }
+  return out
+}
+
 /** D'où vient une piste de la liste résultante (pour l'aperçu de l'IHL). */
-export type OriginePiste = 'choisie' | 'regle'
+export type OriginePiste = 'choisie' | 'commune' | 'regle'
 
 /**
  * La liste RÉSULTANTE d'une station, avec l'origine de chaque piste. Pure et déterministe :
@@ -242,9 +342,11 @@ export type OriginePiste = 'choisie' | 'regle'
 export function pistesDeLaStationDetaillees<T extends PisteJouable>(
   station: { tracks?: readonly T[]; musique?: ReglesMusiqueStation },
   bibliotheque: readonly PisteBibliotheque[],
+  communes: readonly PisteJouable[] = PISTES_COMMUNES,
 ): Array<{ piste: T | PisteJouable; origine: OriginePiste }> {
   const regles = lireReglesMusique(station.musique)
   const exclues = new Set(regles?.exclure ?? [])
+  const clesCommunes = clesDe(communes)
   const parCle = new Map<string, PisteBibliotheque>()
   for (const b of bibliotheque) {
     if (estPisteRetiree(b)) continue
@@ -260,10 +362,18 @@ export function pistesDeLaStationDetaillees<T extends PisteJouable>(
     if (k) {
       if (exclues.has(k)) continue
       const b = parCle.get(k)
-      if (b && !droitsValides(b)) continue
+      if (b && !droitsValides(b) && !clesCommunes.has(k)) continue
       vues.add(k)
     }
     out.push({ piste: t, origine: 'choisie' })
+  }
+  // Décision de Med du 08/10/2026 : les musiques de toutes les radios, quoi que dise la fiche.
+  for (const c of communes) {
+    if (estPisteRetiree(c)) continue
+    const k = cleDePiste(c)
+    if (!k || exclues.has(k) || vues.has(k)) continue
+    vues.add(k)
+    out.push({ piste: c, origine: 'commune' })
   }
   if (regles && reglesActives(regles)) {
     const ajouts = [...parCle.entries()]
@@ -278,6 +388,7 @@ export function pistesDeLaStationDetaillees<T extends PisteJouable>(
 export function pistesDeLaStation<T extends PisteJouable>(
   station: { tracks?: readonly T[]; musique?: ReglesMusiqueStation },
   bibliotheque: readonly PisteBibliotheque[],
+  communes: readonly PisteJouable[] = PISTES_COMMUNES,
 ): Array<T | PisteJouable> {
-  return pistesDeLaStationDetaillees(station, bibliotheque).map(x => x.piste)
+  return pistesDeLaStationDetaillees(station, bibliotheque, communes).map(x => x.piste)
 }

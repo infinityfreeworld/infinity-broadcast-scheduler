@@ -13,6 +13,7 @@
  */
 
 import type { RadioStation } from '../lib/types'
+import { JINGLES_GARANTIS } from '../lib/selection-musique'
 
 /*
  * Plus de bibliothèque musicale par défaut — décision de Med du 07/10/2026 : les 10
@@ -249,6 +250,9 @@ export const SEED_STATIONS: RadioStation[] = [
       { type: 'rss', url: 'https://opensource.org/blog/feed',                      title: 'Open Source Initiative' },
     ],
     tracks: [],
+    // Décision de Med du 08/10/2026 : les 3 jingles de la Radio Pirate (un seul endroit :
+    // JINGLES_GARANTIS, lib/selection-musique.ts — ils reviennent même si une fiche remplace `jingles`).
+    jingles: JINGLES_GARANTIS['pirate-radio'].map(j => ({ ...j })),
     live: false,
     creatorPubkey: null,
   },

@@ -13,7 +13,9 @@
  *   La liste d'une station = `pistesDeLaStation` (lib/selection-musique.ts, IDENTIQUE à l'app) :
  *   ses choix explicites + les musiques de la bibliothèque qui répondent à ses règles, jamais une
  *   musique sans droits. Elle REMPLACE `station.tracks` avant toute décision musicale de la nuit
- *   (réglages, pauses, lit musical, épinglage) : un seul endroit, une seule règle.
+ *   (réglages, pauses, lit musical, épinglage) : un seul endroit, une seule règle. Elle porte
+ *   aussi les MUSIQUES DE TOUTES LES RADIOS et les JINGLES GARANTIS (décision de Med du
+ *   08/10/2026, `PISTES_COMMUNES` et `JINGLES_GARANTIS`), quoi que dise la fiche 30091.
  *
  *   RÈGLE ABSOLUE (lib/musique.ts) : la musique ne bloque jamais l'émission. Relais muets ou
  *   bibliothèque illisible → la station garde ses choix explicites, et on le dit.
@@ -25,7 +27,7 @@ import { getRelays } from './nostr'
 import { adminPubkeys } from './admins-radio'
 import { estAdmin } from './station-reglages'
 import {
-  lireDroits, lireEnergie, lireEtiquettes, lireTexte, pistesDeLaStation, reglesActives,
+  estPisteCommune, jinglesDeLaStation, lireDroits, lireEnergie, lireEtiquettes, lireTexte, pistesDeLaStation, reglesActives,
   type PisteBibliotheque,
 } from './selection-musique'
 import type { RadioStation, TrackRef } from './types'
@@ -81,10 +83,15 @@ export function retenirBibliotheque(events: NostrEvent[], admins: ReadonlySet<st
     .filter((x): x is PisteBibliotheque => !!x)
 }
 
-/** La station avec sa liste RÉSULTANTE à la place de `tracks`. Pure. */
+/**
+ * La station avec sa liste RÉSULTANTE à la place de `tracks` (dont les musiques de toutes les
+ * radios, décision de Med du 08/10/2026) et ses jingles garantis ajoutés aux siens, même quand
+ * sa fiche 30091 remplace `tracks` ou `jingles`. Pure.
+ */
 export function avecSaMusique(station: RadioStation, bibliotheque: readonly PisteBibliotheque[]): RadioStation {
   const tracks = pistesDeLaStation(station, bibliotheque) as TrackRef[]
-  return { ...station, tracks }
+  const jingles = jinglesDeLaStation(station) as TrackRef[]
+  return { ...station, tracks, ...(jingles.length > 0 ? { jingles } : {}) }
 }
 
 /** Interroge les relais : la bibliothèque des admins (relais illisibles → `null`). */
@@ -108,7 +115,7 @@ export async function stationAvecSaMusique(station: RadioStation, timeoutMs = 80
   const s = avecSaMusique(station, biblio ?? [])
   const avant = station.tracks?.length ?? 0
   const apres = s.tracks?.length ?? 0
-  const sansDroits = (biblio ?? []).filter(b => !lireDroits(b.droits)).length
+  const sansDroits = (biblio ?? []).filter(b => !lireDroits(b.droits) && !estPisteCommune(b)).length
   console.log(`    [musique] ${apres} musique(s) pour ${station.id} (choix : ${avant}${reglesActives(station.musique) ? ', + règles' : ''}`
     + `${biblio ? `, bibliothèque : ${biblio.length}${sansDroits ? `, dont ${sansDroits} sans droits — jamais diffusée(s)` : ''}` : ''})`)
   return s

@@ -13,6 +13,10 @@
  * droits) : la règle partagée (`PISTES_RETIREES`, lib/selection-musique.ts) les écarte avant
  * l'inventaire, même si une ancienne fiche 30091 les cite encore. Elles ne sont plus épinglées.
  *
+ * 08/10/2026 — les MUSIQUES DE TOUTES LES RADIOS (`PISTES_COMMUNES`) et les jingles de la Radio
+ * Pirate (`JINGLES_GARANTIS`), décision de Med : `stationAvecSaMusique` les ajoute à chaque
+ * station (même quand sa fiche remplace `tracks` / `jingles`), donc ils sont épinglés ici.
+ *
  * Usage :  npx tsx src/scripts/epingler-pistes.ts [--executer] [--station <id>]
  * Sans `--executer` : inventaire seulement. Clé : DATASPACE_NOSTR_KEY (ou DATASPACE_API_KEY).
  */

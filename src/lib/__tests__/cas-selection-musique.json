@@ -1,5 +1,5 @@
 {
-  "_lisezmoi": "Cas de la règle de sélection musicale. FICHIER IDENTIQUE dans l'app (src/modules/radio/musique/__tests__/) et dans le générateur (src/lib/__tests__/) : les deux suites l'éprouvent. `attendu` = clés (CID ou adresse) de la liste résultante, dans l'ordre.",
+  "_lisezmoi": "Cas de la règle de sélection musicale. FICHIER IDENTIQUE dans l'app (src/modules/radio/musique/__tests__/) et dans le générateur (src/lib/__tests__/) : les deux suites l'éprouvent. `attendu` = clés (CID ou adresse) de la liste résultante, dans l'ordre. `communes` = les musiques de toutes les radios du cas (absent = aucune ; la vraie liste PISTES_COMMUNES est éprouvée à part). `jingles` = cas de jinglesDeLaStation (`garantis` = jingles garantis du cas).",
   "bibliotheque": [
     { "title": "Aube", "artiste": "Lena", "cid": "bafyaube00000000000000000000000000000000000000000000000001", "genres": ["électro", "chill"], "ambiances": ["calme"], "energie": 2, "droits": { "type": "licence", "licence": "CC BY 4.0", "auteur": "Lena" } },
     { "title": "Orage", "cid": "bafyorage0000000000000000000000000000000000000000000000002", "genres": ["rock"], "ambiances": ["énergique"], "energie": 5, "droits": { "type": "libre-de-droits", "auteur": "Équipe Infinity" } },
@@ -93,6 +93,62 @@
       "nom": "piste retirée dans la bibliothèque, AVEC droits et qui répond à la règle : jamais prise par la règle",
       "station": { "musique": { "etiquettes": { "genres": ["rétro"] } } },
       "attendu": []
+    },
+    {
+      "nom": "musiques de toutes les radios (Med, 08/10/2026) : ajoutées après les choix, même quand une fiche remplace `tracks`",
+      "communes": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "station": { "tracks": [ { "title": "Aube", "cid": "bafyaube00000000000000000000000000000000000000000000000001" } ] },
+      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001", "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    },
+    {
+      "nom": "musiques de toutes les radios : une fiche aux `tracks` vides (anciennes pistes retirées) les reçoit quand même",
+      "communes": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "station": { "tracks": [ { "title": "Default Track 05", "cid": "bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q" } ] },
+      "attendu": ["QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    },
+    {
+      "nom": "une musique commune se retire seulement par `musique.exclure`",
+      "communes": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "station": { "tracks": [], "musique": { "exclure": ["QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] } },
+      "attendu": ["QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    },
+    {
+      "nom": "une musique commune déjà choisie : gardée à sa place, jamais en double",
+      "communes": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "station": { "tracks": [ { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, { "title": "Aube", "cid": "bafyaube00000000000000000000000000000000000000000000000001" } ] },
+      "attendu": ["QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bafyaube00000000000000000000000000000000000000000000000001", "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    },
+    {
+      "nom": "une musique commune SANS droits dans la bibliothèque (droits déclarés par l'administration) : diffusée, choisie ou non, avant les règles et sans doublon",
+      "communes": [ { "title": "Sans droits", "cid": "bafysansdroits000000000000000000000000000000000000000004" } ],
+      "station": { "tracks": [ { "title": "Sans droits", "cid": "bafysansdroits000000000000000000000000000000000000000004" }, { "title": "Orage", "cid": "bafyorage0000000000000000000000000000000000000000000000002" } ], "musique": { "etiquettes": { "genres": ["électro"] }, "energie": [1, 2] } },
+      "attendu": ["bafysansdroits000000000000000000000000000000000000000004", "bafyorage0000000000000000000000000000000000000000000000002", "bafyaube00000000000000000000000000000000000000000000000001"]
+    },
+    {
+      "nom": "PISTES_RETIREES reste prioritaire : une piste retirée n'entre jamais, même déclarée commune",
+      "communes": [ { "title": "Retirée", "cid": "bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q" }, { "title": "Retirée par adresse", "url": "https://data-space.world/api/ipfs/bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q" }, { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ],
+      "station": { "tracks": [] },
+      "attendu": ["QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    }
+  ],
+  "jingles": [
+    {
+      "nom": "jingles garantis : ajoutés après ceux de la fiche, sans doublon",
+      "station": { "id": "pirate-radio", "jingles": [ { "title": "Le sien", "cid": "bafymaree0000000000000000000000000000000000000000000000003" }, { "title": "Garanti 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ] },
+      "garantis": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "attendu": ["bafymaree0000000000000000000000000000000000000000000000003", "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    },
+    {
+      "nom": "jingles garantis : présents même si la fiche n'en a aucun",
+      "station": { "id": "pirate-radio" },
+      "garantis": [ { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, { "title": "Commune 2", "cid": "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+      "attendu": ["QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "QmCommune2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    },
+    {
+      "nom": "jingles : une piste retirée n'est jamais jouée, ni de la fiche ni garantie",
+      "station": { "id": "pirate-radio", "jingles": [ { "title": "Retiré", "cid": "bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q" } ] },
+      "garantis": [ { "title": "Retiré", "cid": "bafybeieyacqlnv7zk32ejrekmb7f3dljazzxuidk3iostfl4mbbldpnk3q" }, { "title": "Commune 1", "cid": "QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ],
+      "attendu": ["QmCommune1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
     }
   ]
 }
