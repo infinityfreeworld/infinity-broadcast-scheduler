@@ -29,7 +29,7 @@ import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/hos
 import { fetchHostPersonas, exportHostPersonasToEnv } from '../lib/host-personas'
 import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { fetchPulse, exportPulseToEnv } from '../lib/pulse'
-import { fetchStationsAjoutees } from '../lib/station-reglages'
+import { fetchFichesNuit, stationsAFabriquer } from '../lib/station-reglages'
 import { fetchRadioPersonas, exportRadioPersonasToEnv, unifiedGuestsForStation, resolvePersonaForStation } from '../lib/radio-personas'
 
 const exec = promisify(execFile)
@@ -120,10 +120,18 @@ async function main() {
   // ── Stations AJOUTÉES par un administrateur dans l'IHL (07/10/2026) ──────────────────
   // Une fiche 30091 d'admin dont le d-tag n'est pas dans la seed, et COMPLÈTE (nom, langue
   // ayant une voix, au moins un animateur) : fabriquée comme les autres, après elles.
-  console.log(`\n📨 Stations ajoutées dans l'IHL (NOSTR kind:30091, administrateurs seulement)…`)
-  const ajoutees = await fetchStationsAjoutees(SEED_STATIONS)
+  // 08/10/2026 — ET les stations DÉSACTIVÉES dans l'IHL (`active: false`) : pas fabriquées cette nuit.
+  console.log(`\n📨 Stations ajoutées / désactivées dans l'IHL (NOSTR kind:30091, administrateurs seulement)…`)
+  const fiches = await fetchFichesNuit(SEED_STATIONS)
+  const ajoutees = fiches.ajoutees
   console.log(`   ✓ ${ajoutees.length} station(s) ajoutée(s)${ajoutees.length ? ' : ' + ajoutees.map(s => `${s.name} (${s.id}, ${s.language})`).join(', ') : ''}`)
-  const STATIONS_NUIT = [...SEED_STATIONS, ...ajoutees]
+  if (fiches.desactivees.length > 0) {
+    console.log(`   ⏸ ${fiches.desactivees.length} station(s) DÉSACTIVÉE(S) dans l'IHL — non fabriquée(s) cette nuit : `
+      + fiches.desactivees.map(d => `${d.id} (depuis le ${d.le} UTC)`).join(', '))
+  } else if (fiches.lu) {
+    console.log(`   · aucune station désactivée`)
+  }
+  const STATIONS_NUIT = stationsAFabriquer(SEED_STATIONS, ajoutees, fiches.desactivees)
 
   console.log(`\n📨 Fetch Pulse (NOSTR kinds:30101/30102/30103)…`)
   const pulse = await fetchPulse(STATIONS_NUIT.map(s => s.id))
@@ -293,6 +301,7 @@ async function main() {
   console.log(`║  Résumé : ${okCount}/${liste.length} publiée(s) · ${compte('veille-gardee')} veille gardée · `
     + `${compte('a-reprendre')} encore à reprendre · ${failCount} échec(s) · ${totalSec}s wall time  ║`)
   console.log(`╚══════════════════════════════════════════════════════════╝`)
+  for (const d of fiches.desactivees) console.log(`  ⏸ ${d.id} : désactivée dans l'IHL (depuis le ${d.le} UTC) — non fabriquée`)
   for (const r of liste.filter(r => r.passe > 1)) console.log(`  🔁 ${r.stationId} : ${r.issue} au passage ${r.passe}`)
   for (const r of liste.filter(r => r.issue === 'veille-gardee')) {
     console.log(`  🛑 ${r.stationId} : NON publiée (voix de repli en fin de fenêtre) — l'émission précédente reste à l'antenne`)
