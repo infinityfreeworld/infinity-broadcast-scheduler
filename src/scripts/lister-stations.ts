@@ -14,6 +14,7 @@ import 'dotenv/config'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
+import { fetchFichesNuit } from '../lib/station-reglages'
 import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import {
@@ -64,6 +65,16 @@ async function ordonnerParBesoinDeGpu(): Promise<string[]> {
 let ids = process.argv.includes('--brut')
   ? SEED_STATIONS.map(s => s.id)
   : await ordonnerParBesoinDeGpu()
+
+// 08/10/2026 — les stations DÉSACTIVÉES dans l'IHL ne passent pas dans la matrice (relais illisibles : toutes).
+if (!process.argv.includes('--brut')) {
+  const { desactivees } = await fetchFichesNuit(SEED_STATIONS, 8000, l => console.error(l))
+  if (desactivees.length > 0) {
+    const off = new Set(desactivees.map(d => d.id))
+    ids = ids.filter(i => !off.has(i))
+    console.error(`[stations] ${desactivees.length} désactivée(s) dans l'IHL, écartée(s) : ${[...off].join(', ')}`)
+  }
+}
 
 // `--manquantes` : ne garder que les stations dont l'émission de TARGET_DATE n'est PAS encore à
 // l'antenne (secours GitHub, 14/09/2026). Relais illisibles → on les garde toutes : mieux vaut

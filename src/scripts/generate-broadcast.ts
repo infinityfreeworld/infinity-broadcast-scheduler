@@ -33,7 +33,7 @@ import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
-import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
+import { stationSelonIHL, stationAjouteeSelonIHL, stationDesactiveeSelonIHL } from '../lib/station-reglages'
 import { stationAvecSaMusique } from '../lib/bibliotheque-musique'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
 import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
@@ -1053,6 +1053,15 @@ async function main() {
   // complète (lib/station-reglages.ts).
   const seed = SEED_STATIONS.find(s => s.id === stationId)
   if (seed && seed.hosts.length === 0) throw new Error(`Station ${stationId} sans animateur`)
+  // 08/10/2026 — désactivée dans l'IHL (`active: false`) : rien à fabriquer, AVANT tout jeton dépensé.
+  // (La nuit ne nous appelle pas pour elle ; ce garde vaut pour un lancement à la main ou la matrice GitHub.)
+  if (process.env.FORCER_REGENERATION !== '1') {
+    const desactivee = await stationDesactiveeSelonIHL(stationId)
+    if (desactivee) {
+      console.log(`⏸ ${stationId} : désactivée dans l'IHL (depuis le ${desactivee.le} UTC) — rien n'est fabriqué.`)
+      process.exit(0)
+    }
+  }
   const stationFiche = seed ? await stationSelonIHL(seed) : await stationAjouteeSelonIHL(stationId, SEED_STATIONS)
   if (!stationFiche) throw new Error(`Station inconnue : ${stationId} (ni dans la seed, ni fiche IHL d'administrateur complète)`)
   // 07/10/2026 — la musique de la station = ses choix + ce que ses règles prennent dans la
