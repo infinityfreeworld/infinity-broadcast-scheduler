@@ -251,8 +251,8 @@ export interface Transcripteur {
 }
 
 /** Cherche un exécutable dans le PATH (sans `which`, absent de certains PATH launchd). */
-function dansLePath(nom: string): string | null {
-  for (const d of (process.env.PATH ?? '').split(delimiter)) {
+function dansLePath(nom: string, path = process.env.PATH): string | null {
+  for (const d of (path ?? '').split(delimiter)) {
     if (d && existsSync(join(d, nom))) return join(d, nom)
   }
   return null
@@ -270,7 +270,7 @@ export function modeleParDefaut(): string {
  */
 export function transcripteurWhisperCpp(env: NodeJS.ProcessEnv = process.env): Transcripteur | { indisponible: string } {
   if (env.OREILLE === '0') return { indisponible: 'coupée (OREILLE=0)' }
-  const binaire = env.OREILLE_BINAIRE || dansLePath('whisper-cli') || dansLePath('whisper-cpp')
+  const binaire = env.OREILLE_BINAIRE || dansLePath('whisper-cli', env.PATH) || dansLePath('whisper-cpp', env.PATH)
   if (!binaire || !existsSync(binaire)) {
     return { indisponible: 'whisper-cli introuvable (brew install whisper-cpp)' }
   }
