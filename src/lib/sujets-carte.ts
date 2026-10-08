@@ -64,7 +64,7 @@ export const RECENT_JOURS = 30
 export const AGORA_RECENTE_JOURS = 45
 /** « À venir » : pas plus loin que tant de jours. */
 export const A_VENIR_JOURS = 90
-/** Même règle que la télévision (`infinity-sujets.ts`) : on ne raconte pas ce qu'on ne peut pas raconter. */
+/** Même règle que la télévision (`infinity-sujets.ts`, qui lit désormais CE module) : on ne raconte pas ce qu'on ne peut pas raconter. */
 export const DESCRIPTION_MIN = 40
 /** Un compte est « établi » s'il publiait déjà au moins tant de jours AVANT sa publication (règle des
  *  comptes neufs de l'application : 7 jours, `NEWCOMER_DEFAULT.days`). */
@@ -493,7 +493,9 @@ export function confianceDepuisModeration(
  * Juger l'âge au moment de la PUBLICATION, et non aujourd'hui : un compte jetable de la vague du 30/09
  * aura bientôt sept jours, il n'en avait pas sept minutes quand il a publié.
  */
-export function seuilsAnciennete(sujets: readonly SujetCarte[], conf: Pick<ConfianceCarte, 'arbitres' | 'bannis'>): Map<string, number> {
+export function seuilsAnciennete(
+  sujets: readonly { auteur: string; publieLe: number; famille?: FamilleCarte }[], conf: Pick<ConfianceCarte, 'arbitres' | 'bannis'>,
+): Map<string, number> {
   const seuils = new Map<string, number>()
   for (const s of sujets) {
     if (s.famille === 'biogame' || conf.arbitres.has(s.auteur) || conf.bannis.has(s.auteur)) continue
@@ -540,13 +542,22 @@ export function sujetsLisibles(events: readonly NostrEvent[], maintenant: number
   return out
 }
 
+/**
+ * Peut-on dire une publication de cet auteur ? Banni / masqué → jamais ; sinon il faut un auteur
+ * établi ou approuvé. Générique : sert aussi à la télévision (`infinity-sujets.ts`, propositions DAV).
+ */
+export function publicationDeConfiance(p: { auteur: string; eventId: string }, conf: ConfianceCarte): boolean {
+  if (conf.bannis.has(p.auteur) || conf.masques.has(p.eventId)) return false
+  return conf.arbitres.has(p.auteur) || conf.approuves.has(p.eventId)
+    || conf.auteursApprouves.has(p.auteur) || conf.etablis.has(p.auteur)
+}
+
 /** Peut-on dire ce sujet ? Banni / masqué → jamais ; sinon il faut un auteur établi ou approuvé. */
 export function sujetDeConfiance(s: SujetCarte, conf: ConfianceCarte): boolean {
   if (conf.bannis.has(s.auteur) || conf.masques.has(s.eventId)) return false
   // Un Biogame a déjà l'aval EXPLICITE de l'administration sur cette version : c'est la preuve.
   if (s.famille === 'biogame') return true
-  return conf.arbitres.has(s.auteur) || conf.approuves.has(s.eventId)
-    || conf.auteursApprouves.has(s.auteur) || conf.etablis.has(s.auteur)
+  return publicationDeConfiance(s, conf)
 }
 
 /**
