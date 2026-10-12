@@ -44,7 +44,7 @@ async function main() {
   const aujourdhui = new Date().toISOString().slice(0, 10)
   const liste = aRetirer(lues, moi, aujourdhui, jours)
   console.log(`${lues.length} émission(s) lue(s) · ${liste.length} de plus de ${jours} jours à retirer`)
-  const paquets = demandesSuppression(liste, Math.floor(Date.now() / 1000))
+  const paquets = demandesSuppression(liste, Math.floor(Date.now() / 1000), 40) // 40 : le relais radio refuse un paquet de 100 (trop d’étiquettes)
   if (!executer) {
     console.log(`· À BLANC. ${paquets.length} demande(s) de suppression NIP-09 seraient publiées.`)
     console.log('  Pour exécuter (accord de Med) : VIDAGE_CONFIRME_PAR_MED=oui … --executer')
