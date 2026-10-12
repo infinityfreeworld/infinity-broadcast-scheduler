@@ -61,6 +61,8 @@ export function contenuEmission(finalBroadcast: RadioBroadcast): string {
     // « Émissions précédentes » : titre et résumé du thème, dans la langue de la station.
     ...(finalBroadcast.titre ? { titre: finalBroadcast.titre } : {}),
     ...(finalBroadcast.resume ? { resume: finalBroadcast.resume } : {}),
+    // Note de qualité (12/10/2026, lib/note-qualite.ts) : additive, ignorée par les lecteurs actuels.
+    ...(finalBroadcast.qualite ? { qualite: finalBroadcast.qualite } : {}),
   })
 }
 

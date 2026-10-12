@@ -34,6 +34,7 @@ import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
 import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence, calerSurVoix, appliquerFondus, margeLu, type NiveauVoix } from '../lib/musique'
 import { lufsEnsemble, normaliserEmission, reglagesLoudness, type NormalisationEmission } from '../lib/loudness'
+import { noteQualite, resumeQualite, type NoteQualite } from '../lib/note-qualite'
 import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
 import { stationAvecSaMusique } from '../lib/bibliotheque-musique'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
@@ -149,6 +150,8 @@ interface GenResult {
   refsCourrier:  string[]
   /** Les tours dont les liens peuvent aller à l'écran : jamais la parole d'un auditeur. */
   toursPourLiens: BroadcastTurn[]
+  /** La note de qualité publiée avec l'émission (lib/note-qualite.ts). */
+  qualite:        NoteQualite
 }
 
 /** Ce qu'un tour doit dire, et par quelle voix (gardé dans le chantier d'une reprise). */
@@ -820,7 +823,18 @@ async function generateBroadcastBytes(opts: {
   }
 
   const audioBlob = encodeWav(merged)
+  const bilanControle = controleVoix.bilan()
+  const qualite = noteQualite({
+    voixAttendues, voixObtenues,
+    reprise: opts.reprise ? opts.reprise.compteurs() : null,
+    controle: bilanControle,
+    oreille: opts.reprise ? opts.reprise.etatOreille() : null,
+    sonie,
+    producteur: process.env.PRODUCTEUR || undefined,
+  })
+  console.log(`\n${resumeQualite(qualite)}`)
   return {
+    qualite,
     audioBlob,
     durationSec: durationOf(merged),
     turns,
@@ -1368,6 +1382,8 @@ async function main() {
     model,
     ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
     ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
+    // 🏷 12/10/2026 — ce que la nuit sait de la qualité de CETTE émission (lib/note-qualite.ts).
+    qualite:     result.qualite,
     generatedBy: '',   // sera rempli par publishBroadcast
     generatedAt: Math.floor(Date.now() / 1000),
   }
