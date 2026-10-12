@@ -31,3 +31,10 @@ it('« euh » allongé pour la voix clonée (elle avalait « euh… »), mot ent
   assert.equal(hesitationsAudibles('peuh, heuh'), 'peuh, heuh')
   assert.ok(frenchifyEnglishWords(hesitationsAudibles('Euh… bon')).startsWith('Eeeuh'))
 })
+it('la vision commune est dans le prompt de TOUT animateur (Med : « jamais heureusement, il y a l’ONU »)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../personas.ts', import.meta.url), 'utf8')
+  assert.ok(src.includes('${editorialeSection}${VISION_INFINITY}'))
+  const { VISION_INFINITY } = await import('../vision-infinity')
+  for (const mot of ['ONU', 'OMS', 'GAVI', 'OTAN', 'DAV']) assert.ok(VISION_INFINITY.includes(mot), mot)
+})
