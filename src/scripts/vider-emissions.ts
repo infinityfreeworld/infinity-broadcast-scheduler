@@ -24,9 +24,23 @@ async function main() {
   const moi = pubkeyDe(cle)
   const pool = new SimplePool()
   const relais = getRelays()
-  const evs = await pool.querySync(relais, { kinds: [RADIO_BROADCAST_KIND], authors: [moi] }, { maxWait: 20_000 })
+  // Page par page, relais par relais : un relais plafonne chaque réponse (500 sur data-space) — sans pagination on ne
+  // voyait que 517 émissions sur 1 350 (12/10/2026).
+  const parD = new Map<string, EmissionRelais>()
+  for (const r of relais) {
+    let until: number | undefined
+    for (let page = 0; page < 50; page++) {
+      const evs = await pool.querySync([r], { kinds: [RADIO_BROADCAST_KIND], authors: [moi], limit: 500, ...(until ? { until } : {}) }, { maxWait: 20_000 })
+      for (const e of evs) { const d = e.tags.find(t => t[0] === 'd')?.[1] ?? ''; parD.set(d, { pubkey: e.pubkey, d }) }
+      if (evs.length === 0) break
+      const plusVieux = Math.min(...evs.map(e => e.created_at))
+      if (until !== undefined && plusVieux >= until) break
+      until = plusVieux - 1
+      if (evs.length < 100) break
+    }
+  }
   pool.close(relais)
-  const lues: EmissionRelais[] = evs.map(e => ({ pubkey: e.pubkey, d: e.tags.find(t => t[0] === 'd')?.[1] ?? '' }))
+  const lues: EmissionRelais[] = [...parD.values()]
   const aujourdhui = new Date().toISOString().slice(0, 10)
   const liste = aRetirer(lues, moi, aujourdhui, jours)
   console.log(`${lues.length} émission(s) lue(s) · ${liste.length} de plus de ${jours} jours à retirer`)
