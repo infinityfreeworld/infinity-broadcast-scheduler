@@ -52,9 +52,27 @@ test('chaque émission dit QUI l’a fabriquée', () => {
 // ── Secours GitHub ─────────────────────────────────────────────────────
 const WF = lire('../../../.github/workflows/daily-broadcast.yml')
 
-test('⭐ le secours tourne APRÈS la fenêtre du Mac, pour le jour qui commence', () => {
-  assert.match(WF, /cron: '30 1 \* \* \*'/)
-  assert.match(WF, /date -u \+%F/, 'la date du secours est celle du jour (UTC)')
+test('⭐ le secours part à 22:00 UTC pour le LENDEMAIN, et chaque station revérifie avant de partir', () => {
+  // 12/10/2026 : à 01:30, la file (8 à 10 h, une station à la fois) finissait vers 11:00 UTC.
+  assert.match(WF, /cron: '0 22 \* \* \*'/)
+  assert.match(WF, /date -u -d tomorrow \+%F/, 'la date du secours est celle du lendemain (UTC), comme le Mac')
+  // Le Mac a pu publier la station pendant que la file avançait : on ne la refait pas.
+  assert.match(WF, /STATIONS_DEMANDEES: \$\{\{ matrix\.station \}\}/)
+  assert.match(WF, /stations:list -- --brut --manquantes/)
+  assert.match(WF, /- name: Génère \$\{\{ matrix\.station \}\}\s*\n\s*if: steps\.encore\.outputs\.faire == 'oui'/)
+  // Une relance depuis l'IHL attend la fin de la nuit au lieu de doubler la charge du GPU.
+  assert.match(WF, /concurrency:\s*\n\s*group: radio-nuit\s*\n\s*cancel-in-progress: false/)
+})
+
+test('⭐ l’oreille de contrôle est installée (whisper.cpp figé, sans optimisation propre au processeur, modèle vérifié) et branchée', () => {
+  assert.match(WF, /git clone -q --depth 1 --branch v[\d.]+ https:\/\/github\.com\/ggml-org\/whisper\.cpp/)
+  assert.match(WF, /-DGGML_NATIVE=OFF/, 'un cache restauré sur un autre processeur ne doit pas planter')
+  assert.match(WF, /-DBUILD_SHARED_LIBS=OFF/)
+  assert.match(WF, /--target whisper-cli/)
+  assert.match(WF, /sha256sum -c -/)
+  assert.match(WF, /trap 'rm -rf \.oreille' ERR/, 'une installation ratée ne part jamais dans le cache')
+  assert.match(WF, /OREILLE_BINAIRE: \$\{\{ github\.workspace \}\}\/\.oreille\/bin\/whisper-cli/)
+  assert.match(WF, /OREILLE_MODELE:  \$\{\{ github\.workspace \}\}\/\.oreille\/ggml-base\.bin/)
 })
 
 test('⭐ le secours ne produit QUE les stations manquantes, et ne démarre rien s’il n’y en a aucune', () => {

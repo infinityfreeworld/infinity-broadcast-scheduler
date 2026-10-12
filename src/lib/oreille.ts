@@ -317,7 +317,7 @@ export function transcripteurWhisperCpp(env: NodeJS.ProcessEnv = process.env): T
   if (env.OREILLE === '0') return { indisponible: 'coupée (OREILLE=0)' }
   const binaire = env.OREILLE_BINAIRE || dansLePath('whisper-cli', env.PATH) || dansLePath('whisper-cpp', env.PATH)
   if (!binaire || !existsSync(binaire)) {
-    return { indisponible: 'whisper-cli introuvable (brew install whisper-cpp)' }
+    return { indisponible: 'whisper-cli introuvable (Mac : brew install whisper-cpp ; GitHub : étape « Installe l’oreille » du workflow)' }
   }
   const modele = env.OREILLE_MODELE || modeleParDefaut()
   if (!existsSync(modele)) return { indisponible: `modèle Whisper absent (${modele})` }

@@ -309,6 +309,31 @@ la dernière chance, il est dit en voix locale plutôt qu'incompréhensible.
   `curl -L -o "$HOME/Library/Application Support/infinity-radio/whisper/ggml-base.bin" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin`
   (~150 Mo ; `OREILLE_MODELE` et `OREILLE_BINAIRE` pour d'autres chemins). Les seuils n'ont
   pas encore été calibrés sur de vraies émissions.
+- **Sur GitHub** (12/10/2026) : le workflow construit whisper.cpp (tag figé, `GGML_NATIVE=OFF`,
+  exécutable statique) et télécharge `ggml-base.bin` (empreinte vérifiée) une fois, puis le cache
+  les garde ; `OREILLE_BINAIRE` / `OREILLE_MODELE` pointent sur `.oreille/`.
+- **« Euh » écrits mais non dits** : l'oreille compte les hésitations vocales du texte et celles
+  qu'elle retrouve dans la transcription. C'est un INDICE (journal + note de qualité), jamais un
+  refus : Whisper efface parfois une hésitation pourtant dite. Les formes allongées envoyées à la
+  voix clonée (« eeeuh », « uhh », « umm », « ehh », « э-э-э », mesurées le 12/10/2026 :
+  `src/lib/disfluences.ts`) ne comptent pas comme des mots en trop.
+
+## Sonie et note de qualité (12/10/2026)
+
+- **Sonie** (`src/lib/loudness.ts`, EBU R128 / BS.1770, vérifié contre ffmpeg `ebur128`) :
+  musiques, jingles, idents et lit se calent sur la sonie PERÇUE de la voix (`MUSIQUE_MARGE_LU`,
+  défaut `0` : niveau égal), puis l'émission entière est ramenée à `RADIO_LUFS` (défaut `-16`)
+  avec un limiteur sous `RADIO_CRETE_DB` (défaut `-1.5` dBFS). Fondus de musique en S.
+  `HABILLAGE_LOUDNESS=off` revient au calage RMS d'avant.
+- **Note de qualité** (`src/lib/note-qualite.ts`) : champ additif `qualite` du contenu 30093
+  (voix clonées / secours, défauts corrigés, état de l'oreille, « euh » entendus, LUFS, producteur).
+
+## Flash spécial OBF (12/10/2026, éteint par défaut)
+
+`src/lib/flash-obf.ts`, `src/scripts/flash-obf.ts`, `.github/workflows/flash-obf.yml` : toutes les
+30 min, une alerte OBF grave, nouvelle et de confiance donne un bulletin d'environ une minute (gabarit
+fixe, voix locale), publié en événement DISTINCT (`stationId: 'obf-radio-flash'`). Ne fait rien sans
+la variable de dépôt `FLASH_OBF=1`. Essai local sans rien publier : `npx tsx src/scripts/flash-obf.ts --essai`.
 
 ## Maintenance
 
