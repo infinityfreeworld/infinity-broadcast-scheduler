@@ -14,7 +14,8 @@ import type { ConcatEntry } from './audio'
 import { getChatterboxVoiceForHost, synthesizeWithChatterbox, chatterboxBranche } from './chatterbox'
 import { synthesize } from './piper'
 import { voixPourLangue } from './voix'
-import { estVoixKokoro } from './kokoro'
+import { estVoixKokoro, synthesizeKokoro } from './kokoro'
+import { voixPersonnagePourLangue } from './voix-zh'
 import { calerSurVoix, encadrerDeSilence, type NiveauVoix } from './musique'
 import type { RadioStation } from './types'
 import { decodeWav } from './audio'
@@ -47,7 +48,7 @@ async function direAvecVoix(station: RadioStation, texte: string): Promise<Decod
   const langue = station.language ?? 'fr'
   const hote = station.hosts[0]
   if (!hote) return null
-  const voixPersonnage = chatterboxBranche() ? getChatterboxVoiceForHost(station.id, hote.id, langue) : null
+  const voixPersonnage = voixPersonnagePourLangue(langue, chatterboxBranche() ? getChatterboxVoiceForHost(station.id, hote.id, langue) : null)
   if (voixPersonnage) {
     try {
       const buf = await synthesizeWithChatterbox({ voice: voixPersonnage, text: texte, language: langue, format: 'wav' })
@@ -57,9 +58,10 @@ async function direAvecVoix(station: RadioStation, texte: string): Promise<Decod
     }
   }
   const voixPiper = voixPourLangue(langue, hote.gender, hote.id)
-  if (!voixPiper || estVoixKokoro(voixPiper)) return null   // le chinois sans Chatterbox : pas d'ident
+  if (!voixPiper) return null
   try {
-    return readWav(await synthesize(texte, voixPiper))
+    // 12/10/2026 : le chinois a sa voix d'antenne en Kokoro (voix-zh.ts), ident compris.
+    return readWav(estVoixKokoro(voixPiper) ? await synthesizeKokoro(texte, voixPiper) : await synthesize(texte, voixPiper))
   } catch (err) {
     console.warn(`    ⚠ ident Piper impossible : ${(err as Error).message.slice(0, 90)}`)
     return null

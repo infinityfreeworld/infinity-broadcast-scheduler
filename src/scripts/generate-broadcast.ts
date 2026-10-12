@@ -98,6 +98,7 @@ import {
   plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage, toursPourLiens,
   type MarquesCourrier,
 } from '../lib/courrier/reprise-courrier'
+import { voixPersonnagePourLangue, voixLocalePrincipale } from '../lib/voix-zh'
 import { preparerReprise, deciderOuArreter } from '../lib/reprise-branchement'
 import { ArretVolontaire } from '../lib/regle-publication'
 import type { RepriseEmission } from '../lib/reprise-emission'
@@ -495,9 +496,10 @@ async function generateBroadcastBytes(opts: {
     // La synthèse est repoussée à la phase 2. Voir l'en-tête de la boucle
     // pour la raison — elle vient de l'hébergeur, pas d'un goût pour les
     // refactorisations.
-    const chatterboxVoice = (isGuestTurn && guestVoiceName && chatterboxBranche())
+    // 🇨🇳 12/10/2026 : en chinois, Kokoro est la voix principale ; le clone seulement si ZH_VOIX_CLONEE=1 (voix-zh.ts).
+    const chatterboxVoice = voixPersonnagePourLangue(language, (isGuestTurn && guestVoiceName && chatterboxBranche())
       ? guestVoiceName
-      : getChatterboxVoiceForHost(station.id, host.id, language)
+      : getChatterboxVoiceForHost(station.id, host.id, language))
     if (chatterboxVoice) voixAttendues++
 
     const turn: BroadcastTurn = {
@@ -567,7 +569,7 @@ async function generateBroadcastBytes(opts: {
         if (gA.horsLangue || !dit || !resteADire(dit) || contientInsulte(dit)) {
           console.log('(appel sauté)')
         } else {
-          const voixA = a.voixInventee && chatterboxBranche() ? a.voixInventee : null
+          const voixA = voixPersonnagePourLangue(language, a.voixInventee && chatterboxBranche() ? a.voixInventee : null)
           if (voixA) voixAttendues++
           turns.push({ id: `bcast-${i}a-${Date.now().toString(36).slice(-4)}`, hostId: `auditeur-joue-${place.k}`, hostName: a.prenom, color: '#9aa4b2', avatar: '📞', text: dit, tStart: 0, tEnd: 0 })
           plansVoix.push({ texte: prononcerDomaine(dit, language), voixPiper: voixPourLangue(language, a.genre, `auditeur-${a.prenom}`) ?? voiceId, voixPersonnage: voixA, court: false, boucle: i })
@@ -1211,11 +1213,12 @@ async function main() {
     // n'est pas « prêt », et mieux vaut l'apprendre en dix secondes qu'au
     // milieu de l'émission.
     const invitesUnifies = unifiedGuestsForStation(station.id, langueStation)
-    const voixTemoin =
+    // En chinois sans ZH_VOIX_CLONEE=1, aucun témoin : on ne réveille pas le GPU pour rien.
+    const voixTemoin = voixPersonnagePourLangue(langueStation,
       (invitesUnifies.length ? resolvePersonaForStation(invitesUnifies[0], station.id).voiceName : undefined)
       ?? station.hosts
         .map(h => getChatterboxVoiceForHost(station.id, h.id, langueStation))
-        .find((v): v is string => !!v)
+        .find((v): v is string => !!v))
 
     if (!voixTemoin) {
       console.log('\n🎙  Chatterbox configuré, mais aucune voix de personnage sur cette station — tout ira sur Piper.')
@@ -1429,7 +1432,8 @@ async function main() {
     if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`)
 
     const strict = (process.env.CHATTERBOX_STRICT ?? 'true') !== 'false'
-    if (strict && voixObtenues === 0) {
+    // En chinois, Kokoro est la voix voulue : un clone tenté (ZH_VOIX_CLONEE=1) qui échoue n'est pas une panne.
+    if (strict && voixObtenues === 0 && !voixLocalePrincipale(station.language ?? 'fr')) {
       console.error(`\n❌ AUCUNE voix de personnage n'a fonctionné : le service de synthèse `
         + `est probablement injoignable. L'émission est publiée en repli, mais ce job `
         + `échoue volontairement pour que quelqu'un regarde.`)

@@ -14,6 +14,7 @@ import {
   reglesPublication, type DecisionPublication,
 } from './regle-publication'
 import { RepriseEmission } from './reprise-emission'
+import { voixLocalePrincipale } from './voix-zh'
 
 /**
  * La reprise d'une émission. En RÉPÉTITION : ni chantier, ni report — tout se fait d'un trait,
@@ -29,6 +30,8 @@ export function preparerReprise<Tour, Plan extends { texte: string }>(
     derniereChance: repetition || estDerniereChance(),
     oreille,
     langue,
+    // 🇨🇳 Chinois : Kokoro est la voix voulue, le clone n'est gardé que confirmé (lib/voix-zh.ts).
+    localeVoulue: voixLocalePrincipale(langue),
     moteurs: {
       clone: (texte, voix, essai): Promise<DecodedWav> => moteurs.clone(texte, voix, reglagesEssai(essai, langue)),
       locale: (texte, voix) => moteurs.locale(texte, voix),

@@ -269,3 +269,53 @@ test('toutes les voix là : publiée, sans même consulter les relais', async ()
     assert.equal(consulte, false)
   } finally { b.fin() }
 })
+
+// ── 自由之声 : Kokoro est la voix VOULUE du chinois (12/10/2026, lib/voix-zh.ts) ───────────────
+
+const ZH = '今天我们聊一聊城市里的自行车道还有大家的看法'
+const PLANS_ZH: Plan[] = Array.from({ length: 21 }, () => ({ texte: ZH, voixPiper: 'zf_xiaobei', voixPersonnage: null, court: false }))
+const TURNS_ZH = PLANS_ZH.map((p, i) => ({ id: `z${i}`, text: p.texte }))
+
+test('⭐ chinois par défaut (ZH_VOIX_CLONEE absent) : 21 tours en Kokoro, la règle finale PUBLIE', async () => {
+  const { voixPersonnagePourLangue } = await import('../voix-zh')
+  assert.equal(voixPersonnagePourLangue('zh', 'inv-zy-mei', {}), null, 'aucun clone demandé')
+  const b = banc()
+  try {
+    const r = new RepriseEmission({ chantier: null, derniereChance: true, oreille: null, langue: 'zh', localeVoulue: true, moteurs: b.moteurs, log: () => {} })
+    r.enregistrerTextes(TURNS_ZH, PLANS_ZH)
+    for (let i = 0; i < PLANS_ZH.length; i++) {
+      await r.apresTour({ i, texte: ZH, voixPersonnage: null, voixLocale: 'zf_xiaobei', wav: wav(-0.5), viaClone: false })
+    }
+    let consulte = false
+    const d = await deciderOuArreter(r as never, async () => { consulte = true; return true }, '2026-10-13')
+    assert.equal(d.action, 'publier')
+    assert.equal(consulte, false)
+    assert.equal(b.appels.clone, 0)
+  } finally { b.fin() }
+})
+
+test('⭐ chinois avec ZH_VOIX_CLONEE=1 : clone gardé SEULEMENT confirmé ; sinon Kokoro, et ce n’est pas un repli', async () => {
+  const b = banc()
+  try {
+    const plans: Plan[] = PLANS_ZH.slice(0, 4).map(p => ({ ...p, voixPersonnage: 'inv-zy-mei' }))
+    // tour 0 : compris ; tour 1 : charabia (nuit instable) ; tour 2 : clone raté (déjà Kokoro) ; tour 3 : oreille muette
+    const entendus = [ZH, '但会不会为这么的爱', '']
+    const oreille = oreilleQuiEntend(n => entendus[n] ?? '')
+    const r = new RepriseEmission({ chantier: null, derniereChance: true, oreille, langue: 'zh', localeVoulue: true, moteurs: b.moteurs, log: () => {} })
+    r.enregistrerTextes(plans.map((p, i) => ({ id: `z${i}`, text: p.texte })), plans)
+    const o0 = await r.apresTour({ i: 0, texte: ZH, voixPersonnage: 'inv-zy-mei', voixLocale: 'zf_xiaobei', wav: wav(0.5), viaClone: true })
+    const o1 = await r.apresTour({ i: 1, texte: ZH, voixPersonnage: 'inv-zy-mei', voixLocale: 'zf_xiaobei', wav: wav(0.5), viaClone: true })
+    const o2 = await r.apresTour({ i: 2, texte: ZH, voixPersonnage: 'inv-zy-mei', voixLocale: 'zf_xiaobei', wav: wav(-0.5), viaClone: false })
+    const sansOreille = new RepriseEmission({ chantier: null, derniereChance: true, oreille: new Oreille({ indisponible: 'whisper-cli introuvable' }, seuilsOreille({}), () => {}), langue: 'zh', localeVoulue: true, moteurs: b.moteurs, log: () => {} })
+    sansOreille.enregistrerTextes(plans.map((p, i) => ({ id: `z${i}`, text: p.texte })), plans)
+    const o3 = await sansOreille.apresTour({ i: 3, texte: ZH, voixPersonnage: 'inv-zy-mei', voixLocale: 'zf_xiaobei', wav: wav(0.5), viaClone: true })
+    assert.equal(sig((o0 as { wav: DecodedWav }).wav), 0.5, 'confirmé : la voix clonée reste')
+    assert.equal(sig((o1 as { wav: DecodedWav }).wav), -0.5, 'charabia : Kokoro, sans régénération')
+    assert.equal(sig((o2 as { wav: DecodedWav }).wav), -0.5)
+    assert.equal(sig((o3 as { wav: DecodedWav }).wav), -0.5, 'sans oreille, aucun clone n’est cru sur parole')
+    assert.equal(b.appels.clone, 0, 'aucune régénération clonée : on ne paie pas le GPU pour une nuit instable')
+    assert.deepEqual(r.compteurs(), { locale: 2, repris: 0, clone: 1, repli: 0, manquant: 0, incompris: 0 })
+    const d = await deciderOuArreter(r as never, async () => true, '2026-10-13')
+    assert.equal(d.action, 'publier', 'des tours en Kokoro ne font jamais refuser l’émission chinoise')
+  } finally { b.fin() }
+})

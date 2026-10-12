@@ -45,6 +45,12 @@ export interface OptionsReprise<Tour, Plan extends { texte: string }> {
   moteurs:        MoteursReprise
   /** Régénérations immédiates d'un tour refusé par l'oreille (défaut `OREILLE_ESSAIS`, 1). */
   essaisOreille?: number
+  /**
+   * La voix LOCALE est la voix voulue de cette langue (chinois : Kokoro, lib/voix-zh.ts). Un tour cloné
+   * n'est alors gardé que si l'oreille le CONFIRME (verdict « bon ») ; sinon il est dit en voix locale,
+   * sans régénération ni report, et ce n'est PAS un repli pour la règle de publication.
+   */
+  localeVoulue?:  boolean
   log?:           (ligne: string) => void
 }
 
@@ -156,6 +162,8 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     }
     if (this.statuts.get(t.i) === 'repris') return { wav: t.wav }
 
+    if (this.o.localeVoulue) return this.apresTourLocaleVoulue(t)
+
     if (!t.viaClone) {
       if (this.reporterLesManques()) {
         this.manque(t.i, 'voix de personnage perdue')
@@ -214,6 +222,34 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     this.statuts.set(t.i, 'clone')
     this.garder(t.i, wav)
     return { wav }
+  }
+
+  /** Langue à voix locale voulue : le clone n'est gardé que confirmé par l'oreille, sinon voix locale. */
+  private async apresTourLocaleVoulue(t: TourFini): Promise<IssueTour> {
+    if (!t.viaClone) {
+      // Clone raté ou remplacé par le contrôle de voix : la voix locale est la bonne voix.
+      this.statuts.set(t.i, 'locale')
+      return { wav: t.wav }
+    }
+    const j = await this.ecouter(t.wav, t.texte)
+    if (j?.verdict === 'bon') {
+      this.compterHesitations(t.i, j)
+      this.statuts.set(t.i, 'clone')
+      this.garder(t.i, t.wav)
+      return { wav: t.wav }
+    }
+    const pourquoi = !j ? 'oreille sans avis' : j.motif
+    try {
+      const local = await this.o.moteurs.locale(t.texte, t.voixLocale)
+      this.statuts.set(t.i, 'locale')
+      this.log(`    👂 tour ${t.i + 1} : voix clonée non confirmée (${pourquoi}) → voix locale ${t.voixLocale}`)
+      return { wav: local }
+    } catch (err) {
+      this.statuts.set(t.i, 'incompris')
+      this.motifs.set(t.i, `voix clonée non confirmée (${pourquoi}), voix locale impossible`)
+      this.log(`    👂 tour ${t.i + 1} : voix clonée non confirmée ET voix locale impossible (${(err as Error).message.slice(0, 80)}) — gardé tel quel`)
+      return { wav: t.wav }
+    }
   }
 
   /** Tours laissés pour plus tard. */
