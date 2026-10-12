@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { apresPassage, passageFinal, reglagesReprisesJob } from '../reprises-job'
 import { stationsDemandees } from '../stations-demandees'
+import { aRetirer, demandesSuppression, dateDuD } from '../vidage-emissions'
 import { CODE_A_REPRENDRE, CODE_VEILLE_GARDEE } from '../regle-publication'
 
 const MIN = 60_000
@@ -87,4 +88,32 @@ test('le workflow passe par les reprises et n\'interpole plus les entrées dans 
   assert.doesNotMatch(y, /run:[^\n]*\$\{\{ github\.event\.inputs\./, 'entrée interpolée sur une ligne run')
   assert.doesNotMatch(y, /^\s+if \[ -n "\$\{\{ github\.event\.inputs/m)
   assert.match(y, /stations:\n\s+description:/)
+})
+
+// ── Vidage préparé (jamais exécuté sans Med) ─────────────────────────────────────────────
+
+
+test('⭐ vidage : seulement NOS émissions, plus vieilles que N jours, d-tag reconnu', () => {
+  const moi = 'a'.repeat(64)
+  const autre = 'b'.repeat(64)
+  const l = aRetirer([
+    { pubkey: moi, d: 'pirate-radio:2026-09-20' },
+    { pubkey: moi, d: 'pirate-radio:2026-09-20' },          // doublon
+    { pubkey: moi, d: 'pirate-radio:2026-10-02' },          // limite exacte : gardée
+    { pubkey: moi, d: 'pirate-radio:2026-10-11' },
+    { pubkey: autre, d: 'pirate-radio:2026-09-01' },        // pas à nous
+    { pubkey: moi, d: 'bizarre' },                          // illisible : gardée
+  ], moi, '2026-10-12', 10)
+  assert.deepEqual(l.map(e => e.d), ['pirate-radio:2026-09-20'])
+  assert.equal(dateDuD('x:2026-01-01'), '2026-01-01')
+})
+
+test('vidage : demandes NIP-09 par paquets de 100, adresses 30093:<clé>:<d>', () => {
+  const liste = Array.from({ length: 205 }, (_, i) => ({ pubkey: 'a'.repeat(64), d: `s:2026-01-${String((i % 28) + 1).padStart(2, '0')}` }))
+  const p = demandesSuppression(liste, 1)
+  assert.equal(p.length, 3)
+  assert.equal(p[0].kind, 5)
+  assert.equal(p[0].tags.filter(t => t[0] === 'a').length, 100)
+  assert.equal(p[2].tags.filter(t => t[0] === 'a').length, 5)
+  assert.deepEqual(p[0].tags[0], ['a', `30093:${'a'.repeat(64)}:s:2026-01-01`])
 })
