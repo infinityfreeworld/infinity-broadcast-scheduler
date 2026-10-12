@@ -220,6 +220,24 @@ test('sans oreille (Whisper absent), un tour cloné est gardé sans jugement', a
   } finally { b.fin() }
 })
 
+test('⭐ l’état de l’oreille pour la note de qualité : absente, puis active avec les « euh » avalés', async () => {
+  const b = banc()
+  try {
+    const absente = new RepriseEmission({ chantier: null, derniereChance: true, oreille: new Oreille({ indisponible: 'whisper-cli introuvable' }, seuilsOreille({}), () => {}), langue: 'fr', moteurs: b.moteurs, log: () => {} })
+    assert.equal(absente.etatOreille().statut, 'absente')
+    const coupee = new RepriseEmission({ chantier: null, derniereChance: true, oreille: new Oreille({ indisponible: 'coupée (OREILLE=0)' }, seuilsOreille({}), () => {}), langue: 'fr', moteurs: b.moteurs, log: () => {} })
+    assert.equal(coupee.etatOreille().statut, 'coupee')
+
+    const dit = `Euh… ${TEXTE}`
+    const r = new RepriseEmission({ chantier: null, derniereChance: true, oreille: oreilleQuiEntend(TEXTE), langue: 'fr', moteurs: b.moteurs, log: () => {} })
+    r.enregistrerTextes(TURNS, PLANS)
+    await r.apresTour({ i: 0, texte: dit, voixPersonnage: 'aurelien', voixLocale: 'x', wav: wav(0.25), viaClone: true })
+    assert.deepEqual(r.etatOreille(), { statut: 'active', ecoutes: 1, refaits: 0, hesitationsEcrites: 1, hesitationsAvalees: 1 })
+    assert.equal(r.compteurs().clone, 1, 'le tour est gardé malgré le « euh » avalé')
+    assert.match(r.ligneBilan(), /hésitations entendues 0\/1/)
+  } finally { b.fin() }
+})
+
 // ── La décision branchée (veille consultée seulement quand elle compte) ─────────────────────
 
 test('⭐ fin de fenêtre en repli, veille à l’antenne : NON publiée (code 76), chantier effacé', async () => {

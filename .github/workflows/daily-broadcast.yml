@@ -62,8 +62,18 @@ on:
   # stations dont l'émission du jour manque encore (`--manquantes`). Mac éteint, la radio sort quand
   # même ; Mac allumé, il ne refait rien — pas de doublon, pas de double facture. Chaque émission porte
   # le tag `producteur` (mac / github-secours). La veille du hub vérifie le résultat à 06:00 UTC.
+  #
+  # 🌙 22:00 UTC DEPUIS LE 12/10/2026 (était 01:30). Mesuré sur les journaux des quatre dernières nuits
+  # (runs 37872024895, 38014791969, 38103362171, 38194113798) : les stations passent UNE PAR UNE
+  # (max-parallel: 1, ci-dessous) et la somme des jobs vaut 481 à 601 min, soit 8 h à 10 h. Parti à
+  # 02:00 (le cron de 01:30 démarre avec ~30 min de retard chez GitHub), le run du 12/10 a fini à
+  # 10:59 UTC — les dernières stations sortaient en fin de matinée. Ce n'est pas un départ simultané
+  # qui sature : c'est la file elle-même qui est longue, et l'élargir ramènerait les replis du 22/09.
+  # On part donc plus tôt : ~22:30 effectif + 10 h au pire = ~08:30 UTC. La date cible devient le
+  # LENDEMAIN (comme le Mac, dont la fenêtre 20 h–minuit fabrique déjà le jour suivant) ; chaque job
+  # revérifie juste avant de partir que sa station manque toujours (le Mac a pu la faire entre-temps).
   schedule:
-    - cron: '30 1 * * *'
+    - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       target_date:
@@ -86,6 +96,12 @@ on:
         description: 'Clé publique (hex) de l administrateur IHL qui a demandé la relance — trace seulement'
         required: false
         default: ''
+
+# Une seule nuit à la fois : une relance depuis l'IHL (#90) pendant la nuit planifiée ATTEND la fin
+# de celle-ci au lieu de doubler la charge sur le service de voix (12/10/2026).
+concurrency:
+  group: radio-nuit
+  cancel-in-progress: false
 
 jobs:
   # ── Ce qui ne doit tourner QU'UNE FOIS ───────────────────────────────
@@ -111,8 +127,9 @@ jobs:
       - name: Outils des tests (opus-tools + ffmpeg)
         run: sudo apt-get update && sudo apt-get install -y opus-tools ffmpeg
 
-      # Date cible : celle demandée à la main ; sinon, en SECOURS (cron de 01:30 UTC), le jour qui
-      # commence ; sinon (lancement manuel sans date) le comportement historique, J+1.
+      # Date cible : celle demandée à la main ; sinon, en SECOURS (cron de 22:00 UTC), le LENDEMAIN
+      # (le jour que l'on fabrique la nuit) ; sinon (lancement manuel sans date) le comportement
+      # historique, J+1.
       # Les entrées passent par l'ENVIRONNEMENT, jamais interpolées dans le script : une relance vient
       # d'un Worker, et une entrée mal formée ne doit pas pouvoir devenir une commande.
       - name: Date cible
@@ -126,7 +143,7 @@ jobs:
           fi
           if [ -n "$DEMANDEUR" ]; then echo "relance demandée depuis l'IHL par ${DEMANDEUR:0:16}…"; fi
           if [ -n "$DATE_DEMANDEE" ]; then d="$DATE_DEMANDEE"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then d="$(date -u +%F)"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then d="$(date -u -d tomorrow +%F)"
           else d=""; fi
           echo "date=$d" >> "$GITHUB_OUTPUT"
           echo "date cible : ${d:-J+1 (défaut)}"
@@ -206,9 +223,74 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # La liste a été faite au DÉBUT de la nuit ; ce job peut partir 8 h plus tard. Si le Mac (ou une
+      # relance) a publié la station entre-temps, on ne la refait pas : pas de doublon, pas de GPU
+      # pris pour rien (12/10/2026). Relais illisibles → on la fait (même règle que --manquantes).
+      - name: Encore à faire ?
+        id: encore
+        env:
+          TARGET_DATE:        ${{ needs.preparer.outputs.date }}
+          NOSTR_PRIVATE_KEY:  ${{ secrets.NOSTR_PRIVATE_KEY }}
+          STATIONS_DEMANDEES: ${{ matrix.station }}
+        run: |
+          if [ -z "$TARGET_DATE" ]; then echo "faire=oui" >> "$GITHUB_OUTPUT"; exit 0; fi
+          liste="$(npm run --silent stations:list -- --brut --manquantes || echo '?')"
+          if [ "$liste" = "[]" ]; then
+            echo "faire=non" >> "$GITHUB_OUTPUT"
+            echo "✅ $STATIONS_DEMANDEES déjà à l'antenne pour $TARGET_DATE — rien à refaire"
+          else
+            echo "faire=oui" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 👂 L'OREILLE DE CONTRÔLE (lib/oreille.ts) — 12/10/2026. Jusqu'ici, chaque nuit GitHub disait
+      # « oreille indisponible : whisper-cli introuvable » : aucune émission n'a jamais été réécoutée
+      # ici. whisper.cpp n'a ni paquet Ubuntu 24.04 ni binaire Linux publié : on le CONSTRUIT (cmake et
+      # gcc sont dans l'image), une fois, puis le cache le garde.
+      #   · version FIGÉE (tag) : un main qui bouge ne doit pas casser la nuit ;
+      #   · GGML_NATIVE=OFF : le cache est restauré sur des machines dont le processeur varie — un
+      #     binaire compilé pour le processeur du premier soir planterait (« illegal instruction ») ;
+      #   · BUILD_SHARED_LIBS=OFF : un seul exécutable, sans libwhisper.so à retrouver ;
+      #   · modèle ggml-base (148 Mo), le même que sur le Mac, empreinte vérifiée.
+      # Échec d'installation → l'émission se fait quand même (contrôle du signal seul), l'oreille se
+      # déclare absente dans le journal ET dans la note de qualité de l'émission.
+      - name: Cache de l'oreille (whisper.cpp + modèle ggml-base)
+        id: cache-oreille
+        if: steps.encore.outputs.faire == 'oui'
+        uses: actions/cache@v6
+        with:
+          path: .oreille/
+          key: oreille-whisper.cpp-v1.9.5-ggml-base-${{ runner.os }}-${{ runner.arch }}-1
+      - name: Installe l'oreille (whisper-cli)
+        if: steps.encore.outputs.faire == 'oui' && steps.cache-oreille.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Une installation à moitié faite ne doit jamais finir dans le cache.
+          trap 'rm -rf .oreille' ERR
+          rm -rf .oreille && mkdir -p .oreille/bin
+          git clone -q --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp .oreille/src
+          cmake -S .oreille/src -B .oreille/build -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          cmake --build .oreille/build --target whisper-cli -j"$(nproc)"
+          cp .oreille/build/bin/whisper-cli .oreille/bin/whisper-cli
+          curl -fsSL --retry 3 -o .oreille/ggml-base.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+          echo "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe  .oreille/ggml-base.bin" | sha256sum -c -
+          rm -rf .oreille/src .oreille/build
+      - name: L'oreille répond-elle ?
+        if: steps.encore.outputs.faire == 'oui'
+        run: |
+          if [ -x .oreille/bin/whisper-cli ] && [ -s .oreille/ggml-base.bin ] && .oreille/bin/whisper-cli --help >/dev/null 2>&1; then
+            echo "👂 oreille prête : $(du -h .oreille/ggml-base.bin | cut -f1) de modèle"
+          else
+            echo "::warning::${{ matrix.station }} : oreille de contrôle absente (whisper.cpp non installé) — émission contrôlée au signal seulement"
+          fi
+
       # Cache des binaires Piper + voix ONNX. Piper reste le REPLI : si la
       # synthèse Chatterbox est injoignable, l'émission sort quand même.
       - name: Cache Piper binary + voices
+        if: steps.encore.outputs.faire == 'oui'
         uses: actions/cache@v6
         with:
           path: |
@@ -223,7 +305,7 @@ jobs:
       # (~1 min, puis cache) ; le modèle (380 Mo, GitHub) est mis en cache
       # avec lui. La config vient du dépôt (src/data), plus de Hugging Face.
       - name: Cache Kokoro (venv + modèle) — station chinoise
-        if: matrix.station == 'zi-you-zhi-sheng'
+        if: matrix.station == 'zi-you-zhi-sheng' && steps.encore.outputs.faire == 'oui'
         uses: actions/cache@v6
         with:
           path: |
@@ -231,7 +313,7 @@ jobs:
             voices/kokoro/
           key: kokoro-${{ hashFiles('src/lib/kokoro.ts', 'scripts/kokoro-python.py') }}
       - name: Installe Kokoro — station chinoise
-        if: matrix.station == 'zi-you-zhi-sheng'
+        if: matrix.station == 'zi-you-zhi-sheng' && steps.encore.outputs.faire == 'oui'
         run: |
           if [ ! -x .venv-kokoro/bin/python ]; then
             python3 -m venv .venv-kokoro
@@ -241,7 +323,11 @@ jobs:
           .venv-kokoro/bin/python -c "import kokoro_onnx, misaki; print('kokoro-onnx OK')"
 
       - name: Génère ${{ matrix.station }}
+        if: steps.encore.outputs.faire == 'oui'
         env:
+          # 👂 L'oreille installée plus haut (absente → indisponible, la nuit continue sans elle).
+          OREILLE_BINAIRE: ${{ github.workspace }}/.oreille/bin/whisper-cli
+          OREILLE_MODELE:  ${{ github.workspace }}/.oreille/ggml-base.bin
           # 🔴 PREMIER maillon de la chaîne d'écriture, et le seul gratuit à
           # notre échelle : offre d'environ 1 milliard de jetons/mois, contre
           # ~1,17 M/jour pour les 15 stations — soit 3,5 %.

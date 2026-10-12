@@ -108,6 +108,7 @@ export function motsCompares(texte: string, langue: string): string[] {
       if (/\p{N}/u.test(morceau)) continue          // chiffres
       if (NOMBRES.has(morceau)) continue
       if (HESITATIONS.has(morceau)) continue
+      if (langue !== 'pt' && estHesitationAllongee(morceau)) continue   // « eeeuh », « uhh », « ummm »
       sortie.push(morceau)
     }
   }
@@ -161,6 +162,42 @@ export function finEntendue(prevus: readonly string[], entendus: readonly string
   return fins.some(m => queue.includes(m))
 }
 
+// ── Hésitations écrites mais non dites ─────────────────────────────────────────────────────
+
+/**
+ * Les VRAIES hésitations vocales (« euh », « uh », « eh », « э-э », « 嗯 »…), allongements compris
+ * (« eeeuh », « uhh », « э-э-э », que la voix clonée reçoit — lib/disfluences.ts). Pas « bah », « ben »,
+ * « tu vois », « ну » : ce sont des mots, l'oreille les compte déjà comme tels (ou pas du tout).
+ */
+const FORMES_VOCALES = ['e+u+h+', 'h+e+u+h*', 'u+h+', 'u+m+', 'e+r+m+', 'e+h+', 'e+m+', 'э+(?:-э+)*', 'э+м+']
+/** En portugais, « um » (un) et « em » (dans) sont des mots. */
+const FORMES_PT = FORMES_VOCALES.filter(f => f !== 'u+m+' && f !== 'e+m+')
+const reVocale = (formes: string[]) => new RegExp(`(?<![\\p{L}])(?:${formes.join('|')})(?![\\p{L}])`, 'giu')
+const HESITATION_VOCALE_CJK = /嗯|呃|额/gu
+
+/** Un mot entier n'est-il qu'une hésitation allongée (« eeeuh », « uhh », « ummm ») ? */
+function estHesitationAllongee(mot: string): boolean {
+  return new RegExp(`^(?:${FORMES_VOCALES.join('|')})$`, 'iu').test(mot)
+}
+
+/** Nombre d'hésitations vocales dans un texte (écrit ou transcrit). Pure. */
+export function compterHesitationsVocales(texte: string, langue: string): number {
+  const re = langueSansEspaces(langue) ? HESITATION_VOCALE_CJK : reVocale(langue === 'pt' ? FORMES_PT : FORMES_VOCALES)
+  return [...texte.matchAll(new RegExp(re.source, re.flags))].length
+}
+
+/**
+ * Combien d'hésitations ÉCRITES l'oreille n'a PAS entendues (0 si toutes, ou si aucune n'était écrite).
+ *
+ * 🔴 UN INDICE, JAMAIS UN VERDICT. Mesuré le 12/10/2026 sur la voix clonée data-space (en, es, ru) :
+ * Whisper efface parfois une hésitation pourtant DITE (« Uhh… you know, uhh… » transcrit « You know »),
+ * et en ajoute parfois une. Refaire un tour pour un « euh » manquant coûterait du GPU sur un faux
+ * négatif ; on le COMPTE (journal + note de qualité de l'émission), on ne le refait pas.
+ */
+export function hesitationsAvalees(prevu: string, entendu: string, langue: string): number {
+  return Math.max(0, compterHesitationsVocales(prevu, langue) - compterHesitationsVocales(entendu, langue))
+}
+
 // ── Verdict ────────────────────────────────────────────────────────────────────────────────
 
 export interface SeuilsOreille {
@@ -197,6 +234,10 @@ export interface Jugement {
   perdus:    number
   fin:       boolean
   mots:      number
+  /** Hésitations vocales écrites dans le texte prévu (« euh », « uh », « э-э »…). */
+  hesitationsEcrites: number
+  /** …dont l'oreille n'a pas retrouvé la trace (indice seulement : cf. `hesitationsAvalees`). */
+  hesitationsAvalees: number
   /** Une ligne lisible pour le journal. */
   motif:     string
 }
@@ -214,7 +255,11 @@ export function jugerEcoute(
   const wer = tauxErreurMots(p, e)
   const perdus = partMotsPerdus(p, e)
   const fin = finEntendue(p, e)
-  const base = { wer, perdus, fin, mots: p.length }
+  const base = {
+    wer, perdus, fin, mots: p.length,
+    hesitationsEcrites: compterHesitationsVocales(prevu, langue),
+    hesitationsAvalees: hesitationsAvalees(prevu, entendu, langue),
+  }
   if (p.length < seuils.motsMinimum) {
     return { ...base, verdict: 'non-juge', motif: `trop court pour juger (${p.length} mot(s) comparable(s))` }
   }

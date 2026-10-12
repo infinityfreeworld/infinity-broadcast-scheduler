@@ -15,7 +15,7 @@ import { getChatterboxVoiceForHost, synthesizeWithChatterbox, chatterboxBranche 
 import { synthesize } from './piper'
 import { voixPourLangue } from './voix'
 import { estVoixKokoro } from './kokoro'
-import { ajusterNiveau, encadrerDeSilence } from './musique'
+import { calerSurVoix, encadrerDeSilence, type NiveauVoix } from './musique'
 import type { RadioStation } from './types'
 import { decodeWav } from './audio'
 
@@ -71,13 +71,13 @@ async function direAvecVoix(station: RadioStation, texte: string): Promise<Decod
  * l'émission, silences autour). Chaque ident manquant est `null`, jamais une erreur.
  */
 export async function identsDeStation(
-  station: RadioStation, sampleRate: number, voixRmsDb: number,
+  station: RadioStation, sampleRate: number, voix: NiveauVoix | number,
 ): Promise<{ ouverture: ConcatEntry | null; fermeture: ConcatEntry | null }> {
   if (process.env.IDENTS === 'false') return { ouverture: null, fermeture: null }
   const preparer = async (quoi: 'ouverture' | 'fermeture'): Promise<ConcatEntry | null> => {
     const wav = await direAvecVoix(station, phraseIdent(station.language, station.name, quoi, station.tagline))
     if (!wav || wav.samples.length < wav.sampleRate * 0.5) return null
-    let s = ajusterNiveau(wav.samples, voixRmsDb)
+    let s = calerSurVoix(wav.samples, wav.sampleRate, voix, 0)
     s = encadrerDeSilence(s, wav.sampleRate, quoi === 'ouverture' ? 0.2 : 0.6, quoi === 'ouverture' ? 0.7 : 0.4)
     return { wav: { samples: s, sampleRate: wav.sampleRate } }
   }

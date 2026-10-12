@@ -50,6 +50,14 @@ export interface OptionsReprise<Tour, Plan extends { texte: string }> {
 
 export type StatutTour = 'clone' | 'repris' | 'repli' | 'locale' | 'manquant' | 'incompris'
 
+export interface EtatOreille {
+  statut:             'active' | 'absente' | 'coupee' | 'en-panne' | 'non-branchee'
+  ecoutes:            number
+  refaits:            number
+  hesitationsEcrites: number
+  hesitationsAvalees: number
+}
+
 export interface TourFini {
   i:              number
   texte:          string
@@ -68,6 +76,8 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
   private attendus = 0
   private ecoutes = 0
   private refaitsOreille = 0
+  private hesitationsEcrites = 0
+  private hesitationsAvalees = 0
   private readonly log: (l: string) => void
   private readonly essaisOreille: number
 
@@ -122,6 +132,16 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     const j = await this.o.oreille.ecouter(wav, texte, this.o.langue)
     if (j) this.ecoutes++
     return j
+  }
+
+  /** Les hésitations du tour RETENU (écrites / non entendues) — un indice, jamais un refus. */
+  private compterHesitations(i: number, j: Jugement | null): void {
+    if (!j || j.hesitationsEcrites === 0) return
+    this.hesitationsEcrites += j.hesitationsEcrites
+    this.hesitationsAvalees += j.hesitationsAvalees
+    if (j.hesitationsAvalees > 0) {
+      this.log(`    👂 tour ${i + 1} : ${j.hesitationsAvalees}/${j.hesitationsEcrites} hésitation(s) écrite(s) non entendue(s) (indice, le tour est gardé)`)
+    }
   }
 
   /**
@@ -190,6 +210,7 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
       }
     }
 
+    this.compterHesitations(t.i, j)
     this.statuts.set(t.i, 'clone')
     this.garder(t.i, wav)
     return { wav }
@@ -229,12 +250,38 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     }
   }
 
+  /**
+   * Ce que l'oreille a fait de cette émission, pour la note de qualité (lib/note-qualite.ts).
+   * `statut` : 'active' (elle a écouté), 'absente' (whisper-cli ou modèle introuvable),
+   * 'coupee' (OREILLE=0), 'en-panne' (trois transcriptions ratées d'affilée), 'non-branchee'.
+   */
+  etatOreille(): EtatOreille {
+    const ind = this.o.oreille?.indisponible() ?? null
+    const statut: EtatOreille['statut'] = !this.o.oreille ? 'non-branchee'
+      : !ind ? 'active'
+      : /OREILLE=0/.test(ind) ? 'coupee'
+      : /ratées/.test(ind) ? 'en-panne'
+      : 'absente'
+    return {
+      statut, ecoutes: this.ecoutes, refaits: this.refaitsOreille,
+      hesitationsEcrites: this.hesitationsEcrites, hesitationsAvalees: this.hesitationsAvalees,
+    }
+  }
+
+  /** Compteurs des tours par sort, pour la note de qualité. */
+  compteurs(): Record<StatutTour, number> {
+    const c: Record<StatutTour, number> = { locale: 0, repris: 0, clone: 0, repli: 0, manquant: 0, incompris: 0 }
+    for (const s of this.statuts.values()) c[s]++
+    return c
+  }
+
   ligneBilan(): string {
     const c = (s: StatutTour) => [...this.statuts.values()].filter(x => x === s).length
     const ind = this.o.oreille?.indisponible()
     const oreille = !this.o.oreille ? 'oreille non branchée'
       : ind ? `oreille INDISPONIBLE (${ind}) — signal seul`
       : `oreille : ${this.ecoutes} écoute(s), ${this.refaitsOreille} tour(s) refait(s)`
+        + (this.hesitationsEcrites > 0 ? `, hésitations entendues ${this.hesitationsEcrites - this.hesitationsAvalees}/${this.hesitationsEcrites}` : '')
     return `🔁 Voix : ${c('clone')} clonée(s) neuve(s), ${c('repris')} reprise(s) du chantier, `
       + `${c('repli')} en repli, ${c('manquant')} à reprendre, ${c('incompris')} incompréhensible(s) · ${oreille}`
   }

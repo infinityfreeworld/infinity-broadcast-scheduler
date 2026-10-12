@@ -128,7 +128,8 @@ test('frenchify réservé au français (Piper et voix clonée)', () => {
   // Français → mots anglais ré-épelés ; chinois → sigles et chiffres prononçables (prononciation-zh.ts) ;
   // les autres langues reçoivent le texte nettoyé tel quel.
   // 12/10/2026 : en français, les noms d'Infinity (prononciation-noms.ts) et les « euh » audibles passent AVANT frenchify.
-  assert.match(ch, /text: langueVoix === 'fr' \? frenchifyEnglishWords\(hesitationsAudibles\(prononcerNomsInfinity\(propre\)\)\)\s*: langueVoix === 'zh' \? textePourVoixChinoise\(propre\)\s*: propre/)
+  // 12/10/2026 (bis) : en, es, ru reçoivent aussi leurs hésitations allongées (disfluences.ts), rien d'autre.
+  assert.match(ch, /text: langueVoix === 'fr' \? frenchifyEnglishWords\(hesitationsAudibles\(prononcerNomsInfinity\(propre\)\)\)\s*: langueVoix === 'zh' \? textePourVoixChinoise\(propre\)\s*(?:\/\/[^\n]*\n\s*)?: hesitationsAudibles\(propre, langueVoix\)/)
   const pi = readFileSync(new URL('../piper.ts', import.meta.url), 'utf8')
   assert.match(pi, /return estVoixPiperFrancaise\(voiceId\) \? frenchifyEnglishWords\(prononcerNomsInfinity\(propre\)\) : propre/)
   const gb = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')

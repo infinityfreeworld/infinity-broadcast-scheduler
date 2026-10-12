@@ -698,7 +698,8 @@ export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions
     ...optsBruts,
     text: langueVoix === 'fr' ? frenchifyEnglishWords(hesitationsAudibles(prononcerNomsInfinity(propre)))
       : langueVoix === 'zh' ? textePourVoixChinoise(propre)
-      : propre,
+      // 12/10/2026 — en, es, ru : la voix clonée avale aussi les hésitations brèves (mesuré, disfluences.ts).
+      : hesitationsAudibles(propre, langueVoix),
   }
   // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
   // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons

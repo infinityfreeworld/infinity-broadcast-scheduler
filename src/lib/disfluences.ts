@@ -308,11 +308,38 @@ export function pausePiper(texte: string): string {
 }
 
 /**
- * Les « euh » que la VOIX CLONÉE française avale (12/10/2026, Med : « je ne vois toujours pas les euh »).
- * Mesuré sur la voix data-space, transcription whisper à l'appui : « Euh… Gnu, tu mélanges » sort « Gnu, tu
- * mélanges » (l'hésitation disparaît) ; « Eeeuh… bah, Gnu » sort « Euh… bah… ». On allonge donc « euh » en
- * « eeeuh » dans le texte envoyé à la voix clonée — jamais dans le transcript. Piper, lui, le dit (pausePiper).
+ * Les hésitations que la VOIX CLONÉE avale, et la forme qu'elle DIT (texte envoyé à la voix clonée
+ * seulement — jamais le transcript ; Piper, lui, les dit : pausePiper).
+ *
+ * Mesuré sur la voix data-space, transcription whisper (ggml-base) à l'appui :
+ *   · fr (12/10, Med : « je ne vois toujours pas les euh ») : « Euh… Gnu, tu mélanges » sort
+ *     « Gnu, tu mélanges » ; « Eeeuh… bah, Gnu » sort « Euh… bah… » → « eeeuh » ;
+ *   · en (12/10, inv-fp-sarah / inv-fp-malik) : « Um… you know, uh… » sort « You know » (0/2) ;
+ *     « Uhh… you know, uhh… » sort « Uh, you know, uh » et « Ummm… honestly, uhhh… » sort
+ *     « um… honestly uh… » (4/4) → « uhh », « umm » ;
+ *   · es (12/10, inv-vl-rafael) : « Eh… pues, este… » sort « y por este » (0/1) ; « Ehh… pues,
+ *     ehh… » sort « Eh, pues… eh… » (2/2) → « ehh » (« eeeh » donne des artefacts : 9 s pour 6 mots) ;
+ *   · ru (12/10, inv-sv-dmitri) : « э-э… » n'est entendu qu'avec une aide à la transcription ;
+ *     « Э-э-э… » sort « Э-э-э-э-э » → « э-э-э ». « Ну » est bien dit, laissé tel quel ;
+ *   · zh (12/10, inv-zy-jian / inv-zy-mei) : NON MESURABLE — même une phrase sans hésitation sort
+ *     incompréhensible de la voix clonée chinoise (whisper la comprend pourtant parfaitement dite par
+ *     une voix système). Rien n'est changé tant que la voix elle-même n'est pas réparée.
  */
-export function hesitationsAudibles(texte: string): string {
-  return texte.replace(/(?<![\p{L}])([Ee])uh(?![\p{L}])/gu, (_m, e: string) => `${e}eeuh`)
+const ALLONGEMENTS: Partial<Record<string, Array<[RegExp, (m: string) => string]>>> = {
+  fr: [[/(?<![\p{L}])([Ee])uh(?![\p{L}])/gu, m => `${m[0]}eeuh`]],
+  en: [
+    [/(?<![\p{L}])([Uu])h(?![\p{L}])/gu, m => `${m[0]}hh`],
+    [/(?<![\p{L}])([Uu])m(?![\p{L}])/gu, m => `${m[0]}mm`],
+  ],
+  es: [[/(?<![\p{L}])([Ee])h(?![\p{L}])/gu, m => `${m[0]}hh`]],
+  ru: [[/(?<![\p{L}-])([Ээ])-э(?![\p{L}-])/gu, m => `${m[0]}-э-э`]],
+}
+
+/** Les langues dont la voix clonée reçoit des hésitations allongées. */
+export const LANGUES_HESITATIONS_ALLONGEES: readonly string[] = Object.keys(ALLONGEMENTS)
+
+export function hesitationsAudibles(texte: string, langue: string = 'fr'): string {
+  let t = texte
+  for (const [re, f] of ALLONGEMENTS[langue] ?? []) t = t.replace(re, f)
+  return t
 }

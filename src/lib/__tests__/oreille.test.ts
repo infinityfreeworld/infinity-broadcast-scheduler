@@ -147,3 +147,32 @@ test('⭐ une FIN avalée suffit à refuser, même quand presque tous les mots s
   assert.match(j.motif, /fin non entendue/)
   assert.equal(jugerEcoute(prevu, entendu, 'fr', { ...S, exigerFin: false }).verdict, 'bon', 'OREILLE_FIN=0 le laisse passer')
 })
+
+// ── Hésitations écrites mais non dites (12/10/2026) ──────────────────────────────────────────
+// Les phrases ci-dessous sont les VRAIES transcriptions whisper (ggml-base) de la voix clonée
+// data-space, mesurées le 12/10/2026.
+test('⭐ hésitations : « Euh… » avalé par la voix → compté, sans faire refuser le tour', async () => {
+  const { compterHesitationsVocales, hesitationsAvalees } = await import('../oreille')
+  assert.equal(compterHesitationsVocales('Euh… Gnu, euh, tu mélanges', 'fr'), 2)
+  assert.equal(hesitationsAvalees('Euh… Gnu, euh, tu mélanges tout ce soir avec les jardins', 'Gnu, tu mélanges tout ce soir avec les jardins', 'fr'), 2)
+  // « Eeeuh » entendu compte comme le « euh » écrit
+  assert.equal(hesitationsAvalees('Euh… bah, on y va', 'Eeeuh… bah, on y va', 'fr'), 0)
+  // anglais, espagnol, russe : formes allongées reconnues
+  assert.equal(hesitationsAvalees('Uh… well, I mean, um… that is not', 'uh... well i mean uh... that is not', 'en'), 0)
+  assert.equal(hesitationsAvalees('Um… you know, uh… we will see', 'You know, we will see', 'en'), 2)
+  assert.equal(hesitationsAvalees('Ehh… pues, ehh… no sé', 'Eh, pues... eh... no sé', 'es'), 0)
+  assert.equal(hesitationsAvalees('Ну… это, э-э… я не уверен', 'Ну, это я не уверена', 'ru'), 1)
+  // portugais : « um » et « em » sont des mots
+  assert.equal(compterHesitationsVocales('um livro em casa', 'pt'), 0)
+  // chinois
+  assert.equal(compterHesitationsVocales('嗯……那个……呃', 'zh'), 2)
+  // le verdict ne bouge pas pour un « euh » manquant
+  const j = jugerEcoute('Euh… ce soir on parle des jardins partagés qui poussent partout', 'Ce soir on parle des jardins partagés qui poussent partout', 'fr', S)
+  assert.equal(j.verdict, 'bon')
+  assert.equal(j.hesitationsEcrites, 1)
+  assert.equal(j.hesitationsAvalees, 1)
+})
+
+test('une hésitation allongée entendue (« uhh », « ummm ») n’est pas un mot en trop', () => {
+  assert.deepEqual(motsCompares('ummm honestly uhhh i am not', 'en'), ['honestly', 'i', 'am', 'not'])
+})

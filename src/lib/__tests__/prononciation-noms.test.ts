@@ -38,3 +38,15 @@ it('la vision commune est dans le prompt de TOUT animateur (Med : « jamais heur
   const { VISION_INFINITY } = await import('../vision-infinity')
   for (const mot of ['ONU', 'OMS', 'GAVI', 'OTAN', 'DAV']) assert.ok(VISION_INFINITY.includes(mot), mot)
 })
+
+it('⭐ hésitations allongées pour la voix clonée, par langue (mesuré le 12/10/2026)', async () => {
+  const { hesitationsAudibles } = await import('../disfluences')
+  assert.equal(hesitationsAudibles('Um… you know, uh… we will see', 'en'), 'Umm… you know, uhh… we will see')
+  assert.equal(hesitationsAudibles('umbrella, uhuru, Uhh', 'en'), 'umbrella, uhuru, Uhh', 'seuls les mots entiers « uh » / « um »')
+  assert.equal(hesitationsAudibles('Eh… pues, eh… no sé, ¿eh?', 'es'), 'Ehh… pues, ehh… no sé, ¿ehh?')
+  assert.equal(hesitationsAudibles('Ну… это, э-э… я не уверен', 'ru'), 'Ну… это, э-э-э… я не уверен')
+  assert.equal(hesitationsAudibles('Э-э-э… уже длинное', 'ru'), 'Э-э-э… уже длинное', 'jamais rallongé deux fois')
+  assert.equal(hesitationsAudibles('嗯……那个……', 'zh'), '嗯……那个……', 'chinois : rien tant que la voix n’est pas réparée')
+  assert.equal(hesitationsAudibles('Euh… bon'), 'Eeeuh… bon', 'le français reste le défaut')
+  assert.equal(hesitationsAudibles('Uh… well', 'fr'), 'Uh… well', 'chaque langue ses formes')
+})
