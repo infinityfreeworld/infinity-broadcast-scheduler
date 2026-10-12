@@ -39,6 +39,8 @@ import { jetonDataspace } from './dataspace-jeton'
 import { sanitizeForSpeech } from './tts-sanitize'
 import { frenchifyEnglishWords } from './frenchify-english'
 import { textePourVoixChinoise } from './prononciation-zh'
+import { prononcerNomsInfinity } from './prononciation-noms'
+import { hesitationsAudibles } from './disfluences'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -694,7 +696,7 @@ export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions
   // rendus prononçables (prononciation-zh.ts) : elle les lisait avec une phonétique chinoise.
   const opts: ChatterboxSpeakOptions = {
     ...optsBruts,
-    text: langueVoix === 'fr' ? frenchifyEnglishWords(propre)
+    text: langueVoix === 'fr' ? frenchifyEnglishWords(hesitationsAudibles(prononcerNomsInfinity(propre)))
       : langueVoix === 'zh' ? textePourVoixChinoise(propre)
       : propre,
   }

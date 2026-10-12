@@ -127,9 +127,10 @@ test('frenchify réservé au français (Piper et voix clonée)', () => {
   const ch = readFileSync(new URL('../chatterbox.ts', import.meta.url), 'utf8')
   // Français → mots anglais ré-épelés ; chinois → sigles et chiffres prononçables (prononciation-zh.ts) ;
   // les autres langues reçoivent le texte nettoyé tel quel.
-  assert.match(ch, /text: langueVoix === 'fr' \? frenchifyEnglishWords\(propre\)\s*: langueVoix === 'zh' \? textePourVoixChinoise\(propre\)\s*: propre/)
+  // 12/10/2026 : en français, les noms d'Infinity (prononciation-noms.ts) et les « euh » audibles passent AVANT frenchify.
+  assert.match(ch, /text: langueVoix === 'fr' \? frenchifyEnglishWords\(hesitationsAudibles\(prononcerNomsInfinity\(propre\)\)\)\s*: langueVoix === 'zh' \? textePourVoixChinoise\(propre\)\s*: propre/)
   const pi = readFileSync(new URL('../piper.ts', import.meta.url), 'utf8')
-  assert.match(pi, /return estVoixPiperFrancaise\(voiceId\) \? frenchifyEnglishWords\(propre\) : propre/)
+  assert.match(pi, /return estVoixPiperFrancaise\(voiceId\) \? frenchifyEnglishWords\(prononcerNomsInfinity\(propre\)\) : propre/)
   const gb = readFileSync(new URL('../../scripts/generate-broadcast.ts', import.meta.url), 'utf8')
   assert.match(gb, /synthesizeWithChatterbox\(\{\s*voice:\s+plansVoix\[j\]\.voixPersonnage as string,\s*text:\s+plansVoix\[j\]\.texte,\s*language,/)
 })

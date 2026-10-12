@@ -306,3 +306,13 @@ const HESITATION_SUSPENDUE = new RegExp(
 export function pausePiper(texte: string): string {
   return texte.replace(HESITATION_SUSPENDUE, '$1,')
 }
+
+/**
+ * Les « euh » que la VOIX CLONÉE française avale (12/10/2026, Med : « je ne vois toujours pas les euh »).
+ * Mesuré sur la voix data-space, transcription whisper à l'appui : « Euh… Gnu, tu mélanges » sort « Gnu, tu
+ * mélanges » (l'hésitation disparaît) ; « Eeeuh… bah, Gnu » sort « Euh… bah… ». On allonge donc « euh » en
+ * « eeeuh » dans le texte envoyé à la voix clonée — jamais dans le transcript. Piper, lui, le dit (pausePiper).
+ */
+export function hesitationsAudibles(texte: string): string {
+  return texte.replace(/(?<![\p{L}])([Ee])uh(?![\p{L}])/gu, (_m, e: string) => `${e}eeuh`)
+}
