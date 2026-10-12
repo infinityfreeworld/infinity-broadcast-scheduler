@@ -30,6 +30,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { readWav, type DecodedWav } from './audio'
 import type { RadioStation, TrackRef, BroadcastSegment } from './types'
+import { calerSurLufs, SILENCE_LUFS } from './loudness'
 
 const execFileP = promisify(execFile)
 
@@ -163,14 +164,42 @@ export function ajusterNiveau(samples: Float32Array, cibleDb: number): Float32Ar
   return out
 }
 
-/** Fondu d'entrée et de sortie (linéaires), en place, bornés à la moitié du tampon chacun. */
+/**
+ * Fondu d'entrée et de sortie, en place, bornés à la moitié du tampon chacun.
+ * 12/10/2026 : courbe en S (cosinus surélevé) au lieu d'une droite — la droite démarre et s'arrête
+ * d'un coup (on entend le « genou » au début du fondu) ; la courbe en S part et arrive en douceur.
+ * Mi-parcours inchangé (0,5).
+ */
 export function appliquerFondus(samples: Float32Array, sampleRate: number, inS: number, outS: number): Float32Array {
   const n = samples.length
   const nIn  = Math.min(Math.floor(inS  * sampleRate), Math.floor(n / 2))
   const nOut = Math.min(Math.floor(outS * sampleRate), Math.floor(n / 2))
-  for (let i = 0; i < nIn; i++) samples[i] *= i / nIn
-  for (let i = 0; i < nOut; i++) samples[n - 1 - i] *= i / nOut
+  const courbe = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * t)
+  for (let i = 0; i < nIn; i++) samples[i] *= courbe(i / nIn)
+  for (let i = 0; i < nOut; i++) samples[n - 1 - i] *= courbe(i / nOut)
   return samples
+}
+
+/**
+ * Le niveau de référence d'une émission : la VOIX. `lufs` (loudness.ts) quand on le connaît —
+ * musiques, jingles et lit se calent alors sur la sonie PERÇUE ; sinon l'ancien calage au RMS.
+ */
+export interface NiveauVoix { rmsDb: number; lufs: number | null }
+
+/** Écart musique / voix en LU quand on cale au LUFS (MUSIQUE_MARGE_LU, défaut 0 : « niveau égal »). */
+export function margeLu(env: NodeJS.ProcessEnv = process.env): number {
+  const m = Number.parseFloat((env.MUSIQUE_MARGE_LU ?? '').replace(',', '.'))
+  return Number.isFinite(m) ? Math.min(6, Math.max(-24, m)) : 0
+}
+
+/**
+ * Cale un élément (musique, jingle, ident, lit) sur la voix, à `ecart` près : en LUFS si la sonie de la
+ * voix est connue, sinon au RMS (`ajusterNiveau`, comportement d'avant). Rend un NOUVEAU tampon.
+ */
+export function calerSurVoix(samples: Float32Array, sampleRate: number, voix: NiveauVoix | number, ecartLu: number, ecartRmsDb = ecartLu): Float32Array {
+  const ref: NiveauVoix = typeof voix === 'number' ? { rmsDb: voix, lufs: null } : voix
+  if (ref.lufs !== null && ref.lufs > SILENCE_LUFS) return calerSurLufs(samples, sampleRate, ref.lufs + ecartLu)
+  return ajusterNiveau(samples, ref.rmsDb + ecartRmsDb)
 }
 
 /** Encadre un tampon de silence (avant / après). */
@@ -243,14 +272,14 @@ export interface PausePrete {
  * Lève en cas d'échec — l'appelant décide (et il SAUTE la pause).
  */
 export async function preparerPause(
-  track: TrackRef, sampleRate: number, voixRmsDb: number, r: ReglagesMusique,
+  track: TrackRef, sampleRate: number, voix: NiveauVoix | number, r: ReglagesMusique,
   /** Silences autour, en secondes (défaut : ceux des réglages) — 0 avant pour un talk-over. */
   silences?: { avant: number; apres: number },
 ): Promise<PausePrete> {
   const brut = await telechargerPiste(track)
   const wav = await decoderEnWavMono(brut, sampleRate, r.pauseDureeS)
   if (wav.samples.length < sampleRate * 5) throw new Error('moins de 5 s d\'audio décodé')
-  let s = ajusterNiveau(wav.samples, voixRmsDb + r.margeDb)
+  let s = calerSurVoix(wav.samples, wav.sampleRate, voix, margeLu(), r.margeDb)
   s = appliquerFondus(s, wav.sampleRate, r.fonduInS, r.fonduOutS)
   s = encadrerDeSilence(s, wav.sampleRate, silences?.avant ?? r.silenceS, silences?.apres ?? r.silenceS)
   return { track, wav: { samples: s, sampleRate: wav.sampleRate } }

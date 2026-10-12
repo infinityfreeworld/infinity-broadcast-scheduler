@@ -45,10 +45,24 @@ export interface OptionsReprise<Tour, Plan extends { texte: string }> {
   moteurs:        MoteursReprise
   /** Régénérations immédiates d'un tour refusé par l'oreille (défaut `OREILLE_ESSAIS`, 1). */
   essaisOreille?: number
+  /**
+   * La voix LOCALE est la voix voulue de cette langue (chinois : Kokoro, lib/voix-zh.ts). Un tour cloné
+   * n'est alors gardé que si l'oreille le CONFIRME (verdict « bon ») ; sinon il est dit en voix locale,
+   * sans régénération ni report, et ce n'est PAS un repli pour la règle de publication.
+   */
+  localeVoulue?:  boolean
   log?:           (ligne: string) => void
 }
 
 export type StatutTour = 'clone' | 'repris' | 'repli' | 'locale' | 'manquant' | 'incompris'
+
+export interface EtatOreille {
+  statut:             'active' | 'absente' | 'coupee' | 'en-panne' | 'non-branchee'
+  ecoutes:            number
+  refaits:            number
+  hesitationsEcrites: number
+  hesitationsAvalees: number
+}
 
 export interface TourFini {
   i:              number
@@ -68,6 +82,8 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
   private attendus = 0
   private ecoutes = 0
   private refaitsOreille = 0
+  private hesitationsEcrites = 0
+  private hesitationsAvalees = 0
   private readonly log: (l: string) => void
   private readonly essaisOreille: number
 
@@ -124,6 +140,16 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     return j
   }
 
+  /** Les hésitations du tour RETENU (écrites / non entendues) — un indice, jamais un refus. */
+  private compterHesitations(i: number, j: Jugement | null): void {
+    if (!j || j.hesitationsEcrites === 0) return
+    this.hesitationsEcrites += j.hesitationsEcrites
+    this.hesitationsAvalees += j.hesitationsAvalees
+    if (j.hesitationsAvalees > 0) {
+      this.log(`    👂 tour ${i + 1} : ${j.hesitationsAvalees}/${j.hesitationsEcrites} hésitation(s) écrite(s) non entendue(s) (indice, le tour est gardé)`)
+    }
+  }
+
   /**
    * Le tour i est synthétisé et contrôlé (signal) : on décide de son sort. Rend le WAV à monter,
    * ou `aReprendre` (le tour sera refait à un passage suivant ; rien à monter pour lui).
@@ -135,6 +161,8 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
       return { wav: t.wav }
     }
     if (this.statuts.get(t.i) === 'repris') return { wav: t.wav }
+
+    if (this.o.localeVoulue) return this.apresTourLocaleVoulue(t)
 
     if (!t.viaClone) {
       if (this.reporterLesManques()) {
@@ -190,9 +218,38 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
       }
     }
 
+    this.compterHesitations(t.i, j)
     this.statuts.set(t.i, 'clone')
     this.garder(t.i, wav)
     return { wav }
+  }
+
+  /** Langue à voix locale voulue : le clone n'est gardé que confirmé par l'oreille, sinon voix locale. */
+  private async apresTourLocaleVoulue(t: TourFini): Promise<IssueTour> {
+    if (!t.viaClone) {
+      // Clone raté ou remplacé par le contrôle de voix : la voix locale est la bonne voix.
+      this.statuts.set(t.i, 'locale')
+      return { wav: t.wav }
+    }
+    const j = await this.ecouter(t.wav, t.texte)
+    if (j?.verdict === 'bon') {
+      this.compterHesitations(t.i, j)
+      this.statuts.set(t.i, 'clone')
+      this.garder(t.i, t.wav)
+      return { wav: t.wav }
+    }
+    const pourquoi = !j ? 'oreille sans avis' : j.motif
+    try {
+      const local = await this.o.moteurs.locale(t.texte, t.voixLocale)
+      this.statuts.set(t.i, 'locale')
+      this.log(`    👂 tour ${t.i + 1} : voix clonée non confirmée (${pourquoi}) → voix locale ${t.voixLocale}`)
+      return { wav: local }
+    } catch (err) {
+      this.statuts.set(t.i, 'incompris')
+      this.motifs.set(t.i, `voix clonée non confirmée (${pourquoi}), voix locale impossible`)
+      this.log(`    👂 tour ${t.i + 1} : voix clonée non confirmée ET voix locale impossible (${(err as Error).message.slice(0, 80)}) — gardé tel quel`)
+      return { wav: t.wav }
+    }
   }
 
   /** Tours laissés pour plus tard. */
@@ -229,12 +286,38 @@ export class RepriseEmission<Tour = unknown, Plan extends { texte: string } = { 
     }
   }
 
+  /**
+   * Ce que l'oreille a fait de cette émission, pour la note de qualité (lib/note-qualite.ts).
+   * `statut` : 'active' (elle a écouté), 'absente' (whisper-cli ou modèle introuvable),
+   * 'coupee' (OREILLE=0), 'en-panne' (trois transcriptions ratées d'affilée), 'non-branchee'.
+   */
+  etatOreille(): EtatOreille {
+    const ind = this.o.oreille?.indisponible() ?? null
+    const statut: EtatOreille['statut'] = !this.o.oreille ? 'non-branchee'
+      : !ind ? 'active'
+      : /OREILLE=0/.test(ind) ? 'coupee'
+      : /ratées/.test(ind) ? 'en-panne'
+      : 'absente'
+    return {
+      statut, ecoutes: this.ecoutes, refaits: this.refaitsOreille,
+      hesitationsEcrites: this.hesitationsEcrites, hesitationsAvalees: this.hesitationsAvalees,
+    }
+  }
+
+  /** Compteurs des tours par sort, pour la note de qualité. */
+  compteurs(): Record<StatutTour, number> {
+    const c: Record<StatutTour, number> = { locale: 0, repris: 0, clone: 0, repli: 0, manquant: 0, incompris: 0 }
+    for (const s of this.statuts.values()) c[s]++
+    return c
+  }
+
   ligneBilan(): string {
     const c = (s: StatutTour) => [...this.statuts.values()].filter(x => x === s).length
     const ind = this.o.oreille?.indisponible()
     const oreille = !this.o.oreille ? 'oreille non branchée'
       : ind ? `oreille INDISPONIBLE (${ind}) — signal seul`
       : `oreille : ${this.ecoutes} écoute(s), ${this.refaitsOreille} tour(s) refait(s)`
+        + (this.hesitationsEcrites > 0 ? `, hésitations entendues ${this.hesitationsEcrites - this.hesitationsAvalees}/${this.hesitationsEcrites}` : '')
     return `🔁 Voix : ${c('clone')} clonée(s) neuve(s), ${c('repris')} reprise(s) du chantier, `
       + `${c('repli')} en repli, ${c('manquant')} à reprendre, ${c('incompris')} incompréhensible(s) · ${oreille}`
   }

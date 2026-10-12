@@ -32,11 +32,13 @@ import { buildHostSystemPrompt, buildGuestSystemPrompt, retrieveTopEntries } fro
 import { fetchNewsForStation, formatNewsForPrompt } from '../lib/news'
 import { synthesize, getVoiceSampleRate, ensurePiperBinary, ensureVoice } from '../lib/piper'
 import { estVoixKokoro, ensureKokoro, synthesizeKokoro, TAUX_KOKORO } from '../lib/kokoro'
-import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence } from '../lib/musique'
+import { reglagesMusique, planifierPauses, preparerPause, segmentDePause, rmsDbGlobal, decoderEnWavMono, telechargerPiste, encadrerDeSilence, calerSurVoix, appliquerFondus, margeLu, type NiveauVoix } from '../lib/musique'
+import { lufsEnsemble, normaliserEmission, reglagesLoudness, type NormalisationEmission } from '../lib/loudness'
+import { noteQualite, resumeQualite, type NoteQualite } from '../lib/note-qualite'
 import { stationSelonIHL, stationAjouteeSelonIHL } from '../lib/station-reglages'
 import { stationAvecSaMusique } from '../lib/bibliotheque-musique'
 import { planHumain, silenceApresTour, egaliserNiveaux, fusionTalkOver, superposerLit, dateLisible, habillageActif } from '../lib/humain'
-import { prng, choisirPistes, ajusterNiveau } from '../lib/musique'
+import { prng, choisirPistes } from '../lib/musique'
 import { identsDeStation, IDENT_TITRE } from '../lib/idents'
 import {
   appliquerSlogan, consigneSloganPourTour, positionDuTour, positionPourConsigne, prononcerDomaine,
@@ -96,6 +98,7 @@ import {
   plansPourChantier, restaurerCourrier, sortDuTourCourrier, sansSautes, hesitationPermise, permisPourRattrapage, toursPourLiens,
   type MarquesCourrier,
 } from '../lib/courrier/reprise-courrier'
+import { voixPersonnagePourLangue, voixLocalePrincipale } from '../lib/voix-zh'
 import { preparerReprise, deciderOuArreter } from '../lib/reprise-branchement'
 import { ArretVolontaire } from '../lib/regle-publication'
 import type { RepriseEmission } from '../lib/reprise-emission'
@@ -148,6 +151,8 @@ interface GenResult {
   refsCourrier:  string[]
   /** Les tours dont les liens peuvent aller à l'écran : jamais la parole d'un auditeur. */
   toursPourLiens: BroadcastTurn[]
+  /** La note de qualité publiée avec l'émission (lib/note-qualite.ts). */
+  qualite:        NoteQualite
 }
 
 /** Ce qu'un tour doit dire, et par quelle voix (gardé dans le chantier d'une reprise). */
@@ -491,9 +496,10 @@ async function generateBroadcastBytes(opts: {
     // La synthèse est repoussée à la phase 2. Voir l'en-tête de la boucle
     // pour la raison — elle vient de l'hébergeur, pas d'un goût pour les
     // refactorisations.
-    const chatterboxVoice = (isGuestTurn && guestVoiceName && chatterboxBranche())
+    // 🇨🇳 12/10/2026 : en chinois, Kokoro est la voix principale ; le clone seulement si ZH_VOIX_CLONEE=1 (voix-zh.ts).
+    const chatterboxVoice = voixPersonnagePourLangue(language, (isGuestTurn && guestVoiceName && chatterboxBranche())
       ? guestVoiceName
-      : getChatterboxVoiceForHost(station.id, host.id, language)
+      : getChatterboxVoiceForHost(station.id, host.id, language))
     if (chatterboxVoice) voixAttendues++
 
     const turn: BroadcastTurn = {
@@ -563,7 +569,7 @@ async function generateBroadcastBytes(opts: {
         if (gA.horsLangue || !dit || !resteADire(dit) || contientInsulte(dit)) {
           console.log('(appel sauté)')
         } else {
-          const voixA = a.voixInventee && chatterboxBranche() ? a.voixInventee : null
+          const voixA = voixPersonnagePourLangue(language, a.voixInventee && chatterboxBranche() ? a.voixInventee : null)
           if (voixA) voixAttendues++
           turns.push({ id: `bcast-${i}a-${Date.now().toString(36).slice(-4)}`, hostId: `auditeur-joue-${place.k}`, hostName: a.prenom, color: '#9aa4b2', avatar: '📞', text: dit, tStart: 0, tEnd: 0 })
           plansVoix.push({ texte: prononcerDomaine(dit, language), voixPiper: voixPourLangue(language, a.genre, `auditeur-${a.prenom}`) ?? voiceId, voixPersonnage: voixA, court: false, boucle: i })
@@ -786,6 +792,15 @@ async function generateBroadcastBytes(opts: {
   const alignement = turns.length !== new Set(indexBoucle).size || sautes.size > 0 ? { indexBoucle, nbTours: numTurns } : undefined
   const { entries, segmentsPrevus, finVoix } = await monterAvecMusique(station, wavEntries, opts.date, alignement)
   const merged = concatWavs(entries, habillageActif('HABILLAGE_FOND') ? { bruitDb: -58, rand: prng(`${station.id}:${opts.date}:fond`) } : {})
+  // 🔊 L'émission entière à la même sonie d'une station à l'autre (−16 LUFS, crêtes sous −1,5 dBFS) :
+  // mesuré le 12/10/2026, Biogame sortait à −17,7 LUFS crête 0 dBFS, Свобода FM à −21,3.
+  let sonie: NormalisationEmission | null = null
+  if (habillageActif('HABILLAGE_LOUDNESS')) {
+    const { cible, crete } = reglagesLoudness()
+    sonie = normaliserEmission(merged.samples, merged.sampleRate, cible, crete)
+    console.log(`    🔊 sonie : ${sonie.avantLufs.toFixed(1)} → ${sonie.apresLufs.toFixed(1)} LUFS (gain ${sonie.gainDb >= 0 ? '+' : ''}${sonie.gainDb.toFixed(1)} dB), crête ${sonie.creteDb.toFixed(1)} dBFS`
+      + `${sonie.limite > 0 ? `, limiteur sur ${(sonie.limite * 100).toFixed(2)} % des échantillons` : ''}`)
+  }
   for (let i = 0; i < turns.length; i++) {
     turns[i].tStart = wavEntries[i].tStart ?? 0
     // Un tour fusionné en talk-over porte la musique après la voix : la fin du tour est la fin de la VOIX.
@@ -810,7 +825,18 @@ async function generateBroadcastBytes(opts: {
   }
 
   const audioBlob = encodeWav(merged)
+  const bilanControle = controleVoix.bilan()
+  const qualite = noteQualite({
+    voixAttendues, voixObtenues,
+    reprise: opts.reprise ? opts.reprise.compteurs() : null,
+    controle: bilanControle,
+    oreille: opts.reprise ? opts.reprise.etatOreille() : null,
+    sonie,
+    producteur: process.env.PRODUCTEUR || undefined,
+  })
+  console.log(`\n${resumeQualite(qualite)}`)
   return {
+    qualite,
     audioBlob,
     durationSec: durationOf(merged),
     turns,
@@ -851,11 +877,14 @@ async function monterAvecMusique(
   const r = reglagesMusique(station)
   const sampleRate = wavEntries[0].wav.sampleRate
   const voixDb = rmsDbGlobal(wavEntries.map(e => e.wav.samples))
+  // 🔊 12/10/2026 : musiques, jingles, idents et lit se calent sur la sonie PERÇUE de la voix (LUFS,
+  // lib/loudness.ts) ; HABILLAGE_LOUDNESS=off revient au calage RMS d'avant.
+  const voix: NiveauVoix = { rmsDb: voixDb, lufs: habillageActif('HABILLAGE_LOUDNESS') ? lufsEnsemble(wavEntries.map(e => e.wav)) : null }
   const plan = planifierPauses(station, date, alignement ? alignement.nbTours : wavEntries.length, r)
   const jingles = (station.jingles ?? []).filter(j => !!j.cid || !!j.url)
   const talkOver = habillageActif('HABILLAGE_TALKOVER')
   if (plan.length > 0 || jingles.length > 0) {
-    console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB${talkOver ? ', talk-over' : ''}`)
+    console.log(`\n🎶 Musique : ${plan.length} pause(s) ≤ ${r.pauseDureeS} s, ${jingles.length} jingle(s), voix ${voix.lufs !== null ? `${voix.lufs.toFixed(1)} LUFS, musique ${margeLu() > 0 ? '+' : ''}${margeLu()} LU` : `${voixDb.toFixed(1)} dBFS, musique ${r.margeDb > 0 ? '+' : ''}${r.margeDb} dB`}${talkOver ? ', talk-over' : ''}`)
   } else if (!r.actif && (station.tracks?.length ?? 0) > 0) {
     console.log('\n🎶 Musique : désactivée pour cette émission (skipMusic, MUSIQUE_DESACTIVEE ou 0 pause)')
   } else if ((station.tracks?.length ?? 0) === 0) {
@@ -869,7 +898,9 @@ async function monterAvecMusique(
     try {
       const brut = await telechargerPiste(t)
       const wav = await decoderEnWavMono(brut, sampleRate, 30)
-      let sam = ajusterNiveau(wav.samples, voixDb)
+      let sam = calerSurVoix(wav.samples, wav.sampleRate, voix, 0)
+      // Anti-clic au début, et une fin propre si le jingle a été coupé à 30 s.
+      sam = appliquerFondus(sam, wav.sampleRate, 0.02, 0.3)
       sam = encadrerDeSilence(sam, wav.sampleRate, 0.3, 0.6)
       return { wav: { samples: sam, sampleRate: wav.sampleRate } }
     } catch (err) {
@@ -885,7 +916,7 @@ async function monterAvecMusique(
   // Idents en voix d'animateur (22/09/2026) : « Vous écoutez Radio Pirate. » dit par le premier
   // animateur, à l'ouverture et à la fermeture — SEULEMENT quand la station n'a pas de jingle
   // déposé (le jingle du fondateur passe devant). Deux courtes synthèses, jamais bloquantes.
-  const idents = jingles.length === 0 ? await identsDeStation(station, sampleRate, voixDb) : null
+  const idents = jingles.length === 0 ? await identsDeStation(station, sampleRate, voix) : null
   if (idents?.ouverture) {
     entries.push(idents.ouverture)
     segmentsPrevus.push({ entry: idents.ouverture, track: { title: IDENT_TITRE }, type: 'jingle' })
@@ -899,7 +930,7 @@ async function monterAvecMusique(
     if (piste) {
       try {
         const wav = await decoderEnWavMono(await telechargerPiste(piste), sampleRate, 60)
-        lit = ajusterNiveau(wav.samples, voixDb - 16)
+        lit = calerSurVoix(wav.samples, wav.sampleRate, voix, -16)
         console.log(`    🎼 lit sous l'ouverture et la fermeture : « ${piste.title} » (−16 dB)`)
       } catch (err) {
         console.warn(`    ⚠ lit musical sauté (« ${piste.title} ») : ${(err as Error).message.slice(0, 100)}`)
@@ -920,14 +951,14 @@ async function monterAvecMusique(
     if (!track) continue
     try {
       if (talkOver) {
-        const pause = await preparerPause(track, sampleRate, voixDb, r, { avant: 0, apres: r.silenceS })
+        const pause = await preparerPause(track, sampleRate, voix, r, { avant: 0, apres: r.silenceS })
         const f = fusionTalkOver(wavEntries[i].wav.samples, pause.wav.samples, Math.floor(1.2 * sampleRate))
         wavEntries[i].wav = { samples: f.samples, sampleRate }
         finVoix.set(wavEntries[i], f.finVoix)
         segmentsPrevus.push({ entry: wavEntries[i], track, type: 'music', tStartRel: f.finVoix / sampleRate })
         console.log(`    ♪ après le tour ${i + 1} : « ${track.title} » (${(pause.wav.samples.length / sampleRate).toFixed(0)} s, lancée sous la voix)`)
       } else {
-        const pause = await preparerPause(track, sampleRate, voixDb, r)
+        const pause = await preparerPause(track, sampleRate, voix, r)
         const e: ConcatEntry = { wav: pause.wav }
         entries.push(e)
         segmentsPrevus.push({ entry: e, track, type: 'music' })
@@ -1182,11 +1213,12 @@ async function main() {
     // n'est pas « prêt », et mieux vaut l'apprendre en dix secondes qu'au
     // milieu de l'émission.
     const invitesUnifies = unifiedGuestsForStation(station.id, langueStation)
-    const voixTemoin =
+    // En chinois sans ZH_VOIX_CLONEE=1, aucun témoin : on ne réveille pas le GPU pour rien.
+    const voixTemoin = voixPersonnagePourLangue(langueStation,
       (invitesUnifies.length ? resolvePersonaForStation(invitesUnifies[0], station.id).voiceName : undefined)
       ?? station.hosts
         .map(h => getChatterboxVoiceForHost(station.id, h.id, langueStation))
-        .find((v): v is string => !!v)
+        .find((v): v is string => !!v))
 
     if (!voixTemoin) {
       console.log('\n🎙  Chatterbox configuré, mais aucune voix de personnage sur cette station — tout ira sur Piper.')
@@ -1353,6 +1385,8 @@ async function main() {
     model,
     ...(resumeEm.titre ? { titre: resumeEm.titre } : {}),
     ...(resumeEm.resume ? { resume: resumeEm.resume } : {}),
+    // 🏷 12/10/2026 — ce que la nuit sait de la qualité de CETTE émission (lib/note-qualite.ts).
+    qualite:     result.qualite,
     generatedBy: '',   // sera rempli par publishBroadcast
     generatedAt: Math.floor(Date.now() / 1000),
   }
@@ -1398,7 +1432,8 @@ async function main() {
     if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`)
 
     const strict = (process.env.CHATTERBOX_STRICT ?? 'true') !== 'false'
-    if (strict && voixObtenues === 0) {
+    // En chinois, Kokoro est la voix voulue : un clone tenté (ZH_VOIX_CLONEE=1) qui échoue n'est pas une panne.
+    if (strict && voixObtenues === 0 && !voixLocalePrincipale(station.language ?? 'fr')) {
       console.error(`\n❌ AUCUNE voix de personnage n'a fonctionné : le service de synthèse `
         + `est probablement injoignable. L'émission est publiée en repli, mais ce job `
         + `échoue volontairement pour que quelqu'un regarde.`)

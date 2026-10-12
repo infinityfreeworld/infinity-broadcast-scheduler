@@ -182,6 +182,11 @@ export interface RadioBroadcast {
   titre?:      string
   /** Résumé du thème, 1 ou 2 phrases (≤ 220 car., langue de la station). OPTIONNEL. */
   resume?:     string
+  /**
+   * Note de qualité de l'émission (12/10/2026, `lib/note-qualite.ts` décrit chaque champ).
+   * OPTIONNELLE et RÉTROCOMPATIBLE : les lecteurs actuels l'ignorent.
+   */
+  qualite?:    import('./note-qualite').NoteQualite
   generatedBy: string       // pubkey hex
   generatedAt: number       // unix epoch sec
 }

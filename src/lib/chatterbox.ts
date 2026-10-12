@@ -39,6 +39,8 @@ import { jetonDataspace } from './dataspace-jeton'
 import { sanitizeForSpeech } from './tts-sanitize'
 import { frenchifyEnglishWords } from './frenchify-english'
 import { textePourVoixChinoise } from './prononciation-zh'
+import { prononcerNomsInfinity } from './prononciation-noms'
+import { hesitationsAudibles } from './disfluences'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -694,9 +696,10 @@ export async function synthesizeWithChatterbox(optsBruts: ChatterboxSpeakOptions
   // rendus prononçables (prononciation-zh.ts) : elle les lisait avec une phonétique chinoise.
   const opts: ChatterboxSpeakOptions = {
     ...optsBruts,
-    text: langueVoix === 'fr' ? frenchifyEnglishWords(propre)
+    text: langueVoix === 'fr' ? frenchifyEnglishWords(hesitationsAudibles(prononcerNomsInfinity(propre)))
       : langueVoix === 'zh' ? textePourVoixChinoise(propre)
-      : propre,
+      // 12/10/2026 — en, es, ru : la voix clonée avale aussi les hésitations brèves (mesuré, disfluences.ts).
+      : hesitationsAudibles(propre, langueVoix),
   }
   // Un texte long part en plusieurs requêtes, recollées en un seul WAV : l'appelant reçoit le
   // même contrat qu'avant. Seul le WAV se recolle ; les autres formats (sondes, livraisons

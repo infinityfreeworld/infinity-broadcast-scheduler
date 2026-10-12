@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "generate:one": "tsx src/scripts/generate-broadcast.ts",
+    "generate:reprises": "tsx src/scripts/generate-une-avec-reprises.ts",
     "generate:all": "tsx src/scripts/generate-all.ts",
     "stations:list": "tsx src/scripts/lister-stations.ts",
     "pinata:purge": "tsx src/scripts/purger-pinata.ts",

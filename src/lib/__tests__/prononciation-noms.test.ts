@@ -1,0 +1,52 @@
+import { test as it } from 'node:test'
+import assert from 'node:assert/strict'
+import { prononcerNomsInfinity } from '../prononciation-noms'
+import { frenchifyEnglishWords } from '../frenchify-english'
+import { textePourVoixPiper } from '../piper'
+
+// Les noms d’Infinity dits par une voix française (Med, 12/10/2026).
+it('OBF est épelé, sans point ni tiret à lire', () => {
+  assert.equal(prononcerNomsInfinity('vous êtes sur OBF — la station qui veille'), 'vous êtes sur Ô Bé Èf — la station qui veille')
+  assert.equal(prononcerNomsInfinity('une alerte OBF, puis OBF.'), 'une alerte Ô Bé Èf, puis Ô Bé Èf.')
+})
+it('seulement le sigle : ni « obf » en minuscules, ni un mot qui le contient', () => {
+  assert.equal(prononcerNomsInfinity('obf OBFX XOBF'), 'obf OBFX XOBF')
+})
+it('Biogame : « game » à l’anglaise, pluriel et variantes', () => {
+  assert.equal(prononcerNomsInfinity('Un Biogame, des biogames, le Bio-Game'), 'Un Bio-guéïme, des bio-guéïmes, le Bio-guéïme')
+})
+it('idempotent, et le dictionnaire anglais ne le défait pas', () => {
+  const une = prononcerNomsInfinity('Biogame et OBF')
+  assert.equal(prononcerNomsInfinity(une), une)
+  assert.ok(frenchifyEnglishWords(une).includes('guéïme'))
+  assert.ok(frenchifyEnglishWords(une).includes('Ô Bé Èf'))
+})
+it('appliqué aux voix Piper françaises, pas aux autres', () => {
+  assert.ok(textePourVoixPiper('Bienvenue sur OBF', 'fr_FR-siwis-medium').includes('Ô Bé Èf'))
+  assert.ok(textePourVoixPiper('Welcome to OBF', 'en_US-lessac-medium').includes('OBF'))
+})
+it('« euh » allongé pour la voix clonée (elle avalait « euh… »), mot entier seulement', async () => {
+  const { hesitationsAudibles } = await import('../disfluences')
+  assert.equal(hesitationsAudibles('Euh… Gnu, euh, tu vois'), 'Eeeuh… Gnu, eeeuh, tu vois')
+  assert.equal(hesitationsAudibles('peuh, heuh'), 'peuh, heuh')
+  assert.ok(frenchifyEnglishWords(hesitationsAudibles('Euh… bon')).startsWith('Eeeuh'))
+})
+it('la vision commune est dans le prompt de TOUT animateur (Med : « jamais heureusement, il y a l’ONU »)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../personas.ts', import.meta.url), 'utf8')
+  assert.ok(src.includes('${editorialeSection}${VISION_INFINITY}'))
+  const { VISION_INFINITY } = await import('../vision-infinity')
+  for (const mot of ['ONU', 'OMS', 'GAVI', 'OTAN', 'DAV']) assert.ok(VISION_INFINITY.includes(mot), mot)
+})
+
+it('⭐ hésitations allongées pour la voix clonée, par langue (mesuré le 12/10/2026)', async () => {
+  const { hesitationsAudibles } = await import('../disfluences')
+  assert.equal(hesitationsAudibles('Um… you know, uh… we will see', 'en'), 'Umm… you know, uhh… we will see')
+  assert.equal(hesitationsAudibles('umbrella, uhuru, Uhh', 'en'), 'umbrella, uhuru, Uhh', 'seuls les mots entiers « uh » / « um »')
+  assert.equal(hesitationsAudibles('Eh… pues, eh… no sé, ¿eh?', 'es'), 'Ehh… pues, ehh… no sé, ¿ehh?')
+  assert.equal(hesitationsAudibles('Ну… это, э-э… я не уверен', 'ru'), 'Ну… это, э-э-э… я не уверен')
+  assert.equal(hesitationsAudibles('Э-э-э… уже длинное', 'ru'), 'Э-э-э… уже длинное', 'jamais rallongé deux fois')
+  assert.equal(hesitationsAudibles('嗯……那个……', 'zh'), '嗯……那个……', 'chinois : rien tant que la voix n’est pas réparée')
+  assert.equal(hesitationsAudibles('Euh… bon'), 'Eeeuh… bon', 'le français reste le défaut')
+  assert.equal(hesitationsAudibles('Uh… well', 'fr'), 'Uh… well', 'chaque langue ses formes')
+})

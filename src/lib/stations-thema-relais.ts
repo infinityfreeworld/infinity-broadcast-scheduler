@@ -22,7 +22,7 @@ import {
   KIND_PROJET_ABONDANCE, TAG_VALIDATION_ABONDANCE, projetsAbondance, derniereEmission, referenceNouveaute,
   antenneAbondance, type EmissionLue, type ProjetAbondance,
 } from './sujets-abondance'
-import { KIND_OBF_ALERTE, BILAN_HEURES, alertesLisibles, alerteDeConfiance, bilanAlertes, bilanEnPhrase, actualitesStationObf, ligneEditorialeObf } from './sujets-obf'
+import { KIND_OBF_ALERTE, BILAN_HEURES, alertesLisibles, alerteDeConfiance, bilanAlertes, bilanEnPhrase, actualitesStationObf, ligneEditorialeObf, type AlerteObf } from './sujets-obf'
 import { actualitesStationBiogame, ligneEditorialeBiogame } from './sujets-biogame'
 import type { StationThema } from './stations-thema'
 
@@ -121,13 +121,19 @@ async function pourAbondance(station: RadioStation, date: string, maintenant: nu
 
 // ── OBF ──────────────────────────────────────────────────────────────────────────────────────
 
-async function pourObf(date: string, maintenant: number): Promise<CartePourStation> {
+/**
+ * Les alertes OBF publiques, récentes et DE CONFIANCE (mêmes filtres et même sonde d'ancienneté que le
+ * bilan de la station) : partagé par la station et par le flash spécial (lib/flash-obf.ts). Lève si
+ * les relais sont injoignables — l'appelant décide.
+ */
+export async function alertesObfRetenues(
+  maintenant: number, depuisHeures = BILAN_HEURES + 24,
+): Promise<{ lues: number; lisibles: number; retenues: AlerteObf[] }> {
   const relays = getRelays()
   const pool = new SimplePool()
   const arbitres = arbitresCarte()
-  const vide = () => ({ total: 0, parNiveau: { critical: 0, warning: 0, info: 0, ok: 0 }, villes: [], terminees: 0 })
   try {
-    const depuis = Math.floor(maintenant / 1000) - (BILAN_HEURES + 24) * 3600
+    const depuis = Math.floor(maintenant / 1000) - depuisHeures * 3600
     const [alertes, supp, moderation] = await Promise.all([
       lire(pool, relays, { kinds: [KIND_OBF_ALERTE], since: depuis, limit: 1000 }),
       lire(pool, relays, { kinds: [KIND_SUPPRESSION], '#k': [String(KIND_OBF_ALERTE)], since: depuis, limit: 500 }),
@@ -151,14 +157,21 @@ async function pourObf(date: string, maintenant: number): Promise<CartePourStati
       for (const pk of etablisDepuis(reponses.flat(), seuils)) etablis.add(pk)
     }
     const conf: ConfianceCarte = { ...moder, etablis, arbitres }
-    const retenues = lisibles.filter(a => alerteDeConfiance(a, conf))
+    return { lues: alertes.length, lisibles: lisibles.length, retenues: lisibles.filter(a => alerteDeConfiance(a, conf)) }
+  } finally {
+    try { pool.close(relays) } catch { /* rien à fermer */ }
+  }
+}
+
+async function pourObf(date: string, maintenant: number): Promise<CartePourStation> {
+  const vide = () => ({ total: 0, parNiveau: { critical: 0, warning: 0, info: 0, ok: 0 }, villes: [], terminees: 0 })
+  try {
+    const { lues, lisibles, retenues } = await alertesObfRetenues(maintenant)
     const bilan = bilanAlertes(retenues)
-    const journal = `${alertes.length} alerte(s) OBF lues, ${lisibles.length} publique(s) récente(s), ${retenues.length} retenue(s) pour le bilan`
+    const journal = `${lues} alerte(s) OBF lues, ${lisibles} publique(s) récente(s), ${retenues.length} retenue(s) pour le bilan`
     return { concernee: true, actualites: actualitesStationObf(bilan, date, maintenant), rubrique: [], ligneEditoriale: ligneEditorialeObf(bilanEnPhrase(bilan)), journal }
   } catch (err) {
     return { concernee: true, actualites: actualitesStationObf(vide(), date, maintenant), rubrique: [], ligneEditoriale: ligneEditorialeObf(''), journal: `relais injoignables (${err instanceof Error ? err.message : String(err)}) → fond seul` }
-  } finally {
-    try { pool.close(relays) } catch { /* rien à fermer */ }
   }
 }
 

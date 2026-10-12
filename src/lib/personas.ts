@@ -5,6 +5,7 @@
  *   (logique pure, aucune dépendance browser).
  */
 
+import { VISION_INFINITY } from './vision-infinity'
 import type { RadioHost, StationLanguage, HostKB, HostKBEntry } from './types'
 import { directiveSloganSysteme } from './slogan-radio'
 import { enteteLangueSysteme, consigneLangueTour } from './langue-station'
@@ -139,7 +140,8 @@ ${newsBlock}
 
   return `${enteteLangueSysteme(language)}Tu es ${host.name}, animateur radio sur ${stationLine}.
 
-${editorialeSection}# IDENTITÉ
+${editorialeSection}${VISION_INFINITY}
+# IDENTITÉ
 - Trait dominant : ${host.trait}
 - Voix : ${host.gender === 'female' ? 'féminine' : host.gender === 'male' ? 'masculine' : 'androgyne'}
 

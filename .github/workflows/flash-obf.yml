@@ -1,0 +1,71 @@
+name: Flash spécial OBF
+
+# ⚡ LE FLASH SPÉCIAL OBF (12/10/2026, src/lib/flash-obf.ts explique tout).
+#
+# Toutes les 30 minutes : lit les alertes OBF GRAVES récentes (mêmes filtres de prudence que la
+# station OBF : publiques, de confiance, ni test ni bannies), et s'il y en a une NOUVELLE, fabrique un
+# bulletin d'une à deux minutes (gabarit fixe, voix locale) et le publie en événement DISTINCT
+# (kind 30093, `stationId: 'obf-radio-flash'`, expiration 24 h). Une alerte est donc annoncée
+# 0 à 30 min après son lancement, plus ~5 min de fabrication : « dans l'heure ».
+#
+# 🔴 ÉTEINT PAR DÉFAUT. Pour l'allumer : Settings › Secrets and variables › Actions › Variables →
+#    FLASH_OBF = 1. Sans elle, le job est SAUTÉ (aucune minute consommée, rien de lu ni d'écrit).
+#    Réglages facultatifs (mêmes endroits) : FLASH_OBF_NIVEAUX (« critical » ou « critical,warning »),
+#    FLASH_OBF_FENETRE_MIN (90), FLASH_OBF_MAX_JOUR (6), FLASH_OBF_INTERVALLE_MIN (30).
+# ⚠️ Avant de l'allumer : l'application doit savoir faire entendre un flash sur la station OBF (elle
+#    ignore aujourd'hui `obf-radio-flash`, c'est voulu — voir la PR).
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      repetition:
+        description: 'Répétition : lit les relais et fabrique le son, sans rien publier (oui/non)'
+        required: false
+        default: 'oui'
+
+# Jamais deux flashs en même temps (le second relirait les mêmes alertes avant que le premier publie).
+concurrency:
+  group: flash-obf
+  cancel-in-progress: false
+
+jobs:
+  flash:
+    if: vars.FLASH_OBF == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install espeak-ng + opus-tools + ffmpeg (Piper, encodage Opus, WebM)
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng opus-tools ffmpeg
+      - name: Install deps
+        run: npm ci
+      - name: Cache Piper binary + voices
+        uses: actions/cache@v6
+        with:
+          path: |
+            piper/
+            voices/
+          key: piper-${{ hashFiles('src/lib/piper.ts') }}
+      - name: Flash
+        env:
+          FLASH_OBF:                ${{ vars.FLASH_OBF }}
+          FLASH_OBF_NIVEAUX:        ${{ vars.FLASH_OBF_NIVEAUX || 'critical' }}
+          FLASH_OBF_FENETRE_MIN:    ${{ vars.FLASH_OBF_FENETRE_MIN || '90' }}
+          FLASH_OBF_MAX_JOUR:       ${{ vars.FLASH_OBF_MAX_JOUR || '6' }}
+          FLASH_OBF_INTERVALLE_MIN: ${{ vars.FLASH_OBF_INTERVALLE_MIN || '30' }}
+          NOSTR_PRIVATE_KEY:        ${{ secrets.NOSTR_PRIVATE_KEY }}
+          NOSTR_RELAYS:             ${{ vars.NOSTR_RELAYS || '' }}
+          DATASPACE_NOSTR_KEY:      ${{ secrets.DATASPACE_NOSTR_KEY || '' }}
+          DATASPACE_API_KEY:        ${{ secrets.DATASPACE_API_KEY || '' }}
+          RADIO_ADMIN_PUBKEYS:      ${{ vars.RADIO_ADMIN_PUBKEYS || '' }}
+          PRODUCTEUR:               github-flash
+          REPETITION:               ${{ github.event.inputs.repetition || 'non' }}
+        run: |
+          if [ "$REPETITION" = "oui" ]; then npx tsx src/scripts/flash-obf.ts --repetition
+          else npx tsx src/scripts/flash-obf.ts; fi

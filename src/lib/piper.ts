@@ -19,6 +19,7 @@
  *     - synthesize(text, voiceId): génère un WAV → renvoie path local
  */
 
+import { prononcerNomsInfinity } from './prononciation-noms'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
@@ -381,7 +382,7 @@ export function estVoixPiperFrancaise(voiceId: string): boolean {
 export function textePourVoixPiper(text: string, voiceId: string): string {
   // « euh… » → « euh, » : Piper ne marque pas de pause sur « … » (mesuré, cf. disfluences.ts).
   const propre = pausePiper(sanitizeForSpeech(text))
-  return estVoixPiperFrancaise(voiceId) ? frenchifyEnglishWords(propre) : propre
+  return estVoixPiperFrancaise(voiceId) ? frenchifyEnglishWords(prononcerNomsInfinity(propre)) : propre
 }
 
 export async function synthesize(text: string, voiceId: string): Promise<string> {

@@ -179,7 +179,8 @@ test('🔴 « Kokoro absent » n’arrête plus la station : Chatterbox est essa
 
 test('le secours GitHub installe Kokoro pour la station chinoise, et pour elle seule', () => {
   const wf = readFileSync(resolve(process.cwd(), '.github/workflows/daily-broadcast.yml'), 'utf8')
-  assert.match(wf, /if: matrix\.station == 'zi-you-zhi-sheng'\s*\n\s*run: \|\s*\n\s*if \[ ! -x \.venv-kokoro\/bin\/python \]/)
+  // 12/10/2026 : « && steps.encore.outputs.faire == 'oui' » — rien n'est installé pour une station déjà faite.
+  assert.match(wf, /if: matrix\.station == 'zi-you-zhi-sheng'(?: && steps\.encore\.outputs\.faire == 'oui')?\s*\n\s*run: \|\s*\n\s*if \[ ! -x \.venv-kokoro\/bin\/python \]/)
   assert.match(wf, /max-parallel: 1\b/, 'une station à la fois : mesuré le 22/09/2026, ~4 morceaux/min sur une RTX 3060')
   assert.match(wf, /CHATTERBOX_ECHEANCE_S:\s+\$\{\{ vars\.CHATTERBOX_ECHEANCE_S \|\| '2700' \}\}/)
   assert.match(wf, /CHATTERBOX_QUEUE_BUDGET_S: \$\{\{ vars\.CHATTERBOX_QUEUE_BUDGET_S \|\| '2700' \}\}/)
