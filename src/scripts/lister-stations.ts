@@ -14,6 +14,7 @@ import 'dotenv/config'
 import { SEED_STATIONS } from '../data/seed-stations'
 import { pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
+import { stationsDemandees } from '../lib/stations-demandees'
 import { getChatterboxVoiceForHost, chatterboxBranche } from '../lib/chatterbox'
 import { fetchHostVoiceMappings, exportHostVoiceMappingsToEnv } from '../lib/host-voice-mappings'
 import {
@@ -64,6 +65,14 @@ async function ordonnerParBesoinDeGpu(): Promise<string[]> {
 let ids = process.argv.includes('--brut')
   ? SEED_STATIONS.map(s => s.id)
   : await ordonnerParBesoinDeGpu()
+
+// `STATIONS_DEMANDEES` (relance depuis l'IHL, 12/10/2026) : seulement ces stations, dans l'ordre de la
+// nuit. Identifiants inconnus ignorés (lib/stations-demandees.ts). Vide = toutes.
+{
+  const { ids: gardees, inconnues } = stationsDemandees(ids, process.env.STATIONS_DEMANDEES)
+  if (inconnues.length > 0) console.error(`[stations] demandées mais inconnues, ignorées : ${inconnues.join(', ')}`)
+  ids = gardees
+}
 
 // `--manquantes` : ne garder que les stations dont l'émission de TARGET_DATE n'est PAS encore à
 // l'antenne (secours GitHub, 14/09/2026). Relais illisibles → on les garde toutes : mieux vaut
