@@ -74,6 +74,18 @@ on:
         description: 'Station unique (vide = toutes)'
         required: false
         default: ''
+      # 🔁 RELANCE DEPUIS L'IHL (12/10/2026) : Pirate › Radio › « Relancer » passe par le Worker
+      # `infinity-moderate` (POST /radio/relancer), qui vérifie la signature d'un administrateur radio
+      # (droit `manage_radio`) puis déclenche CE workflow avec ces deux entrées. Seules les stations
+      # CONNUES et encore MANQUANTES pour la date sont produites (lib/stations-demandees.ts + --manquantes).
+      stations:
+        description: 'Stations à relancer, séparées par des virgules (seules les manquantes sont produites)'
+        required: false
+        default: ''
+      demandeur:
+        description: 'Clé publique (hex) de l administrateur IHL qui a demandé la relance — trace seulement'
+        required: false
+        default: ''
 
 jobs:
   # ── Ce qui ne doit tourner QU'UNE FOIS ───────────────────────────────
@@ -101,10 +113,19 @@ jobs:
 
       # Date cible : celle demandée à la main ; sinon, en SECOURS (cron de 01:30 UTC), le jour qui
       # commence ; sinon (lancement manuel sans date) le comportement historique, J+1.
+      # Les entrées passent par l'ENVIRONNEMENT, jamais interpolées dans le script : une relance vient
+      # d'un Worker, et une entrée mal formée ne doit pas pouvoir devenir une commande.
       - name: Date cible
         id: date
+        env:
+          DATE_DEMANDEE: ${{ github.event.inputs.target_date }}
+          DEMANDEUR:     ${{ github.event.inputs.demandeur }}
         run: |
-          if [ -n "${{ github.event.inputs.target_date }}" ]; then d="${{ github.event.inputs.target_date }}"
+          if [ -n "$DATE_DEMANDEE" ] && ! printf '%s' "$DATE_DEMANDEE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "::error::date cible mal formée"; exit 1
+          fi
+          if [ -n "$DEMANDEUR" ]; then echo "relance demandée depuis l'IHL par ${DEMANDEUR:0:16}…"; fi
+          if [ -n "$DATE_DEMANDEE" ]; then d="$DATE_DEMANDEE"
           elif [ "${{ github.event_name }}" = "schedule" ]; then d="$(date -u +%F)"
           else d=""; fi
           echo "date=$d" >> "$GITHUB_OUTPUT"
@@ -133,11 +154,17 @@ jobs:
       - name: Liste des stations
         id: liste
         env:
-          TARGET_DATE:       ${{ steps.date.outputs.date }}
-          NOSTR_PRIVATE_KEY: ${{ secrets.NOSTR_PRIVATE_KEY }}
+          TARGET_DATE:        ${{ steps.date.outputs.date }}
+          NOSTR_PRIVATE_KEY:  ${{ secrets.NOSTR_PRIVATE_KEY }}
+          STATION_UNIQUE:     ${{ github.event.inputs.single_station }}
+          STATIONS_DEMANDEES: ${{ github.event.inputs.stations }}
         run: |
-          if [ -n "${{ github.event.inputs.single_station }}" ]; then
-            echo "stations=[\"${{ github.event.inputs.single_station }}\"]" >> "$GITHUB_OUTPUT"
+          if [ -n "$STATION_UNIQUE" ]; then
+            # Passée par le même filtre qu'une relance : une station inconnue donne une liste vide.
+            echo "stations=$(STATIONS_DEMANDEES="$STATION_UNIQUE" npm run --silent stations:list)" >> "$GITHUB_OUTPUT"
+          elif [ -n "$STATIONS_DEMANDEES" ]; then
+            # Relance IHL : seulement les stations demandées QUI MANQUENT encore pour la date.
+            echo "stations=$(npm run --silent stations:list -- --manquantes)" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "schedule" ]; then
             # Secours : seulement ce qui n'est pas encore à l'antenne.
             echo "stations=$(npm run --silent stations:list -- --manquantes)" >> "$GITHUB_OUTPUT"
@@ -154,7 +181,10 @@ jobs:
     # Large : une station demande ~20 min de synthèse, mais le réveil du
     # GPU, la file d'attente et la fenêtre de 45 min s'ajoutent. Loin des
     # 6 h de la limite dure ; en série, la nuit entière tient en ~5 h.
-    timeout-minutes: 90
+    # 12/10/2026 : 150 (était 90). La station a désormais plusieurs PASSAGES dans son job
+    # (generate-une-avec-reprises.ts, budget RADIO_JOB_BUDGET_MIN = 130 min) au lieu d'une seule
+    # tentative en « dernière chance ». Une station qui passe du premier coup ne dure pas plus.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -295,7 +325,15 @@ jobs:
           # Les deux valeurs restent ÉGALES (chatterbox.ts explique pourquoi).
           CHATTERBOX_QUEUE_BUDGET_S: ${{ vars.CHATTERBOX_QUEUE_BUDGET_S || '2700' }}
           CHATTERBOX_ECHEANCE_S:     ${{ vars.CHATTERBOX_ECHEANCE_S || '2700' }}
-        run: npm run generate:one -- "${{ matrix.station }}"
+          # Reprises dans le job (lib/reprises-job.ts) : les premiers passages sont REPORTABLES, seul
+          # le dernier applique la règle de publication finale. Avant le 12/10/2026, l'unique passage
+          # était toujours une dernière chance : un engorgement passager du GPU = code 76, veille gardée.
+          RADIO_JOB_PASSES:             ${{ vars.RADIO_JOB_PASSES || '3' }}
+          RADIO_JOB_BUDGET_MIN:         ${{ vars.RADIO_JOB_BUDGET_MIN || '130' }}
+          RADIO_JOB_PAUSE_MIN:          ${{ vars.RADIO_JOB_PAUSE_MIN || '8' }}
+          RADIO_JOB_MARGE_DERNIERE_MIN: ${{ vars.RADIO_JOB_MARGE_DERNIERE_MIN || '50' }}
+          STATION:                      ${{ matrix.station }}
+        run: npm run generate:reprises -- "$STATION"
 
   # ── Le compte rendu : combien de stations ont vraiment diffusé ───────
   #
