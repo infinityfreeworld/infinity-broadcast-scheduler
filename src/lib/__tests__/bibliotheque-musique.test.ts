@@ -74,14 +74,17 @@ test('station sans règles : `tracks` inchangées (la bibliothèque n’ajoute r
   assert.deepEqual(avecSaMusique(pirate, BIBLIO).tracks, pirate.tracks)
 })
 
-test('🔴 DROITS OBLIGATOIRES : une musique sans droits n’entre jamais dans une émission, ni par règle ni par choix', () => {
+// 14/10/2026 (Med) : toutes les musiques sont libres de droits — une mention absente n’exclut plus rien.
+test('🎵 TOUTES LIBRES DE DROITS : une musique sans mention de droits entre dans l’émission, par choix comme par règle', () => {
   const s = avecSaMusique({ ...pirate, tracks: [{ title: 'Chanson festive', cid: CID_B }], musique: { etiquettes: { genres: ['électro'] } } }, BIBLIO)
-  assert.deepEqual(s.tracks, [{ title: 'Aube', cid: CID_A }])
-  // …et les pauses de la nuit ne tirent que dans cette liste-là.
+  const cids = (s.tracks ?? []).map(t => t.cid)
+  assert.ok(cids.includes(CID_B), 'la musique sans mention de droits est gardée')
+  assert.ok(cids.includes(CID_A))
+  // …et les pauses de la nuit tirent dans cette liste-là.
   const r = reglagesMusique(s, {})
   const plan = planifierPauses(s, '2026-10-08', 22, r)
   assert.ok(plan.length > 0)
-  for (const p of plan) assert.equal(p.track.cid, CID_A)
+  for (const p of plan) assert.ok(cids.includes(p.track.cid))
 })
 
 test('règles de la station : lues sur une fiche RÉCENTE, ignorées sur une fiche d’avant la date butoir', () => {
