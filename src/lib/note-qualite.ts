@@ -26,10 +26,18 @@
  *       lufs?:            number,   // sonie intégrée de l'émission publiée (EBU R128, 1 décimale)
  *       creteDb?:         number,   // crête d'échantillon (dBFS, 1 décimale)
  *       producteur?:      string,   // 'mac' | 'github-secours' | …
+ *       dataspace?: {                 // 14/10/2026 — ce que data-space a dit de ses réponses (en-têtes x-ds-*)
+ *         stations:      string[],    //   stations data-space distinctes qui ont servi
+ *         langueDeduite: number,      //   travaux dont la langue a été DÉDUITE (nous l'envoyons pourtant)
+ *         retries:       number,      //   relances automatiques faites chez data-space
+ *         echecsFinals:  number,      //   500 synthesis_failed « final »
+ *       },
  *     }
  *
  *   Un résumé lisible (`resumeQualite`) sert au journal et pourra servir de texte d'infobulle.
  */
+
+import type { BilanDataspace } from './dataspace-reponse'
 
 export type EtatOreilleNote = 'active' | 'absente' | 'coupee' | 'en-panne' | 'non-branchee'
 
@@ -48,6 +56,7 @@ export interface NoteQualite {
   lufs?:            number
   creteDb?:         number
   producteur?:      string
+  dataspace?:       BilanDataspace
 }
 
 /** Ce que le générateur sait à la fin de la synthèse (tout facultatif sauf les compteurs de voix). */
@@ -61,6 +70,8 @@ export interface SourcesNote {
   oreille?: { statut: EtatOreilleNote; ecoutes: number; refaits: number; hesitationsEcrites: number; hesitationsAvalees: number } | null
   sonie?: { apresLufs: number; creteDb: number } | null
   producteur?: string
+  /** Bilan des réponses data-space (dataspace-reponse.ts) ; absent ou null : champ omis. */
+  dataspace?: BilanDataspace | null
 }
 
 const entier = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : 0)
@@ -94,6 +105,14 @@ export function noteQualite(s: SourcesNote): NoteQualite {
     note.creteDb = dixieme(s.sonie.creteDb)
   }
   if (s.producteur) note.producteur = s.producteur.slice(0, 40)
+  if (s.dataspace) {
+    note.dataspace = {
+      stations: s.dataspace.stations.filter(x => typeof x === 'string' && x).slice(0, 20).map(x => x.slice(0, 60)),
+      langueDeduite: entier(s.dataspace.langueDeduite),
+      retries: entier(s.dataspace.retries),
+      echecsFinals: entier(s.dataspace.echecsFinals),
+    }
+  }
   return note
 }
 
@@ -107,5 +126,15 @@ export function resumeQualite(n: NoteQualite): string {
   if (n.hesitations) morceaux.push(`« euh » entendus ${n.hesitations.entendues}/${n.hesitations.ecrites}`)
   if (n.incompris) morceaux.push(`${n.incompris} incompris`)
   if (n.lufs !== undefined) morceaux.push(`${n.lufs} LUFS`)
+  if (n.dataspace) {
+    const d = n.dataspace
+    const details = [
+      `${d.stations.length} station(s)`,
+      d.retries ? `${d.retries} relance(s)` : '',
+      d.echecsFinals ? `${d.echecsFinals} échec(s) final(s)` : '',
+      d.langueDeduite ? `${d.langueDeduite} langue(s) déduite(s)` : '',
+    ].filter(Boolean)
+    morceaux.push(`data-space ${details.join(', ')}`)
+  }
   return `🏷 Qualité : ${morceaux.join(' · ')}`
 }
