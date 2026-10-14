@@ -55,6 +55,7 @@ import {
   isFallbackPiperEnabled, ChatterboxError, chatterboxBranche,
 } from '../lib/chatterbox'
 import { fileEnVol } from '../lib/en-vol'
+import { bilanDataspace } from '../lib/dataspace-reponse'
 import { getPersonaForHost, behaviorDirective } from '../lib/host-personas'
 import { pickGuestForStation, guestBehaviorDirective } from '../lib/guests'
 import {
@@ -833,6 +834,7 @@ async function generateBroadcastBytes(opts: {
     oreille: opts.reprise ? opts.reprise.etatOreille() : null,
     sonie,
     producteur: process.env.PRODUCTEUR || undefined,
+    dataspace: bilanDataspace(),
   })
   console.log(`\n${resumeQualite(qualite)}`)
   return {
@@ -1233,7 +1235,7 @@ async function main() {
       console.log('\n🎙  Chatterbox configuré, mais aucune voix de personnage sur cette station — tout ira sur Piper.')
     } else {
       console.log(`\n🎙  Réveil du service de synthèse, témoin « ${voixTemoin} »…`)
-      const etat = await reveillerEtVerifier(voixTemoin)
+      const etat = await reveillerEtVerifier(voixTemoin, langueStation)
       if (etat === 'voix-absente') {
         // NOTRE faute, pas la leur : le nom demandé n'existe pas chez eux.
         // On le DIT distinctement, sinon on accuserait le service d'une

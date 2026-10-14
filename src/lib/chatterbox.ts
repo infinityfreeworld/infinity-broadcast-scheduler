@@ -41,6 +41,10 @@ import { frenchifyEnglishWords } from './frenchify-english'
 import { textePourVoixChinoise } from './prononciation-zh'
 import { prononcerNomsInfinity } from './prononciation-noms'
 import { hesitationsAudibles } from './disfluences'
+import {
+  lireInfosDataspace, formaterInfosDataspace, controleLangue, noterReponseDataspace, infosVides,
+  type InfosDataspace,
+} from './dataspace-reponse'
 
 export interface ChatterboxSpeakOptions {
   voice:               string
@@ -71,6 +75,12 @@ export class ChatterboxError extends Error {
      *  durée audio mesurée, caractères, durée minimale attendue. C'est ce qui confirmera — ou
      *  non — l'hypothèse « texte trop long, coupé, refusé » sans avoir à les attendre. */
     public readonly dernierRefus?: string,
+    /** En-têtes `x-ds-*` de la réponse (depuis le 14/10/2026) : station, GPU, langue, file, relances. */
+    public readonly infos?: InfosDataspace,
+    /** 500 `synthesis_failed` avec `final: true` : data-space a déjà relancé, inutile d'insister. */
+    public readonly final?: boolean,
+    /** Attente demandée par data-space (secondes), lue dans `Retry-After` ou `retry_after`. */
+    public readonly retryAfterS?: number,
   ) {
     super(message)
     this.name = 'ChatterboxError'
@@ -92,20 +102,106 @@ export function formaterRefus(r: unknown): string | undefined {
   return morceaux.join(' — ')
 }
 
-/** Lit `job_id`, `error.code` et `last_refusal` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
-export function lireCorpsErreur(detail: string): { jobId?: string; code?: string; refus?: string; voices?: string[] } {
+/**
+ * Les raisons d'un échec final, en une ligne. data-space (14/10/2026) joint au 500 final « les
+ * raisons précédentes » ; le nom exact du champ n'étant pas figé, on lit les plus probables.
+ */
+export function formaterRaisons(j: Record<string, unknown>): string | undefined {
+  const textes: string[] = []
+  const prendre = (v: unknown) => {
+    if (typeof v === 'string' && v.trim()) textes.push(v.trim())
+    else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>
+      const t = [o.reason, o.error, o.message].find(x => typeof x === 'string' && x.trim())
+      if (typeof t === 'string') textes.push(t.trim())
+    }
+  }
+  for (const cle of ['reasons', 'previous_reasons', 'previous_errors', 'errors', 'attempts', 'history']) {
+    const v = j[cle]
+    if (Array.isArray(v)) v.forEach(prendre)
+  }
+  for (const cle of ['reason', 'last_error', 'message']) prendre(j[cle])
+  const e = j.error
+  if (e && typeof e === 'object') prendre((e as Record<string, unknown>).message)
+  else prendre(e)
+  const uniques = [...new Set(textes)]
+  return uniques.length ? uniques.join(' | ').slice(0, 300) : undefined
+}
+
+/** Lit `job_id`, le code (`error.code` ou `code`), `last_refusal`, et — depuis le 14/10/2026 — `final`,
+ *  les raisons et `retry_after` d'un corps d'erreur data-space ; muet si ce n'est pas du JSON. */
+export function lireCorpsErreur(detail: string): {
+  jobId?: string; code?: string; refus?: string; voices?: string[]
+  final?: boolean; raisons?: string; retryAfter?: number
+} {
   try {
-    const j = JSON.parse(detail) as { job_id?: unknown; error?: { code?: unknown }; last_refusal?: unknown; voices?: unknown }
+    const j = JSON.parse(detail) as {
+      job_id?: unknown; error?: { code?: unknown } | unknown; code?: unknown; last_refusal?: unknown
+      voices?: unknown; final?: unknown; retry_after?: unknown
+    }
+    if (!j || typeof j !== 'object') return {}
+    const err = j.error && typeof j.error === 'object' ? j.error as { code?: unknown } : undefined
+    const code = typeof err?.code === 'string' ? err.code : typeof j.code === 'string' ? j.code : undefined
+    const raisons = j.final === true ? formaterRaisons(j as Record<string, unknown>) : undefined
+    const ra = typeof j.retry_after === 'number' ? j.retry_after
+      : typeof j.retry_after === 'string' && /^\d+(\.\d+)?$/.test(j.retry_after) ? Number(j.retry_after) : undefined
     return {
       jobId: typeof j.job_id === 'string' ? j.job_id : undefined,
-      code: typeof j.error?.code === 'string' ? j.error.code : undefined,
+      code,
       refus: formaterRefus(j.last_refusal),
       // `404 voice_not_found` livre le catalogue : c'est ce qui permet de retenir un alias.
       ...(Array.isArray(j.voices) ? { voices: j.voices.filter((v): v is string => typeof v === 'string') } : {}),
+      ...(j.final === true ? { final: true } : {}),
+      ...(raisons ? { raisons } : {}),
+      ...(ra !== undefined && Number.isFinite(ra) ? { retryAfter: ra } : {}),
     }
   } catch {
     return {}
   }
+}
+
+/** Le corps JSON d'une réponse, ou undefined. */
+function jsonOuRien(detail: string): unknown {
+  try { return JSON.parse(detail) } catch { return undefined }
+}
+
+/**
+ * Attente bornée avant de rejouer une requête en 429 : `retry_after` de data-space, entre 1 s et
+ * `CHATTERBOX_RETRY_AFTER_MAX_S` (défaut 120 s). Défaut 15 s s'ils n'ont rien dit. Pure.
+ */
+export function attenteBornee(retryAfterS: number | undefined): number {
+  const max = Number.parseInt(process.env.CHATTERBOX_RETRY_AFTER_MAX_S ?? '120', 10)
+  const plafond = Number.isFinite(max) && max >= 1 ? max : 120
+  const v = retryAfterS !== undefined && Number.isFinite(retryAfterS) ? Math.ceil(retryAfterS) : 15
+  return Math.min(plafond, Math.max(1, v))
+}
+
+/** Langues déjà signalées (une ligne par travail, pas une par 429 successif). */
+const LANGUES_SIGNALEES = new Set<string>()
+
+/** Lit, note dans le bilan et contrôle la langue d'une réponse data-space. */
+function examinerReponse(entetes: Pick<Headers, 'get'>, corps: unknown, langueEnvoyee: string, final = false): InfosDataspace {
+  const infos = lireInfosDataspace(entetes, corps)
+  noterReponseDataspace(infos, final)
+  const alerte = controleLangue(langueEnvoyee, infos)
+  if (alerte) {
+    const cle = `${infos.jobId ?? ''}|${alerte}`
+    if (!LANGUES_SIGNALEES.has(cle)) {
+      LANGUES_SIGNALEES.add(cle)
+      console.warn(`  ${alerte}`)
+      if (process.env.GITHUB_ACTIONS) console.log(`::warning::${alerte.replace(/^⚠️ /, '')}`)
+    }
+  }
+  return infos
+}
+
+/** La ligne de journal d'un échec : code, raison, et les repères data-space à leur citer. */
+export function ligneEchec(e: ChatterboxError): string {
+  const quoi = `HTTP ${e.status ?? '—'}${e.code ? ` ${e.code}` : ''}${e.final ? ' (échec FINAL chez data-space)' : ''}`
+  const reperes = e.infos && !infosVides(e.infos)
+    ? formaterInfosDataspace(e.infos)
+    : `job_id ${e.jobId ?? '?'} · (aucun en-tête x-ds-*)`
+  return `  [chatterbox] échec ${quoi} — ${reperes} — ${new Date().toISOString()}`
 }
 
 /**
@@ -491,7 +587,7 @@ export async function etatSession(): Promise<EtatSession | null> {
   }
 }
 
-export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
+export async function reveillerEtVerifier(voix: string, langue?: string): Promise<EtatReveil> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_WAKE_TIMEOUT_S ?? '720', 10) * 1000
   const maxTentatives = Number.parseInt(process.env.CHATTERBOX_WAKE_ATTEMPTS ?? '24', 10)
   const debut = Date.now()
@@ -521,7 +617,9 @@ export async function reveillerEtVerifier(voix: string): Promise<EtatReveil> {
       // Opus, et non WAV : cet audio-ci est JETÉ — seule compte la réponse.
       // Le réveil peut demander jusqu'à 24 tentatives ; en Opus la sonde
       // pèse ~10× moins. ⚠️ Le MONTAGE, lui, reste en WAV (voir plus bas).
-      await synthesizeWithChatterbox({ voice: voix, text: 'Bonjour.', format: 'opus' })
+      // La langue de la STATION, explicitement (data-space, 14/10/2026 : « envoyez language pour
+      // chaque voix ») : le témoin d'une station anglaise ou chinoise partait jusqu'ici en « fr ».
+      await synthesizeWithChatterbox({ voice: voix, text: 'Bonjour.', format: 'opus', ...(langue ? { language: langue } : {}) })
       console.log(`  [chatterbox] éveillé et vérifié avec « ${voix} » après ${ecoule}s`)
       return 'pret'
     } catch (err) {
@@ -743,48 +841,81 @@ async function synthetiserEnMorceaux(opts: ChatterboxSpeakOptions, morceaux: str
   return encodeWav(concatWavs(entrees))
 }
 
+/**
+ * Rejoue la requête tant que data-space dit « pas encore » — À L'IDENTIQUE.
+ *
+ * 🔴 14/10/2026 — data-space relance lui-même un travail en échec quand on lui renvoie la MÊME
+ * requête (au plus 3 cycles, 2 min d'écart) et répond alors `429 not_ready` + `retry_after`,
+ * comme pour une synthèse en cours. Le corps envoyé est donc figé UNE fois ici et renvoyé tel
+ * quel : un seul paramètre différent serait pour eux un AUTRE travail, et leur relance serait
+ * perdue.
+ *
+ * Un `500 synthesis_failed` avec `final: true` signifie qu'ils ont épuisé leurs relances : on
+ * n'insiste pas, le tour échoue (repli de l'appelant), raison et job_id dans le journal.
+ * Un 502/503/504 sans JSON reste un échec immédiat, comme avant.
+ */
 async function synthetiserSansMur(opts: ChatterboxSpeakOptions): Promise<Buffer> {
   const budgetMs = Number.parseInt(process.env.CHATTERBOX_QUEUE_BUDGET_S ?? '1800', 10) * 1000
   const debut = Date.now()
   let filesRatees = 0
+  const corpsFige = corpsRequete(opts)
   for (let tentative = 1; ; tentative++) {
     try {
-      return await synthetiserUneFois(opts)
+      return await synthetiserUneFois(opts, false, corpsFige)
     } catch (err) {
-      const e = err as ChatterboxError
+      if (!(err instanceof ChatterboxError)) throw err
+      const e = err
       // ⚠️ DEUX ATTENTES QUI N'APPELLENT PAS LE MÊME REMÈDE (data-space, 10/09/2026) :
-      //   • 429 `not_ready` : le travail EXISTE et avance → on redemande, c'est le contrat ;
+      //   • 429 `not_ready` : le travail EXISTE et avance (ou est relancé chez eux) → on redemande ;
       //   • 503 `queue_error` : le travail n'a PAS été enregistré → leur consigne est
       //     « Réessaie ; si ça persiste, signale-nous cet identifiant ».
-      // Avant, un 503 partait droit en repli Piper : un accident passager coûtait la voix du
-      // personnage pour tout le tour, et personne n'apprenait qu'il fallait le leur signaler.
       const fileRatee = e.status === 503 && e.code === 'queue_error'
-      if (e.status !== 429 && !fileRatee) throw err
+      if (e.status !== 429 && !fileRatee) {
+        if (e.status !== undefined && e.status !== 408) console.warn(ligneEchec(e))
+        throw err
+      }
       const ref = e.jobId ? `[job_id ${e.jobId}] ` : ''
       if (fileRatee && ++filesRatees > MAX_FILES_RATEES) {
-        throw new ChatterboxError(
+        const finale = new ChatterboxError(
           `${ref}mise en file refusée ${filesRatees} fois de suite — à signaler à data-space avec cet identifiant et l'heure (${new Date().toISOString()})`,
-          503, e.jobId, 'queue_error', e.dernierRefus,
+          503, e.jobId, 'queue_error', e.dernierRefus, e.infos,
         )
+        console.warn(ligneEchec(finale))
+        throw finale
       }
-      const attenteS = Number.parseInt(/Retry-After (\d+)s/.exec(e.message)?.[1] ?? '15', 10)
-      const restant = budgetMs - (Date.now() - debut)
-      if (restant <= attenteS * 1000) {
-        throw new ChatterboxError(
-          `${ref}file d'attente saturée au-delà de notre budget (${budgetMs / 1000}s) — repli`,
-          429, e.jobId, e.code, e.dernierRefus,
+      const attenteS = attenteBornee(e.retryAfterS)
+      // L'attente reste TOUJOURS sous le budget de file ET sous l'échéance de l'émission : attendre
+      // au-delà ne servirait qu'à se faire couper par le mur (408) sans avoir rien gagné.
+      const restantFile = budgetMs - (Date.now() - debut)
+      const restantEmission = echeanceClone > 0 ? echeanceClone - Date.now() : Number.POSITIVE_INFINITY
+      if (Math.min(restantFile, restantEmission) <= attenteS * 1000 || echeanceNuitPassee()) {
+        const motif = restantEmission < restantFile ? 'l\'échéance de l\'émission' : `notre budget (${budgetMs / 1000}s)`
+        const finale = new ChatterboxError(
+          `${ref}file d'attente saturée au-delà de ${motif} — repli`,
+          429, e.jobId, e.code, e.dernierRefus, e.infos,
         )
+        console.warn(ligneEchec(finale))
+        throw finale
       }
-      console.log(`  [chatterbox] ${fileRatee ? 'mise en file ratée' : 'file pleine'}${e.jobId ? ` (job_id ${e.jobId})` : ''}, on patiente ${attenteS}s (tentative ${tentative})${e.dernierRefus ? ` — dernier refus : ${e.dernierRefus}` : ''}`)
+      const reperes = e.infos && !infosVides(e.infos) ? ` — ${formaterInfosDataspace(e.infos)}` : e.jobId ? ` (job_id ${e.jobId})` : ''
+      const quoi = fileRatee ? 'mise en file ratée'
+        : e.code === 'not_ready' ? ((e.infos?.relances ?? 0) > 0 ? 'relance en cours chez data-space' : 'synthèse en cours')
+        : 'file pleine'
+      console.log(`  [chatterbox] ${quoi}, on rejoue la même requête dans ${attenteS}s (tentative ${tentative})${reperes}${e.dernierRefus ? ` — dernier refus : ${e.dernierRefus}` : ''}`)
       await new Promise(r => setTimeout(r, attenteS * 1000))
     }
   }
 }
 
-async function synthetiserUneFois(opts: ChatterboxSpeakOptions, dejaAlias = false): Promise<Buffer> {
-  const { url, apiKey } = getEndpoint()
+/** Langue envoyée à data-space : celle de l'appelant, sinon CHATTERBOX_LANGUAGE, sinon « fr ». */
+function langueEnvoyee(opts: ChatterboxSpeakOptions): string {
+  return opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr'
+}
+
+/** Le corps JSON de la requête de synthèse. Construit UNE fois par tour, puis rejoué tel quel. */
+export function corpsRequete(opts: ChatterboxSpeakOptions): Record<string, unknown> {
   const voixDemandee = ALIAS_VOIX.get(opts.voice) ?? opts.voice
-  const body = {
+  return {
     model:                'chatterbox',
     input:                opts.text,
     voice:                voixDemandee.endsWith('.wav') ? voixDemandee : `${voixDemandee}.wav`,
@@ -796,8 +927,8 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions, dejaAlias = fals
     // zéro voix de personnage, sans qu'aucune ligne ne le dise.
     // Passer le montage en Opus exige d'abord un décodeur, pas ce flag.
     response_format:      opts.format ?? 'wav',
-    language:             opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
-    language_id:          opts.language ?? process.env.CHATTERBOX_LANGUAGE ?? 'fr',
+    language:             langueEnvoyee(opts),
+    language_id:          langueEnvoyee(opts),
     emotion_exaggeration: opts.emotionExaggeration ?? 0.55,
     // 🔴 0,50 et non 0,65 — mesuré le 07/09/2026 sur la voix « ranouna »,
     // même phrase, seul ce paramètre variant :
@@ -813,27 +944,71 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions, dejaAlias = fals
     temperature:          opts.temperature ?? 0.75,
     speed:                opts.speed ?? 1.0,
   }
-  const res = await fetch(`${url}${cheminSynthese()}`, {
+}
+
+/**
+ * Suit une redirection 3xx À LA MAIN.
+ *
+ * 🔴 data-space (14/10/2026) répond à une synthèse prête par une 302 vers l'audio, SANS corps : ses
+ * en-têtes `x-ds-*` sont la seule trace du travail. Un `fetch` qui suit tout seul rend les en-têtes
+ * de la DESTINATION (le stockage), et ceux de data-space sont perdus. Le jeton n'est renvoyé que si
+ * l'audio est servi par la même origine.
+ */
+async function suivreRedirection(res: Response, base: string, apiKey: string, signal: AbortSignal): Promise<Response> {
+  const location = res.headers.get('location')
+  if (!location) return res
+  const cible = new URL(location, base)
+  const memeOrigine = cible.origin === new URL(base).origin
+  return fetch(cible, { headers: memeOrigine ? authHeaders(apiKey) : {}, signal })
+}
+
+async function synthetiserUneFois(
+  opts: ChatterboxSpeakOptions, dejaAlias = false, corpsFige?: Record<string, unknown>,
+): Promise<Buffer> {
+  const { url, apiKey } = getEndpoint()
+  const voixDemandee = ALIAS_VOIX.get(opts.voice) ?? opts.voice
+  // Une voix retenue par alias entre deux essais change la requête : on la reconstruit alors.
+  const body = corpsFige && !ALIAS_VOIX.has(opts.voice) ? corpsFige : corpsRequete(opts)
+  const langue = langueEnvoyee(opts)
+  // ⚠️ Le tour le plus long RÉELLEMENT diffusé (relevé du 29/08/2026)
+  // fait 82,6 s d'audio. data-space mesure Chatterbox à un facteur temps
+  // réel d'environ 1,0 : ce tour demande donc ~83 s de calcul, contre un
+  // abandon à 120 s — une marge de 1,45× seulement, avant toute file
+  // d'attente. Un abandon ici ne lève pas d'alerte : il fait retomber le
+  // tour sur Piper, et l'émission change de voix en cours de route.
+  const signal = AbortSignal.timeout(
+    Number.parseInt(process.env.CHATTERBOX_REQUEST_TIMEOUT_S ?? '300', 10) * 1000,
+  )
+  const premiere = await fetch(`${url}${cheminSynthese()}`, {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(apiKey),
     },
     body:    JSON.stringify(body),
-    // ⚠️ Le tour le plus long RÉELLEMENT diffusé (relevé du 29/08/2026)
-    // fait 82,6 s d'audio. data-space mesure Chatterbox à un facteur temps
-    // réel d'environ 1,0 : ce tour demande donc ~83 s de calcul, contre un
-    // abandon à 120 s — une marge de 1,45× seulement, avant toute file
-    // d'attente. Un abandon ici ne lève pas d'alerte : il fait retomber le
-    // tour sur Piper, et l'émission change de voix en cours de route.
-    signal:  AbortSignal.timeout(
-      Number.parseInt(process.env.CHATTERBOX_REQUEST_TIMEOUT_S ?? '300', 10) * 1000,
-    ),
+    redirect: 'manual',
+    signal,
   })
+  // La 302 n'a pas de corps : ses en-têtes sont lus ICI, avant de suivre vers l'audio.
+  const redirigee = premiere.status >= 300 && premiere.status < 400
+  if (redirigee) examinerReponse(premiere.headers, undefined, langue)
+  const res = redirigee ? await suivreRedirection(premiere, url, apiKey, signal) : premiere
+  if (redirigee && !res.ok) {
+    // L'audio annoncé est introuvable au bout de la redirection : ce n'est ni une voix absente
+    // (404 de synthèse) ni un refus — on le rend comme une panne passagère (502).
+    const infos = lireInfosDataspace(premiere.headers)
+    throw new ChatterboxError(
+      `${infos.jobId ? `[job_id ${infos.jobId}] ` : ''}audio de la redirection introuvable (HTTP ${res.status})`,
+      502, infos.jobId, 'audio_introuvable', undefined, infos,
+    )
+  }
   if (!res.ok) {
     let detail = ''
     try { detail = await res.text() } catch { /* */ }
-    const { jobId, code, refus, voices } = lireCorpsErreur(detail)
+    const { jobId: jobCorps, code, refus, voices, final, raisons, retryAfter } = lireCorpsErreur(detail)
+    const echecFinal = res.status === 500 && final === true
+    const infos = examinerReponse(res.headers, jsonOuRien(detail), langue, echecFinal)
+    const jobId = jobCorps ?? infos.jobId
     // Voix absente, mais une seule homonyme au catalogue : on la retient pour la nuit et on
     // réessaie UNE fois. Deux candidates ou aucune : l'erreur suit son cours (repli Piper).
     if (res.status === 404 && code === 'voice_not_found' && voices && !dejaAlias) {
@@ -849,31 +1024,43 @@ async function synthetiserUneFois(opts: ChatterboxSpeakOptions, dejaAlias = fals
     // partie coupée.
     const ref = jobId ? `[job_id ${jobId}] ` : ''
     const entete = res.headers.get('retry-after')
-    // 429 — le service nous demande de ralentir. Obéir vaut mieux que
-    // réessayer aveuglément : c'est LUI qui sait combien de requêtes son
-    // GPU absorbe. On respecte `Retry-After` quand il est donné.
+    const enteteS = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : undefined
+    // 429 — « pas encore » : synthèse en cours, file pleine, ou (depuis le 14/10/2026) travail en
+    // échec que data-space relance parce que nous rejouons la même requête. On respecte l'attente
+    // annoncée : en-tête `Retry-After`, sinon `retry_after` du corps.
     if (res.status === 429) {
-      const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 15
+      const attente = enteteS ?? retryAfter ?? 15
       throw new ChatterboxError(
-        `${ref}speech HTTP 429 — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
-        429, jobId, code, refus,
+        `${ref}speech HTTP 429${code ? ` ${code}` : ''} — service saturé, Retry-After ${attente}s${detail ? ' : ' + detail.slice(0, 120) : ''}`,
+        429, jobId, code, refus, infos, false, attente,
       )
     }
     // 503 queue_error — la mise en file n'a rien enregistré. Réessayable (cf. la boucle).
     if (res.status === 503 && code === 'queue_error') {
-      const attente = entete && /^\d+$/.test(entete) ? Number.parseInt(entete, 10) : 20
+      const attente = enteteS ?? retryAfter ?? 20
       throw new ChatterboxError(
         `${ref}speech HTTP 503 queue_error — travail non mis en file, Retry-After ${attente}s`,
-        503, jobId, code, refus,
+        503, jobId, code, refus, infos, false, attente,
+      )
+    }
+    // 500 synthesis_failed FINAL — data-space a déjà relancé ce travail jusqu'au bout. Insister ne
+    // servirait à rien : le tour échoue (repli de l'appelant), avec leurs raisons.
+    if (echecFinal) {
+      const relances = infos.relances !== undefined ? ` après ${infos.relances} relance(s)` : ''
+      throw new ChatterboxError(
+        `${ref}speech HTTP 500 ${code ?? 'synthesis_failed'} — échec FINAL chez data-space${relances}`
+        + `${raisons ? ` : ${raisons}` : refus ? ` — dernier refus : ${refus}` : ''}`,
+        500, jobId, code ?? 'synthesis_failed', refus, infos, true,
       )
     }
     // Un refus chiffré passe AVANT le corps brut : c'est lui qu'on veut lire, et la ligne d'échec
     // de l'appelant tronque.
     throw new ChatterboxError(
       `${ref}speech HTTP ${res.status}${refus ? ` — dernier refus : ${refus}` : detail ? ' : ' + detail.slice(0, 200) : ''}`,
-      res.status, jobId, code, refus,
+      res.status, jobId, code, refus, infos,
     )
   }
+  if (!redirigee) examinerReponse(res.headers, undefined, langue)
   const arrayBuf = await res.arrayBuffer()
   return Buffer.from(arrayBuf)
 }
