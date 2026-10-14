@@ -15,7 +15,8 @@
  *   ── CE QUE PORTE UNE MUSIQUE DE LA BIBLIOTHÈQUE (kind 30108) ──
  *   titre, artiste, genres, ambiances, énergie (1 à 5), langue, et la MENTION DE DROITS :
  *   `{ type: 'libre-de-droits' | 'licence', licence?, auteur? }`. Sans mention de droits
- *   valable, une musique de la bibliothèque n'est JAMAIS diffusée.
+ *   valable, une musique de la bibliothèque n'était jamais diffusée — jusqu'au 14/10/2026 : toutes sont désormais
+ *   considérées libres de droits (décision de Med), voir `droitsValides`.
  *
  *   ── CE QUE PORTE UNE STATION (kind 30091) ──
  *   - `tracks` : ses choix explicites (format inchangé depuis mai 2026 : les anciens lecteurs
@@ -167,9 +168,14 @@ export function lireDroits(x: unknown): DroitsMusique | undefined {
   return { type, ...(licence ? { licence } : {}), ...(auteur ? { auteur } : {}) }
 }
 
-/** Une musique a-t-elle une mention de droits valable ? */
-export function droitsValides(p: { droits?: unknown }): boolean {
-  return lireDroits(p.droits) !== undefined
+/**
+ * Une musique peut-elle être diffusée au regard de ses droits ?
+ * 14/10/2026 (Med) : « toutes les musiques doivent être automatiquement considérées comme libres de droits — nous ne
+ * mettrons pas de musique qui ne soit pas libre de droits ». La mention de droits n'est plus EXIGÉE : toute musique de
+ * la bibliothèque est diffusable. `lireDroits` reste pour lire une mention existante (affichage, crédits).
+ */
+export function droitsValides(_p: { droits?: unknown }): boolean {
+  return true
 }
 
 /** La clé d'une piste : son CID, sinon son adresse. `null` si elle n'a ni l'un ni l'autre. */

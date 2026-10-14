@@ -1,5 +1,5 @@
 {
-  "_lisezmoi": "Cas de la règle de sélection musicale. FICHIER IDENTIQUE dans l'app (src/modules/radio/musique/__tests__/) et dans le générateur (src/lib/__tests__/) : les deux suites l'éprouvent. `attendu` = clés (CID ou adresse) de la liste résultante, dans l'ordre.",
+  "_lisezmoi": "Cas de la règle de sélection musicale. FICHIER IDENTIQUE dans l'app (src/modules/radio/musique/__tests__/) et dans le générateur (src/lib/__tests__/) : les deux suites l'éprouvent. `attendu` = clés (CID ou adresse) de la liste résultante, dans l'ordre. 14/10/2026 : toutes les musiques sont libres de droits (décision de Med), une mention absente n'exclut plus rien.",
   "bibliotheque": [
     { "title": "Aube", "artiste": "Lena", "cid": "bafyaube00000000000000000000000000000000000000000000000001", "genres": ["électro", "chill"], "ambiances": ["calme"], "energie": 2, "droits": { "type": "licence", "licence": "CC BY 4.0", "auteur": "Lena" } },
     { "title": "Orage", "cid": "bafyorage0000000000000000000000000000000000000000000000002", "genres": ["rock"], "ambiances": ["énergique"], "energie": 5, "droits": { "type": "libre-de-droits", "auteur": "Équipe Infinity" } },
@@ -16,19 +16,19 @@
       "attendu": ["bafydefault01", "bafydefault01"]
     },
     {
-      "nom": "un choix explicite d'une musique de la bibliothèque SANS droits n'est jamais diffusé",
+      "nom": "un choix explicite d'une musique de la bibliothèque SANS mention de droits est diffusé (toutes sont libres de droits, 14/10/2026)",
       "station": { "tracks": [ { "title": "Sans droits", "cid": "bafysansdroits000000000000000000000000000000000000000004" }, { "title": "Aube", "cid": "bafyaube00000000000000000000000000000000000000000000000001" } ] },
-      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001"]
+      "attendu": ["bafysansdroits000000000000000000000000000000000000000004", "bafyaube00000000000000000000000000000000000000000000000001"]
     },
     {
-      "nom": "règle genre « électro » : les musiques électro AVEC droits (majuscules indifférentes), triées par clé",
+      "nom": "règle genre « électro » : toutes les musiques électro, avec ou sans mention de droits (majuscules indifférentes), triées par clé",
       "station": { "musique": { "etiquettes": { "genres": ["Électro"] } } },
-      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001", "bafymaree0000000000000000000000000000000000000000000000003", "https://exemple.org/sans-energie.mp3"]
+      "attendu": ["bafyaube00000000000000000000000000000000000000000000000001", "bafylicencevide00000000000000000000000000000000000000005", "bafymaree0000000000000000000000000000000000000000000000003", "bafysansdroits000000000000000000000000000000000000000004", "https://exemple.org/sans-energie.mp3"]
     },
     {
       "nom": "genre ET énergie : tous les critères doivent tenir ; sans énergie déclarée, pas de correspondance",
       "station": { "musique": { "etiquettes": { "genres": ["électro"] }, "energie": [3, 5] } },
-      "attendu": ["bafymaree0000000000000000000000000000000000000000000000003"]
+      "attendu": ["bafylicencevide00000000000000000000000000000000000000005", "bafymaree0000000000000000000000000000000000000000000000003"]
     },
     {
       "nom": "fourchette d'énergie inversée : remise dans l'ordre",
@@ -46,7 +46,7 @@
         "tracks": [ { "title": "Choix 02", "cid": "bafydefault02" }, { "title": "Marée (choisie)", "cid": "bafymaree0000000000000000000000000000000000000000000000003" }, { "title": "Choix 03", "cid": "bafydefault03" } ],
         "musique": { "etiquettes": { "genres": ["électro"] }, "exclure": ["bafydefault03", "https://exemple.org/sans-energie.mp3"] }
       },
-      "attendu": ["bafydefault02", "bafymaree0000000000000000000000000000000000000000000000003", "bafyaube00000000000000000000000000000000000000000000000001"]
+      "attendu": ["bafydefault02", "bafymaree0000000000000000000000000000000000000000000000003", "bafyaube00000000000000000000000000000000000000000000000001", "bafylicencevide00000000000000000000000000000000000000005", "bafysansdroits000000000000000000000000000000000000000004"]
     },
     {
       "nom": "des exclusions seules n'ajoutent rien",
