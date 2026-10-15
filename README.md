@@ -421,6 +421,23 @@ Tout est déterministe par (station, date) et se coupe par variable (`off`) :
 - `HABILLAGE_LIT` : un morceau à −16 dB sous l'ouverture (ident + 20 s) et la fermeture (8 s + ident) ;
 - `IDENTS=false` coupe les idents (« Vous écoutez Radio Pirate. Le code est libre, l'humain aussi. »).
 
+### Annonces du direct (14/10/2026, `lib/annonces.ts`)
+
+Entre deux morceaux du direct, l'app glisse de courtes interventions d'animateur : idents
+(« Vous écoutez Diginomad. Rejoignez-nous sur Infinity-freeworld.com. »), « Et voici… »,
+« C'était… ». La nuit les fabrique en voix clonée du premier animateur (jamais Piper : voix en
+échec = pas d'annonce), pour chaque piste du direct qui a un vrai titre (jamais « 01 », « Piste 3 »),
+et les publie dans `content.annonces` du 30093 (format de l'app, `broadcast/interventions.ts`).
+Même texte + même voix = même fichier : un cache local (`annonces-cache.json` à côté des
+chantiers, `RADIO_ANNONCES_CACHE` pour le déplacer) et les annonces de la veille évitent de
+refabriquer.
+
+- `ANNONCES=false` coupe tout pour une nuit ;
+- `ANNONCES_NOUVELLES_MAX` (8) : nouvelles annonces au plus par nuit et par station (≈ 30 s chacune) ;
+- `ANNONCES_IDENTS` (3) : idents génériques par station (0 à 4) ;
+- `ANNONCES_MAX_EMISSION` (160) : annonces au plus par émission, en plus de la borne de 60 Ko ;
+- `ANNONCES_ECHEANCE_S` (600) : temps accordé à la voix clonée pour les annonces d'une station.
+
 ## Limites connues
 
 - Les pistes par défaut (mai 2026) sont d'origine inconnue : à remplacer par des musiques

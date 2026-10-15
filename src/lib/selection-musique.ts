@@ -287,3 +287,24 @@ export function pistesDeLaStation<T extends PisteJouable>(
 ): Array<T | PisteJouable> {
   return pistesDeLaStationDetaillees(station, bibliotheque).map(x => x.piste)
 }
+
+/**
+ * 12/10/2026 — la musique d'une station qui n'en a aucune à elle : toute la bibliothèque jouable
+ * (droits valides, pistes non retirées), sauf les chansons dans une AUTRE langue que la station
+ * (une piste sans langue — instrumentale ou non renseignée — convient partout). Pure, ordre de la
+ * bibliothèque trié par clé : la même liste sur tous les appareils.
+ */
+export function musiqueDeRepli(bibliotheque: readonly PisteBibliotheque[], langueStation?: string): PisteJouable[] {
+  const vues = new Set<string>()
+  const out: Array<[string, PisteJouable]> = []
+  for (const b of bibliotheque) {
+    if (estPisteRetiree(b) || !droitsValides(b)) continue
+    const k = cleDePiste(b)
+    if (!k || vues.has(k)) continue
+    const langue = lireTexte(b.langue, 12)?.toLowerCase()
+    if (langue && langueStation && !langue.startsWith(langueStation.toLowerCase())) continue
+    vues.add(k)
+    out.push([k, pisteJouable(b)])
+  }
+  return out.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, p]) => p)
+}

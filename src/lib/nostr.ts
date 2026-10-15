@@ -53,6 +53,8 @@ export function contenuEmission(finalBroadcast: RadioBroadcast): string {
     // Pauses musicales / jingles : seulement quand il y en a (l'appli tolère l'absence).
     ...(finalBroadcast.segments && finalBroadcast.segments.length > 0
       ? { segments: finalBroadcast.segments } : {}),
+    // Annonces d'animateur du direct (14/10/2026, lib/annonces.ts) : seulement quand il y en a.
+    ...(finalBroadcast.annonces && finalBroadcast.annonces.length > 0 ? { annonces: finalBroadcast.annonces } : {}),
     newsRefs:    finalBroadcast.newsRefs,
     // Liens évoqués, calés dans le temps (07/10/2026) : seulement quand il y en a.
     ...(finalBroadcast.liens && finalBroadcast.liens.length > 0 ? { liens: finalBroadcast.liens } : {}),
