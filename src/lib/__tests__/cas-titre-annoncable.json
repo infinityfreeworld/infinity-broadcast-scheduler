@@ -1,0 +1,129 @@
+{
+  "commentaire": "Cas PARTAGÉS de titreAnnoncable (générateur lib/titre-annoncable.ts et app broadcast/interventions.ts). À recopier tel quel dans l'app. Ne modifier qu'en même temps des deux côtés.",
+  "cas": [
+    {
+      "titre": "01",
+      "annoncable": false
+    },
+    {
+      "titre": "Piste 3",
+      "annoncable": false
+    },
+    {
+      "titre": "track_12",
+      "annoncable": false
+    },
+    {
+      "titre": "Audio-0003.mp3",
+      "annoncable": false
+    },
+    {
+      "titre": "7.",
+      "annoncable": false
+    },
+    {
+      "titre": "#4",
+      "annoncable": false
+    },
+    {
+      "titre": "Untitled 2",
+      "annoncable": false
+    },
+    {
+      "titre": "Track 01",
+      "annoncable": false
+    },
+    {
+      "titre": "Morceau n°5",
+      "annoncable": false
+    },
+    {
+      "titre": "No. 9",
+      "annoncable": false
+    },
+    {
+      "titre": "  ",
+      "annoncable": false
+    },
+    {
+      "titre": "",
+      "annoncable": false
+    },
+    {
+      "titre": "Titre 12",
+      "annoncable": false
+    },
+    {
+      "titre": "song_03.wav",
+      "annoncable": false
+    },
+    {
+      "titre": "Rec 2026-10-14",
+      "annoncable": false
+    },
+    {
+      "titre": "A",
+      "annoncable": false
+    },
+    {
+      "titre": "A 1",
+      "annoncable": false
+    },
+    {
+      "titre": "Aurore boréale",
+      "annoncable": true
+    },
+    {
+      "titre": "03 - Aurore boréale.mp3",
+      "annoncable": true
+    },
+    {
+      "titre": "Lo-fi",
+      "annoncable": true
+    },
+    {
+      "titre": "自由之歌",
+      "annoncable": true
+    },
+    {
+      "titre": "歌",
+      "annoncable": true
+    },
+    {
+      "titre": "Ты",
+      "annoncable": true
+    },
+    {
+      "titre": "Bella ciao",
+      "annoncable": true
+    },
+    {
+      "titre": "Track 01 — Lena",
+      "annoncable": true
+    },
+    {
+      "titre": "Aurore — Lena",
+      "annoncable": true
+    },
+    {
+      "titre": "DJ 2000",
+      "annoncable": true
+    },
+    {
+      "titre": "Sans titre",
+      "annoncable": false
+    },
+    {
+      "titre": "Piste 3 (remix)",
+      "annoncable": true
+    },
+    {
+      "titre": "Ode à la joie",
+      "annoncable": true
+    },
+    {
+      "titre": "Nocturne op. 9 n° 2",
+      "annoncable": true
+    }
+  ]
+}

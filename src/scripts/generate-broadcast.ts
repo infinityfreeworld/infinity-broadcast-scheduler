@@ -76,8 +76,10 @@ import { fetchRadioGuests, exportGuestsToEnv } from '../lib/guests'
 import { readWav, concatWavs, encodeWav, durationOf, type ConcatEntry } from '../lib/audio'
 import { encoderEmission, FORMAT_EMISSION } from '../lib/opus'
 import { dataspacePinFile } from '../lib/dataspace'
+import { annoncesDeLaNuit } from '../lib/annonces-nuit'
+import { bornerAnnonces, reglagesAnnonces, tailleEvenement } from '../lib/annonces'
 import { jetonDataspace } from '../lib/dataspace-jeton'
-import { publishBroadcast, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
+import { publishBroadcast, contenuEmission, pubkeyDe, broadcastDTag, getRelays, RADIO_BROADCAST_KIND } from '../lib/nostr'
 import { dTagsPublies } from '../lib/deja-diffuse'
 import { voixPourLangue, langueSynthetisable, timbreHonore } from '../lib/voix'
 import { sujetsCartePourStation } from '../lib/carte-relais'
@@ -1400,6 +1402,17 @@ async function main() {
     qualite:     result.qualite,
     generatedBy: '',   // sera rempli par publishBroadcast
     generatedAt: Math.floor(Date.now() / 1000),
+  }
+  // 🎙 14/10/2026 — annonces d'animateur entre les morceaux du direct (lib/annonces.ts) : idents,
+  // « Et voici… », « C'était… », en voix clonée du premier animateur, jamais Piper, jamais
+  // bloquant. Bornées pour que l'événement reste sous 60 Ko.
+  console.log('\n🎙 Annonces du direct…')
+  const annonces = await annoncesDeLaNuit({ fiche: stationFiche, station, date: targetDate, cleDataspace, pubkey: pubkeyDe(nostrPriv) })
+  if (annonces.length > 0) {
+    const contenuNu = contenuEmission({ ...broadcast, generatedBy: '0'.repeat(64) })
+    broadcast.annonces = bornerAnnonces(annonces, contenuNu, reglagesAnnonces().maxParEmission)
+    const taille = tailleEvenement(contenuEmission({ ...broadcast, generatedBy: '0'.repeat(64) }))
+    console.log(`    · ${broadcast.annonces.length}/${annonces.length} annonce(s) publiée(s) — événement ≈ ${(taille / 1024).toFixed(1)} Ko (sans : ${(tailleEvenement(contenuNu) / 1024).toFixed(1)} Ko)`)
   }
   const publish = await publishBroadcast(broadcast, nostrPriv)
   const okCount = publish.relays.filter(r => r.ok).length

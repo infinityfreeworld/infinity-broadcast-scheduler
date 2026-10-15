@@ -167,6 +167,12 @@ export interface RadioBroadcast {
   turns:       BroadcastTurn[]
   /** Pauses musicales et jingles (absent quand l'émission n'en a pas). */
   segments?:   BroadcastSegment[]
+  /**
+   * Annonces d'animateur entre deux morceaux du direct (14/10/2026, `lib/annonces.ts`) : format
+   * fixé par l'app (`broadcast/interventions.ts`). OPTIONNEL et ADDITIF : absent quand il n'y en a
+   * aucune, ignoré par les anciennes versions de l'app.
+   */
+  annonces?:   import('./annonces').AnnonceAntenne[]
   newsRefs:    string[]
   /**
    * Les liens évoqués dans l'émission, chacun à l'instant où il est évoqué (07/10/2026,

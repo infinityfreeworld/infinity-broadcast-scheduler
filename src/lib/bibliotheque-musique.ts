@@ -25,8 +25,8 @@ import { getRelays } from './nostr'
 import { adminPubkeys } from './admins-radio'
 import { estAdmin } from './station-reglages'
 import {
-  lireDroits, lireEnergie, lireEtiquettes, lireTexte, pistesDeLaStation, reglesActives,
-  type PisteBibliotheque,
+  lireDroits, lireEnergie, lireEtiquettes, lireTexte, musiqueDeRepli, pistesDeLaStation, reglesActives,
+  type PisteBibliotheque, type PisteJouable,
 } from './selection-musique'
 import type { RadioStation, TrackRef } from './types'
 
@@ -85,6 +85,23 @@ export function retenirBibliotheque(events: NostrEvent[], admins: ReadonlySet<st
 export function avecSaMusique(station: RadioStation, bibliotheque: readonly PisteBibliotheque[]): RadioStation {
   const tracks = pistesDeLaStation(station, bibliotheque) as TrackRef[]
   return { ...station, tracks }
+}
+
+/**
+ * La musique du DIRECT d'une station (14/10/2026, annonces de titres) : ce que l'application joue
+ * dans la plage musicale, calculé comme elle (`useMusiqueDuDirect` de
+ * `src/modules/radio/musique/use-musique-station.ts`) — la musique de la station d'abord ; une
+ * station qui n'en a aucune prend la bibliothèque commune (`musiqueDeRepli`, sans chanson dans une
+ * autre langue). `station` = la FICHE (30091 ou seed), pas la station dont `tracks` a déjà été
+ * remplacé (le résultat serait le même, mais on suit l'app pas à pas). Pure.
+ */
+export function musiqueDuDirect(
+  station: Pick<RadioStation, 'tracks' | 'musique' | 'language'>,
+  bibliotheque: readonly PisteBibliotheque[],
+): Array<TrackRef | PisteJouable> {
+  const propres = pistesDeLaStation(station, bibliotheque)
+  if (propres.length > 0) return propres
+  return musiqueDeRepli(bibliotheque, station.language)
 }
 
 /** Interroge les relais : la bibliothèque des admins (relais illisibles → `null`). */
