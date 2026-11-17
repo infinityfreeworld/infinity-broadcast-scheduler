@@ -38,6 +38,25 @@ export function estUneEmission(nom: string): boolean {
   return MOTIF_EMISSION.test(nom)
 }
 
+/** `broadcast-<station>-<AAAA-MM-JJ>.<ext>` → { station, date } ; null hors de ce motif. */
+export function stationEtDate(nom: string): { station: string; date: string } | null {
+  const m = /^broadcast-([a-z0-9-]+)-(\d{4}-\d{2}-\d{2})\.(webm|opus|wav|mp3)$/.exec(nom)
+  return m ? { station: m[1], date: m[2] } : null
+}
+
+/** Pour chaque station, le fichier de sa date la plus récente (à date égale, le dépôt le plus récent). */
+export function dernieresParStation(fichiers: readonly FichierDepot[]): Set<FichierDepot> {
+  const parStation = new Map<string, FichierDepot>()
+  for (const f of fichiers) {
+    const sd = stationEtDate(f.name)
+    if (!sd) continue
+    const actuel = parStation.get(sd.station)
+    const dActuel = actuel ? stationEtDate(actuel.name)?.date ?? '' : ''
+    if (!actuel || sd.date > dActuel || (sd.date === dActuel && f.created_at > actuel.created_at)) parStation.set(sd.station, f)
+  }
+  return new Set(parStation.values())
+}
+
 /** Âge en jours, d'après l'horodatage du dépôt. */
 export function ageEnJours(f: FichierDepot, maintenant = Date.now()): number {
   const t = Date.parse(f.created_at)
@@ -68,8 +87,14 @@ export function trier(
   const aSupprimer: FichierDepot[] = []
   const gardes: FichierDepot[] = []
   const indecidables: FichierDepot[] = []
+  /* 17/11/2026 — Med : « toutes les stations doivent toujours tourner ; si le broadcast n'a pas pu être généré,
+     le broadcast le plus récent doit rester jusqu'à la mise à jour d'un nouveau ». La DERNIÈRE émission de chaque
+     station n'est donc jamais supprimée, quel que soit son âge : sans elle, une station qui n'a pas reçu
+     d'émission depuis dix jours n'aurait plus rien à diffuser. */
+  const derniere = dernieresParStation(fichiers)
   for (const f of fichiers) {
     if (!estUneEmission(f.name)) { gardes.push(f); continue }
+    if (derniere.has(f)) { gardes.push(f); continue }
     const age = ageEnJours(f, maintenant)
     if (!Number.isFinite(age)) { indecidables.push(f); continue }
     if (age > jours) aSupprimer.push(f)
