@@ -22,9 +22,27 @@ function f(name: string, joursDAge: number): FichierDepot {
   return { cid: 'Qm' + name, name, size: 1, created_at: new Date(MAINTENANT - joursDAge * JOUR).toISOString() }
 }
 
-test('une émission de plus de 10 jours part', () => {
-  const v = trier([f('broadcast-tech-radio-2026-08-20.opus', 18)], 10, MAINTENANT)
-  assert.equal(v.aSupprimer.length, 1)
+test('une émission de plus de 10 jours part quand sa station en a une plus récente', () => {
+  const v = trier([f('broadcast-tech-radio-2026-08-20.opus', 18), f('broadcast-tech-radio-2026-09-06.webm', 1)], 10, MAINTENANT)
+  assert.deepEqual(v.aSupprimer.map(x => x.name), ['broadcast-tech-radio-2026-08-20.opus'])
+})
+
+test('🔴 17/11 — la DERNIÈRE émission d\'une station reste, même vieille de 30 jours (une station tourne toujours)', () => {
+  const v = trier([
+    f('broadcast-tech-radio-2026-08-01.webm', 37),
+    f('broadcast-tech-radio-2026-08-08.webm', 30),
+    f('broadcast-freeworld-radio-2026-09-06.webm', 1),
+  ], 10, MAINTENANT)
+  assert.deepEqual(v.aSupprimer.map(x => x.name), ['broadcast-tech-radio-2026-08-01.webm'])
+  assert.ok(v.gardes.some(x => x.name === 'broadcast-tech-radio-2026-08-08.webm'))
+})
+
+test('la dernière se juge par la DATE du nom, station par station (un nom de station avec tiret)', () => {
+  const v = trier([
+    f('broadcast-big-balls-radio-2026-08-01.webm', 37),
+    f('broadcast-big-balls-radio-2026-08-02.webm', 36),
+  ], 10, MAINTENANT)
+  assert.deepEqual(v.aSupprimer.map(x => x.name), ['broadcast-big-balls-radio-2026-08-01.webm'])
 })
 
 test('une émission de moins de 10 jours reste', () => {
@@ -55,7 +73,8 @@ test('un horodatage illisible rend INDÉCIDABLE, pas supprimable', () => {
   // `NaN > 10` est faux — on serait sauvé par hasard. On ne confie pas le
   // sort d'un fichier à une comparaison flottante : on le DIT.
   const casse: FichierDepot = { cid: 'Qmx', name: 'broadcast-a-2026-01-01.opus', size: 1, created_at: 'pas une date' }
-  const v = trier([casse], 10, MAINTENANT)
+  // (une émission plus récente de la même station : sinon `casse` serait gardée comme la dernière de sa station)
+  const v = trier([casse, f('broadcast-a-2026-09-06.webm', 1)], 10, MAINTENANT)
   assert.deepEqual(v.aSupprimer, [])
   assert.equal(v.indecidables.length, 1)
 })
